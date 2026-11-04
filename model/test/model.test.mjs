@@ -246,6 +246,17 @@ const sheet = layoutSheet(Sk);
 ok('a drawing sheet has visible and hidden lines, dimensions and a title block', sheet.lines.some(l => !l.hidden) && sheet.lines.some(l => l.hidden) && sheet.dims.length > 2 && sheet.title.fields.some(([k]) => k === 'SCALE'), { lines: sheet.lines.length, hidden: sheet.lines.filter(l => l.hidden).length, dims: sheet.dims.length, scale: sheet.scale });
 const svgOut = drawingSVG(Sk), dxfOut = drawingDXF(Sk);
 ok('drawings export as SVG and DXF', /^<\?xml[\s\S]*<svg[\s\S]*<\/svg>$/.test(svgOut) && /SECTION[\s\S]*ENTITIES[\s\S]*\nEOF$/.test(dxfOut) && (dxfOut.match(/\nLINE\n/g) || []).length > 20);
+/* sketch constraints on a polyline profile */
+const Sc = new Model();
+Sc.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [61, 1.5], [60, 9], [11, 10.5], [9, 41], [1, 40]], length: 10, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'h', i: 2 }, { type: 'v', i: 3 }, { type: 'h', i: 4 }, { type: 'v', i: 5 }] }]);
+const LP = () => Sc.get('L').params.profile;
+ok('horizontal / vertical constraints square up a sloppy sketch', LP().every((q, i, a) => { const b = a[(i + 1) % a.length]; return Math.abs(q[0] - b[0]) < 1e-6 || Math.abs(q[1] - b[1]) < 1e-6; }), LP());
+for (const [i, v] of [[0, 60], [1, 10], [5, 40], [4, 10]]) Sc.apply([{ op: 'constrain', id: 'L', type: 'length', i, value: v }]);
+ok('length dimensions drive it and it becomes fully defined', near(Sc.result.bodies[0].solid.volume(), (60 * 10 + 10 * 30) * 10, 1e-6) && Sc.describe().objects[0].sketch.dof === 0, { dof: Sc.describe().objects[0].sketch.dof });
+Sc.apply([{ op: 'var', name: 'leg', value: 25 }, { op: 'set', id: 'L', params: { d1: '=#leg * 4' } }]);
+ok('a sketch dimension can be a formula', near(LP()[1][0], 100, 1e-6));
+Sc.apply([{ op: 'constrain', id: 'L', type: 'length', i: 0, value: 10 }]);
+ok('conflicting constraints are reported, not forced', Sc.result.warnings.some(w => /can't satisfy/.test(w.text)));
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

@@ -4,13 +4,15 @@ import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, ma
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 import { drawingSVG, drawingDXF } from './drawing.js';
+import { autoConstraints, KINDS as SKETCH_KINDS } from './sketch.js';
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
 /* toasts sit at the top of the views (the bottom belongs to the tool bar and the motion drawer); at most three at once */
-const placeToasts = () => { const st = document.querySelector('#stage'), T = document.querySelector('#toasts'); if (st && T) T.style.top = (st.getBoundingClientRect().top + 48) + 'px'; };
+/* toasts sit at the bottom (they let clicks through); above the motion drawer when it is open */
+const placeToasts = () => { const T = document.querySelector('#toasts'), mo = document.querySelector('#motion'); if (!T) return; T.style.top = ''; T.style.bottom = (mo && !mo.hidden ? innerHeight - mo.getBoundingClientRect().top + 8 : 22) + 'px'; };
 const trimToasts = () => { const T = $('#toasts'); while (T.children.length > 3) T.firstChild.remove(); };
 const toast = (t, ms) => { placeToasts(); const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); trimToasts(); setTimeout(() => d.remove(), ms || 2200); };
 /* a toast with buttons (stays until used, dismissed or timed out) */
@@ -313,6 +315,36 @@ function massSection(o, sec) {
     if (part.inertia_kg_mm2) s.append(el('div', { class: 'f' }, 'inertia kg·mm²', el('span', { class: 'mono' }, part.inertia_kg_mm2.slice(0, 3).map(v => fmt(v)).join(' / '))));
   }
 }
+/* the profile's constraints: status, per segment H / V / length, relations between segments, fixed points */
+function sketchSection(o, sec) {
+  const q = o.params, P = q.profile, n = P.length, cons = q.constraints || [], st = model.result.sketch && model.result.sketch.get(o.id);
+  const s = sec('Sketch'), add = (c) => { try { apply([Object.assign({ op: 'constrain', id: o.id }, c)]); } catch (e) { /* toast */ } };
+  const status = !cons.length ? ['note', 'No constraints: the profile is exactly as drawn.'] : st && !st.ok ? ['warnline', 'Conflict — remove one of the highlighted constraints'] : st && st.dof === 0 ? ['ok', 'Fully defined'] : ['note', `${st ? st.dof : '?'} degree${st && st.dof === 1 ? '' : 's'} of freedom left (it keeps the drawn shape there)`];
+  s.append(el('div', { class: status[0] }, status[1]));
+  const tbl = el('table', { class: 'cfg sk' });
+  tbl.append(el('tr', null, el('th', null, '#'), el('th', null, 'length'), el('th', null, ''), el('th', null, 'dimension')));
+  for (let i = 0; i < n; i++) {
+    const a = P[i], b = P[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const has = (t) => cons.findIndex(c => c.type === t && c.i === i), hi = has('h'), vi = has('v'), li = cons.findIndex(c => c.type === 'length' && c.i === i);
+    const tog = (t, idx) => el('button', { class: 'chain' + (idx >= 0 ? ' on' : ''), title: SKETCH_KINDS[t].label, onclick: () => (idx >= 0 ? apply([{ op: 'unconstrain', id: o.id, index: idx }]) : add({ type: t, i })) }, t.toUpperCase());
+    const dimCell = li >= 0 ? el('span', { class: 'pin' }, paramInput(o, cons[li].p), el('button', { class: 'chain', title: 'Remove the dimension', onclick: () => apply([{ op: 'unconstrain', id: o.id, index: li }]) }, '×')) : el('button', { class: 'btn', onclick: () => add({ type: 'length', i }) }, '+ dimension');
+    tbl.append(el('tr', { class: st && st.conflicts && st.conflicts.some(c => c.i === i) ? 'bad' : '' }, el('td', null, String(i + 1)), el('td', { class: 'mono' }, fmt(L)), el('td', null, el('span', { class: 'pin' }, tog('h', hi), tog('v', vi))), el('td', null, dimCell)));
+  }
+  s.append(el('div', { class: 'tblwrap' }, tbl));
+  /* relations between two segments */
+  const segSel = () => el('select', null, ...Array.from({ length: n }, (_, i) => el('option', { value: i }, 'segment ' + (i + 1))));
+  const sa = segSel(), sb = segSel(); sb.value = String(Math.min(1, n - 1));
+  s.append(el('div', { class: 'relrow' }, sa, ...[['parallel', '∥'], ['perpendicular', '⊥'], ['equal', '='], ['angle', '∠']].map(([t, g]) => el('button', { class: 'chain', title: SKETCH_KINDS[t].label, onclick: () => { if (sa.value === sb.value) { toast('Pick two different segments'); return; } add({ type: t, i: +sa.value, j: +sb.value }); } }, g)), sb));
+  /* the constraint list */
+  const items = cons.map((c, k) => [c, k]).filter(([c]) => !['h', 'v', 'length'].includes(c.type));
+  for (const [c, k] of items) {
+    const lab = `${SKETCH_KINDS[c.type].label} ${c.type === 'fix' || c.type === 'fixx' || c.type === 'fixy' ? 'point ' + (c.i + 1) : (c.i + 1) + (c.j != null ? ' & ' + (c.j + 1) : '')}`;
+    s.append(el('div', { class: 'f' + (st && st.conflicts && st.conflicts.includes(c) ? ' bad' : '') }, lab, el('span', { class: 'pin' }, c.p ? paramInput(o, c.p) : el('span', { class: 'note' }, c.type === 'fix' ? `at ${fmt(c.at[0])}, ${fmt(c.at[1])}` : ''), el('button', { class: 'chain', title: 'Remove', onclick: () => apply([{ op: 'unconstrain', id: o.id, index: k }]) }, '×'))));
+  }
+  const pt = el('select', null, ...Array.from({ length: n }, (_, i) => el('option', { value: i }, 'point ' + (i + 1))));
+  s.append(el('div', { class: 'relrow' }, pt, el('button', { class: 'btn', onclick: () => add({ type: 'fix', i: +pt.value }) }, 'Fix'), el('button', { class: 'btn', onclick: () => add({ type: 'fixx', i: +pt.value }) }, 'x from origin'), el('button', { class: 'btn', onclick: () => add({ type: 'fixy', i: +pt.value }) }, 'y from origin')));
+  s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, params: { constraints: autoConstraints(P) } }], 'Auto-constrain') }, 'Auto H / V'), cons.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, params: { constraints: [] } }], 'Clear constraints') }, 'Clear') : null));
+}
 function infoSection(o, sec) {
   const T = TYPES[o.type]; if (!T || !T.def || !T.def.info) return;
   let info; try { info = T.def.info(o.params, { K, V, M4 }); } catch (e) { info = { warning: e.message }; }
@@ -371,8 +403,9 @@ function renderProps() {
   const s1 = sec(TYPES[o.type] ? TYPES[o.type].label : o.type);
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
-    : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'twist', 'scale'] : ['profile', 'length', 'twist', 'scale', 'direction'])
-      : Object.keys(o.params);
+    : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'twist', 'scale'] : ['length', 'twist', 'scale', 'direction'])
+      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints'].includes(k) && !/^d\d+$/.test(k))
+        : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
   if (o.type === 'edge' && o._resolved) s1.append(el('div', { class: 'f' }, 'edge', el('span', null, (o._resolved.convex ? 'outer (convex) → removes' : 'inner (concave) → adds') + ' · ' + o._resolved.angle + '°' + (o._resolved.round ? ' · all round' : ''))));
   if (o.type === 'pattern') {
@@ -387,6 +420,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
+  if (['extrude', 'revolve', 'loft'].includes(o.type) && Array.isArray(o.params.constraints) && (!o.params.shape || o.params.shape === 'points')) sketchSection(o, sec);
   if (o.type === 'hole') { try { s1.append(el('div', { class: 'note' }, holeSpec(o.params).label + (o.params.through ? ', through (follows the part’s thickness)' : ''))); } catch (e) { s1.append(el('div', { class: 'warnline' }, e.message)); } }
   /* placement */
   if (!['edge', 'pattern', 'weld'].includes(o.type)) {
@@ -660,11 +694,11 @@ function setTool(name, arg) {
   else if (name === 'sketch') { tool.data.points = []; tool.data.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); if (!arg) pendingLoft = null; sketchHint(); }
   syncBar(); views.draw();
 }
-const SKETCH_HELP = { polyline: 'click points · click the first point (or Enter) to close · Shift = straight', rect: 'click one corner, then the opposite corner', circle: 'click the centre, then a point on the circle', slot: 'click one end, then the other (along the view’s horizontal)', polygon: 'click the centre, then a corner' };
+const SKETCH_HELP = { polyline: 'click points; first point or Enter closes', rect: 'corner, then opposite corner', circle: 'centre, then a point on it', slot: 'one end, then the other', polygon: 'centre, then a corner' };
 function sketchHint() {
   const h = $('#hint'), d = tool.data; h.hidden = false; h.innerHTML = '';
   if (pendingLoft) { h.append(el('span', null, 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)'), el('button', { onclick: () => setTool(null) }, 'Esc')); return; }
-  h.append(el('span', null, 'Profile in FRONT, TOP or RIGHT:'));
+  h.append(el('span', null, 'Profile:'));
   for (const [k, t] of [['polyline', 'Polyline'], ['rect', 'Rectangle'], ['circle', 'Circle'], ['slot', 'Slot'], ['polygon', 'Polygon']]) h.append(el('button', { class: d.mode === k ? 'on' : '', onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; d.points = []; d.pane = null; views.preview = null; sketchHint(); views.draw(); } }, t));
   if (d.mode === 'polygon') { const i = el('input', { type: 'number', min: 3, step: 1, value: prefs.sides || 6, 'aria-label': 'sides', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.sides = Math.max(3, Math.round(+i.value)); savePrefs(); }); h.append(el('label', { class: 'hf' }, 'sides', i)); }
   if (d.mode === 'slot') { const i = el('input', { type: 'number', min: 1, step: 'any', value: prefs.slotW || 10, 'aria-label': 'slot width', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.slotW = +i.value; savePrefs(); }); h.append(el('label', { class: 'hf' }, 'width', i)); }
@@ -702,7 +736,8 @@ function finishSketch() {
   views.preview = { pane: d.pane, points: d.points.slice(), closed: true }; views.draw();
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
-  const make = (op, extra) => { const r = apply([Object.assign({ op, profile: pts2, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  /* a fresh polyline gets horizontal / vertical constraints where it nearly is, and its first point fixed (edit them in Properties → Sketch) */
+  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, constraints: autoConstraints(prof), at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
   if (pendingLoft) {
     if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');

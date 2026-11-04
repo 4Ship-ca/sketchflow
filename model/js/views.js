@@ -236,6 +236,7 @@ export class Views {
       if (pane.id !== '3d' && this.showDims && still) this.drawDims(c, pane, cam, R, O);
       if (this.connectorsFor && still) this.drawConnectors(c, pane, cam);
       if (this.showCoG && still) this.drawCoG(c, pane, cam);
+      if (still && pane.id !== '3d') this.drawSketchGlyphs(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -297,6 +298,26 @@ export class Views {
     if (!ref) return null; if (Array.isArray(ref)) return ref;
     const R = this.model.result; if (ref.obj && ref.conn) { const c = worldConnectors(R, ref.obj).find(x => x.name === ref.conn); return c ? c.o : null; }
     return ref.p || null;
+  }
+  /* the selected profile's constraints, as small badges on its segments (in the views that see its plane) */
+  drawSketchGlyphs(c, pane, cam) {
+    const o = this.sel && this.model.get(this.sel); if (!o || !o.params || !Array.isArray(o.params.constraints) || !o.params.constraints.length || !Array.isArray(o.params.profile)) return;
+    const R = this.model.result, M = R.world.get(o.id); if (!M) return;
+    const rz = o.type === 'revolve', nrm = V.norm(K.M4.dir(M, rz ? [0, 1, 0] : [0, 0, 1])); if (Math.abs(V.dot(nrm, cam.f)) < 0.9) return;
+    const P = o.params.profile, n = P.length, W = (q) => this.project(pane, V.sub(K.M4.point(M, rz ? [q[0], 0, q[1]] : [q[0], q[1], 0]), this.O), cam);
+    const G = { h: 'H', v: 'V', parallel: '∥', perpendicular: '⊥', equal: '=', angle: '∠', fix: '⚓' }, per = new Map();
+    c.save(); c.font = '700 10px "Figtree", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const k of o.params.constraints) {
+      const g = G[k.type]; if (!g) continue;
+      const segs = k.type === 'fix' ? [k.i] : k.j != null ? [k.i, k.j] : [k.i];
+      for (const i of segs) {
+        const a = W(P[i % n]), b = k.type === 'fix' ? a : W(P[(i + 1) % n]), cnt = per.get(i) || 0; per.set(i, cnt + 1);
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, l = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l, x = mx + nx * (12 + cnt * 13), y = my + ny * (12 + cnt * 13);
+        c.fillStyle = this.dark ? '#22252b' : '#ffffff'; c.strokeStyle = '#16a394'; c.lineWidth = 1; c.beginPath(); c.arc(x, y, 7, 0, Math.PI * 2); c.fill(); c.stroke();
+        c.fillStyle = '#16a394'; c.fillText(g, x, y + 0.5);
+      }
+    }
+    c.restore();
   }
   /* centre of gravity: the assembly's (large) and the selected part's (small), as the drafting symbol */
   drawCoG(c, pane, cam) {

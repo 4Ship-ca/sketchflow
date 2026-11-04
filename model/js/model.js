@@ -4,7 +4,9 @@
    evaluated in list order — editable at any time. Edge treatments (fillet / weld / chamfer) are objects too.
    One API — apply(ops) — serves the UI and the MCP bridge, so an LLM builds with the same JSON a click produces. */
 import * as K from './kernel.js';
+import { solveSketch, KINDS as SKETCH_KINDS, measure as measureConstraint } from './sketch.js';
 const { V, M4 } = K;
+export { SKETCH_KINDS };
 
 export const TYPES = {
   box: { label: 'Box', params: { width: 40, depth: 30, height: 20 } },
@@ -13,9 +15,9 @@ export const TYPES = {
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
-  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6 } },
-  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0 } },
-  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
+  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0, constraints: [] } },
+  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360, constraints: [] } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
   /* a linked copy of another part: same shape and features, its own place */
@@ -321,13 +323,26 @@ export function dimsOf(o) {
       /* a shape's own sizes are dimensions in its sketch plane */
       if (p.shape === 'rect' || p.shape === 'slot') out.push(D('width', [x - p.width / 2, y - p.height / 2, 0], [x + p.width / 2, y - p.height / 2, 0], 'auto'), D('height', [x - p.width / 2, y - p.height / 2, 0], [x - p.width / 2, y + p.height / 2, 0], 'auto'));
       if (p.shape === 'circle' || p.shape === 'polygon') out.push(D('diameter', [x - p.diameter / 2, y, 0], [x + p.diameter / 2, y, 0], 'auto', 'diameter'));
+      if (!p.shape || p.shape === 'points') out.push(...constraintDims(p, false));
       return out;
     }
-    case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto')]; }
+    case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto'), ...constraintDims(p, false)]; }
+    case 'revolve': return constraintDims(p, true);
     default: { const T = TYPES[o.type]; if (T && T.def && T.def.dims) { try { return T.def.dims(p, addonApi) || []; } catch (e) { return []; } } return []; }
   }
 }
 
+/* driving sketch values as carried dimensions, in the profile's own plane (revolve profiles are (r, z)) */
+function constraintDims(p, rz) {
+  const out = [], P = p.profile || [], n = P.length, L3 = (q) => (rz ? [q[0], 0, q[1]] : [q[0], q[1], 0]);
+  for (const c of p.constraints || []) {
+    if (!c.p || !n) continue;
+    if (c.type === 'length') out.push({ param: c.p, a: L3(P[c.i % n]), b: L3(P[(c.i + 1) % n]), view: 'auto', kind: 'linear' });
+    if (c.type === 'fixx') out.push({ param: c.p, a: L3([0, P[c.i % n][1]]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
+    if (c.type === 'fixy') out.push({ param: c.p, a: L3([P[c.i % n][0], 0]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
+  }
+  return out;
+}
 /* ---------- document ---------- */
 export function newDoc(name) { return { v: 2, name: name || 'Model', units: 'mm', objects: [], origin: null, ground: null, dims: [], vars: {}, created: Date.now(), updated: Date.now() }; }
 function defaultParams(type, given) {
@@ -499,11 +514,21 @@ export function posedDoc(doc, pose) {
 export function evaluate(doc, opts) {
   const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map(), spin: new Map() };
   MESH_STORE = doc.meshes || {};
+  R.sketch = new Map();
   const cfg = (doc.configs || []).find(c => c.name === doc.config) || null;
   R.warnings.push(...resolveLinks(doc, cfg));
   /* suppressed features, and everything after the rollback bar, are placed but make no geometry */
   const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, cfgOff = new Set((cfg && cfg.suppress) || []), off = new Set(doc.objects.filter((o, i) => o.suppressed || cfgOff.has(o.id) || i >= rb).map(o => o.id));
   R.config = cfg ? cfg.name : null;
+  /* constrained profiles are solved before anything is built (their values may be linked parameters) */
+  for (const o of doc.objects) {
+    const q = o.params; if (!q || !Array.isArray(q.constraints) || !q.constraints.length || !Array.isArray(q.profile) || (q.shape && q.shape !== 'points')) continue;
+    try {
+      const res = solveSketch(q.profile, q.constraints, q); R.sketch.set(o.id, res);
+      if (res.ok) q.profile = res.points;
+      else R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: the sketch can't satisfy ${res.conflicts.map(c => SKETCH_KINDS[c.type].label.toLowerCase() + ' ' + (c.i + 1) + (c.j != null ? '/' + (c.j + 1) : '')).join(', ') || 'all its constraints'} — remove one` });
+    } catch (e) { R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${e.message}` }); }
+  }
   R.off = off;
   const byId = new Map(doc.objects.map(o => [o.id, o]));
   const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
@@ -1299,6 +1324,23 @@ export class Model {
         const r = this.op({ op: 'add', type: 'mesh', id, name: (o.name || 'Mesh').replace(/\.(stl|obj)$/i, ''), params: { scale: +o.scale || 1, ref: id }, mate: o.mate, at: o.at, material: o.material });
         return { label: `Import ${o.name || 'mesh'}`, id: r.id, triangles: count, size };
       }
+      case 'constrain': {
+        /* add a sketch constraint to a polyline profile: {id, type, i, j?, value?} — value-driven ones get a parameter (a dimension) */
+        const x = need(o.id), q = x.params; if (!Array.isArray(q.profile) || !Array.isArray(q.constraints) || (q.shape && q.shape !== 'points')) throw new Error(`${x.name} has no polyline sketch to constrain`);
+        const k = SKETCH_KINDS[o.type]; if (!k) throw new Error(`type is one of ${Object.keys(SKETCH_KINDS).join(', ')}`);
+        const c = { type: o.type, i: Math.round(o.i) }; if (k.args === 2) c.j = Math.round(o.j);
+        if (o.type === 'fix') c.at = o.at || q.profile[c.i % q.profile.length].slice();
+        if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c) * 1e4) / 1e4; } }
+        q.constraints = [...q.constraints.filter(e => !(e.type === c.type && e.i === c.i && e.j === c.j && !k.value)), c];
+        if (o.type === 'h') q.constraints = q.constraints.filter(e => !(e.type === 'v' && e.i === c.i)); if (o.type === 'v') q.constraints = q.constraints.filter(e => !(e.type === 'h' && e.i === c.i));
+        this.recompute(); const st = this.result.sketch.get(x.id);
+        return { label: `${k.label} ${c.i + 1}${c.j != null ? '/' + (c.j + 1) : ''}`, id: x.id, param: c.p, dof: st ? st.dof : null, ok: st ? st.ok : null };
+      }
+      case 'unconstrain': {
+        const x = need(o.id), q = x.params, c = (q.constraints || [])[o.index]; if (!c) throw new Error('No constraint ' + o.index);
+        q.constraints = q.constraints.filter((_, k) => k !== o.index); if (c.p && !q.constraints.some(e => e.p === c.p)) { delete q[c.p]; if (x.expr) delete x.expr[c.p]; }
+        this.recompute(); return { label: `Remove ${SKETCH_KINDS[c.type].label.toLowerCase()}`, id: x.id };
+      }
       case 'suppress': {
         const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;
         for (const x of items) { if (on) x.suppressed = true; else delete x.suppressed; }
@@ -1384,6 +1426,7 @@ export class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
