@@ -1,5 +1,6 @@
 /* SketchFlow v2 model tests: node model/test/model.test.mjs */
 import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim } from '../js/model.js';
+import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { cond ? pass++ : fail++; console.log((cond ? 'ok  ' : 'FAIL') + ' ' + name + (info !== undefined ? ' → ' + JSON.stringify(info) : '')); };
 const near = (a, b, t = 1e-3) => Math.abs(a - b) <= t * Math.max(1, Math.abs(b));
@@ -233,6 +234,18 @@ const ib = In.result.bodies.find(b => b.id === imp.id);
 ok('STL import: a closed mesh part with volume and mass', imp.triangles === 12 && near(ib.solid.volume(), 1000, 1e-6) && near(massReport(In.doc, In.result).parts.find(q => q.id === imp.id).mass_g, 1.24, 1e-6));
 const vv = In.saveVersion('before'); In.apply([{ op: 'delete', id: imp.id }]); In.restoreVersion(vv.id);
 ok('a saved version restores (and survives undo)', In.doc.objects.some(o => o.id === imp.id) && In.listVersions().length === 1 && (In.undo(), In.listVersions().length === 1));
+/* parametric sketch shapes and drawings */
+const Sk = new Model();
+Sk.apply([{ op: 'add', type: 'box', id: 'p', params: { width: 100, depth: 60, height: 10 } }, { op: 'extrude', id: 'pocket', shape: 'rect', x: 20, y: 0, width: 20, height: 10, length: 12, at: [0, 0, -1], into: 'p', mode: 'subtract', fixed: true }]);
+ok('a rectangle sketch cuts a pocket of its size', near(Sk.result.bodies[0].solid.volume(), 60000 - 2000, 1e-6));
+Sk.apply([{ op: 'set', id: 'pocket', params: { width: 30 } }]);
+ok('the sketch shape keeps its sizes as parameters', near(Sk.result.bodies[0].solid.volume(), 60000 - 3000, 1e-6) && Sk.describe().objects[1].params.shape === 'rect');
+Sk.apply([{ op: 'extrude', id: 'hex', shape: 'polygon', diameter: 20, sides: 6, length: 10, at: [0, 0, 10], fixed: true }]);
+ok('a polygon sketch extrudes to its exact area', near(Sk.result.bodies.find(b => b.id === 'hex').solid.volume(), 1.5 * Math.sqrt(3) * 100 * 10, 1e-6));
+const sheet = layoutSheet(Sk);
+ok('a drawing sheet has visible and hidden lines, dimensions and a title block', sheet.lines.some(l => !l.hidden) && sheet.lines.some(l => l.hidden) && sheet.dims.length > 2 && sheet.title.fields.some(([k]) => k === 'SCALE'), { lines: sheet.lines.length, hidden: sheet.lines.filter(l => l.hidden).length, dims: sheet.dims.length, scale: sheet.scale });
+const svgOut = drawingSVG(Sk), dxfOut = drawingDXF(Sk);
+ok('drawings export as SVG and DXF', /^<\?xml[\s\S]*<svg[\s\S]*<\/svg>$/.test(svgOut) && /SECTION[\s\S]*ENTITIES[\s\S]*\nEOF$/.test(dxfOut) && (dxfOut.match(/\nLINE\n/g) || []).length > 20);
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

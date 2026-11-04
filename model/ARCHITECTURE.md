@@ -42,6 +42,12 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Weld (Onshape: a weldment feature) | `weld {a, b, near, size, profile, all_around}` | A separate bead body between two parts that **stay separate** (an assembly you can pull apart). It warns when the materials can't be welded (aluminium to steel, plastic to metal…) |
 | Linear / circular pattern, mirror | `pattern {of, kind, count, spacing, direction, about, plane}` | Live copies of features or parts; a hole's countersink comes along; copies count as quantity in the parts list |
 | Part properties, mass properties | `meta {material, density, fill, part_no, supplier, notes, quantity}` | Mass, centre of gravity and inertia per part and for the assembly, a "does it stand" balance check, and a parts list (CSV) |
+| Rollback bar, suppress, reorder | `rollback`, `suppress`, `move` ops; drag rows in History view; ⋯ / right-click menus | New features go in at the bar; order rules are checked (a hole stays after what it cuts) |
+| Mate types (revolute, slider, cylindrical, planar) and animate | `joint` / `drive` ops, the Motion drawer (J) | Gear mates follow continuously; poses are previews until you keep one |
+| Hole feature, shell | `hole` (ISO tables, click a face, auto edge dimensions), `shell` | Through holes stay through when the part changes |
+| Configurations, versions | `config` op (variable tables + suppression), File → Save version / Versions | Switch sizes from the toolbar |
+| Part instances (assembly reuse) | `instance` op: linked copies | The parts list counts them |
+| Drawings | SVG/DXF sheet: third-angle views, hidden lines, dimensions, parts list, title block | Generated from the live model in about 0.2 s |
 | Custom features (FeatureScript) | Add-ons: plain JS objects with shapes, mate kinds and actions | No imports; the same add-on serves the UI form and the AI tool (`model_addon`). See ADDONS.md |
 | Topological naming | An edge is stored as **the two surface ids it lies between** (e.g. `plate:front | plate:right`) plus a point | It survives size changes. If the faces disappear it falls back to the nearest edge, then warns |
 | Variables / expressions | `#name` model variables; any numeric parameter can be `=formula` (`=plate.depth - 2*#wall`) | Editing a size offers to make same-size, same-direction sizes follow it (leader/follower), so links happen as a by-product of normal editing |
@@ -99,22 +105,34 @@ Example: a flange with a bore and a 4-hole bolt circle in one call.
 
 ## What is not there yet
 
-Done since the first version: patterns and mirror, welds as assembly joints, per-part metadata with mass and balance, a parts list, add-ons (gears), variables and formulas with leader/follower links, and driving dimensions.
+Built so far, on top of the first version:
+- patterns and mirror
+- welds as assembly joints
+- per-part metadata with mass and balance, and a parts list
+- add-ons (gears)
+- variables, formulas and leader/follower links
+- driving dimensions
+- suppress, rollback and reorder
+- joints and motion
+- section views
+- the hole wizard and shell
+- configurations and saved versions
+- linked instances
+- STL/OBJ import
+- drawing sheets (SVG/DXF)
+- parametric sketch shapes
 
 Still to come, roughly in order of how much each unlocks:
 
-1. **Sketch constraints**: coincident, parallel, perpendicular, tangent, equal, driving dimensions. They need a small Newton/LM solver; the 2D board's joints are a start.
-2. **Formulas on mates**: links work on sizes today; offsets and slides of mates could take formulas too (today a driving dimension covers most of it).
-3. **Moving mates**: revolute, slider, cylindrical, planar, ball (today mates are fastened, and the gear mate is a fixed mesh). With limits and a drive, these feed the v1 motion simulator, so gears turn together and "make it move like this" works in 3D.
-4. **Shell, draft, hole wizard (counterbore / tapped), rib.**
-5. **Part Studio vs Assembly**: separate a part's definition from its instances, so a bolt is defined once and placed many times (patterns already count copies).
-6. **Configurations**: one model, several size tables (S / M / L).
-7. **Rollback bar and suppress**: edit "as of" any feature, and turn features off temporarily.
-8. **Section views, exploded-view steps, drawing annotations** (GD&T, notes, title block), and DXF/PDF drawing export.
-9. **STEP / exact geometry**: needs a B-rep kernel. The `Solid` interface (union / subtract / intersect / transform / mesh / massProps) is small on purpose, so the BSP kernel can be swapped for Manifold (Apache-2.0, WASM) or OpenCascade.js. Both would also make booleans 10–100× faster on large models.
-10. **Imports**: STL/OBJ/glTF as reference bodies; 2D board sketches as profiles.
-11. **Versions and branches, and multi-user editing**, as Onshape has them.
-12. **More add-ons**: bearings and shafts (to go with gears), sheet metal, extrusion profiles, pipe and tube. The contract is in ADDONS.md.
+1. **A sketch constraint solver** for free polylines: coincident, parallel, perpendicular, tangent, equal, dimensioned edges. Rectangles, circles, slots and polygons already keep their sizes as parameters.
+2. **Draft, rib and loft guide curves.** Taper an extrude with its scale for now.
+3. **Collision detection during motion**, and motion studies: plots of position, speed and clearance.
+4. **Interference check** between parts in an assembly (one click, using the BSP intersect).
+5. **Formulas on mate offsets and slides.** Driving dimensions cover most placement needs today.
+6. **Assembly-level drawings**: exploded views with balloons tied to the parts list, section views on the sheet, GD&T and notes.
+7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be 10–100× faster on large booleans.
+8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
+9. **More add-ons**: bearings and shafts, sheet metal, extrusion profiles, pipe and tube.
 
 ## Testing
 

@@ -91,7 +91,8 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_session` | undo, redo, new, demo, load a `.sf3d.json`, select, say |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
-| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV |
+| `model_import` | an STL / OBJ file from disk as a mesh part |
+| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF |
 
 **In the browser:**
 - Add a shape with the toolbar (B box, W wedge, C cylinder, K cone, O sphere).
@@ -106,8 +107,15 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - Click any orange dimension in the 2D views to change it. If another part had the same size running the same way, you're offered **Make it follow**: from then on it keeps step with the leader (shown teal, as =90).
 - Any size can be a formula: type `=plate.depth`, `=plate.depth - 10` or `=#wall * 2` in Properties (the link button beside each size picks a leader from a list). Model variables (#wall…) are in Properties with nothing selected.
 - *Measure* (**G**): click two dots in a 2D view. A hole centre then a face dot (the middle of an edge in that view) gives the off-edge distance, measured square to the edge; two points offer horizontal / vertical / aligned. Type a value to make it **driving**: the hole moves and stays at that distance from the edge when the part changes size.
-- The feature list shows **By part** (each part with its holes, edges, welds and arrays) or **History** (the order you made things).
-- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart.
+- The feature list shows **By part** (each part with its holes, edges, welds and arrays) or **History** (the order you made things). In History, drag rows to reorder and drag the blue **rollback bar** to see the model as it was (new features go in at the bar). The ⋯ / right-click menu: suppress, duplicate (Ctrl D), linked instance, pattern, move, delete.
+- *Profile* sketches: Polyline, **Rectangle** (rounded corners), **Circle**, **Slot**, **Polygon** (two clicks). Then Extrude, **Cut through** the part underneath, or Revolve. The shape's sizes stay editable dimensions.
+- *Hole*: pick a size (M2–M16) and type (simple, counterbore, countersink, tapped, heat-set insert) and fit (close / normal / loose / print), then click faces. Each hole is dimensioned from its nearest edges; click a dimension to move it.
+- *Shell…* (Properties) hollows a box, cylinder, cone, sphere or extrude to a wall thickness, open on the face you pick.
+- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar, with limits), then drag its slider or press play. Meshed gears turn with it. *Keep this pose* makes it the model's position.
+- **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
+- **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
+- File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block.
+- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart, J opens Motion, X sections, P patterns the selection, Ctrl D duplicates.
 
 ## 2 · Or just draw
 

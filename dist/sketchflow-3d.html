@@ -89,6 +89,9 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 .tblwrap{overflow-x:auto} table.cfg{border-collapse:collapse;font-size:12px;width:100%} table.cfg th{font:700 10px var(--f-ui);color:var(--ink-3);text-align:left;padding:2px 4px} table.cfg td{padding:2px 3px} table.cfg tr.on td{background:var(--sel)}
 table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 5px;font:500 12px var(--f-mono)}
 #hint input.vname{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:500 12px var(--f-ui);min-width:200px}
+.sheetov{position:fixed;inset:0;background:#0008;z-index:40;display:grid;place-items:center;padding:20px}
+.sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
+.sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
 .row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
 @media (hover:none){ .row .more{opacity:1} }
 .row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
@@ -779,7 +782,7 @@ const TYPES = {
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
-  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1] } },
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6 } },
   loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0 } },
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
@@ -861,7 +864,7 @@ function connectorsOf(o, solid) {
       /* features: start/end faces + bounding-box faces & centre (add-on shapes add their own connectors first) */
       const T = TYPES[o.type], c = T && T.def && T.def.connectors ? T.def.connectors(p, addonApi).slice() : [];
       if (o.type === 'extrude' || o.type === 'loft') {
-        const cen = centroid2(p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
+        const cen = centroid2(o.type === 'extrude' && p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
         const end = o.type === 'extrude' ? V.add([cen[0], cen[1], 0], V.mul(dir, L / (dir[2] || 1))) : [cen[0], cen[1], L];
         c.push(conn('start', [cen[0], cen[1], 0], [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
       }
@@ -971,7 +974,7 @@ function shellCavity(root, p) {
     case 'sphere': { const R = q.diameter / 2 - t; if (R <= 0) throw new Error('walls too thick'); return K.sphere(R, 32).transform(M4.translate([0, 0, t])); }
     case 'extrude': {
       if ((q.twist || 0) !== 0 || (q.scale != null && q.scale !== 1)) throw new Error('shell works on straight extrudes (no twist or taper)');
-      const inner = insetPolygon(q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
+      const inner = insetPolygon(q.shape && q.shape !== 'points' ? shapeProfile(q) : q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
       const z0 = open === 'start' || open === 'bottom' ? -E : t, z1 = open === 'end' || open === 'top' ? q.length + E : q.length - t;
       return K.extrude(inner, { length: z1 - z0, dir: q.direction }).transform(M4.translate(V.mul(V.norm(q.direction || [0, 0, 1]), z0 / (V.norm(q.direction || [0, 0, 1])[2] || 1))));
     }
@@ -1026,6 +1029,23 @@ function parseMesh(name, data) {
   for (let i = 0; i < tri.length; i++) tri[i] -= c[i % 3];
   return { triangles: Float32Array.from(tri), count: tri.length / 9, size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] };
 }
+/* ---------- parametric sketch shapes (extrude profiles that keep their sizes as dimensions) ---------- */
+const SKETCH_SHAPES = { rect: ['x', 'y', 'width', 'height', 'radius'], circle: ['x', 'y', 'diameter'], slot: ['x', 'y', 'width', 'height'], polygon: ['x', 'y', 'diameter', 'sides'] };
+function shapeProfile(p) {
+  const cx = +p.x || 0, cy = +p.y || 0, out = [], arc = (x, y, r, a0, a1, n) => { for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([x + r * Math.cos(a), y + r * Math.sin(a)]); } };
+  switch (p.shape) {
+    case 'rect': {
+      const w = +p.width, h = +p.height, r = Math.max(0, Math.min(+p.radius || 0, w / 2 - 1e-6, h / 2 - 1e-6)); if (!(w > 0 && h > 0)) throw new Error('width and height must be above 0');
+      if (r <= 1e-6) return [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
+      arc(cx + w / 2 - r, cy - h / 2 + r, r, -Math.PI / 2, 0, 8); arc(cx + w / 2 - r, cy + h / 2 - r, r, 0, Math.PI / 2, 8); arc(cx - w / 2 + r, cy + h / 2 - r, r, Math.PI / 2, Math.PI, 8); arc(cx - w / 2 + r, cy - h / 2 + r, r, Math.PI, 1.5 * Math.PI, 8);
+      return out;
+    }
+    case 'circle': { const r = +p.diameter / 2; if (!(r > 0)) throw new Error('diameter must be above 0'); for (let i = 0; i < SEG; i++) out.push([cx + r * Math.cos(2 * Math.PI * i / SEG), cy + r * Math.sin(2 * Math.PI * i / SEG)]); return out; }
+    case 'slot': { const L = +p.width, h = +p.height, r = h / 2; if (!(L > h && h > 0)) throw new Error('a slot needs width (overall length) greater than height'); arc(cx + L / 2 - r, cy, r, -Math.PI / 2, Math.PI / 2, 16); arc(cx - L / 2 + r, cy, r, Math.PI / 2, 1.5 * Math.PI, 16); return out; }
+    case 'polygon': { const n = Math.max(3, Math.round(+p.sides || 6)), r = +p.diameter / 2; if (!(r > 0)) throw new Error('diameter must be above 0'); for (let i = 0; i < n; i++) out.push([cx + r * Math.cos(Math.PI / 2 + 2 * Math.PI * i / n), cy + r * Math.sin(Math.PI / 2 + 2 * Math.PI * i / n)]); return out; }
+  }
+  return p.profile;
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -1037,7 +1057,7 @@ function buildLocal(o) {
     case 'cone': return K.cylinder(p.diameter / 2, Math.max(0, (p.top || 0) / 2), p.height, p.segments || SEG);
     case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
     case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
-    case 'extrude': return K.extrude(p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
+    case 'extrude': return K.extrude(p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
     case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
@@ -1064,7 +1084,14 @@ function dimsOf(o) {
     case 'cone': { const o2 = [D('diameter', [-p.diameter / 2, 0, 0], [p.diameter / 2, 0, 0], 'front', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')]; if (p.top > 0) o2.push(D('top', [-p.top / 2, 0, p.height], [p.top / 2, 0, p.height], 'front', 'diameter')); return o2; }
     case 'sphere': return [D('diameter', [-p.diameter / 2, 0, p.diameter / 2], [p.diameter / 2, 0, p.diameter / 2], 'front', 'diameter')];
     case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
-    case 'extrude': { const c = centroid2(p.profile), dir = V.norm(p.direction || [0, 0, 1]); return [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')]; }
+    case 'extrude': {
+      const prof = p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, c = centroid2(prof), dir = V.norm(p.direction || [0, 0, 1]);
+      const out = [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')], x = +p.x || 0, y = +p.y || 0;
+      /* a shape's own sizes are dimensions in its sketch plane */
+      if (p.shape === 'rect' || p.shape === 'slot') out.push(D('width', [x - p.width / 2, y - p.height / 2, 0], [x + p.width / 2, y - p.height / 2, 0], 'auto'), D('height', [x - p.width / 2, y - p.height / 2, 0], [x - p.width / 2, y + p.height / 2, 0], 'auto'));
+      if (p.shape === 'circle' || p.shape === 'polygon') out.push(D('diameter', [x - p.diameter / 2, y, 0], [x + p.diameter / 2, y, 0], 'auto', 'diameter'));
+      return out;
+    }
     case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto')]; }
     default: { const T = TYPES[o.type]; if (T && T.def && T.def.dims) { try { return T.def.dims(p, addonApi) || []; } catch (e) { return []; } } return []; }
   }
@@ -2154,7 +2181,7 @@ function poseFromMatrix(M) {
   return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
 }
 
-return { K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
+return { K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
 })();
 
 __sf3.views = (() => {
@@ -2430,7 +2457,8 @@ class Views {
       if (it.dir) { const o0 = this.project(pane, [0, 0, 0], cam), o1 = this.project(pane, it.dir, cam), l = Math.hypot(o1.x - o0.x, o1.y - o0.y); if (l < 1e-9) continue; ux = (o1.x - o0.x) / l; uy = (o1.y - o0.y) / l; }
       else { const L0 = Math.hypot(Bp.x - A.x, Bp.y - A.y); if (L0 < 6) continue; ux = (Bp.x - A.x) / L0; uy = (Bp.y - A.y) / L0; }
       let nx = -uy, ny = ux;
-      const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), [0, 0, 0]), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
+      const lb = it.ob && R.local.get(it.ob.id), lc = lb && !lb.isEmpty() ? V.lerp(lb.bbox().min, lb.bbox().max, 0.5) : [0, 0, 0];   /* dimensions go outside the part's middle */
+      const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), lc), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
       const mid = { x: (A.x + Bp.x) / 2, y: (A.y + Bp.y) / 2 }; if (!it.measure && (mid.x - bc.x) * nx + (mid.y - bc.y) * ny < 0) { nx = -nx; ny = -ny; }
       /* both extension lines reach a common dimension line, beyond the further point */
       const da = A.x * nx + A.y * ny, db = Bp.x * nx + Bp.y * ny, far = Math.max(da, db);
@@ -2616,6 +2644,212 @@ function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) *
 function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
 
 return { Views, fmt };
+})();
+
+__sf3.drawing = (() => {
+/* SketchFlow 3D drawings: an engineering sheet from the live model.
+   Third-angle layout (TOP above FRONT, RIGHT beside it, an isometric view top-right), visible and hidden lines
+   (hidden-line removal by sampling every edge against all parts' triangles, sped up with a 2D grid), the parts'
+   carried dimensions and the measured dimensions, a parts list and a title block. Exports SVG (prints to PDF) and DXF. */
+const K = __sf3.kernel;
+const { dimsOf, measureDim, massReport, bom, MATERIALS } = __sf3.model;
+const { V, M4 } = K;
+
+const VIEWS = {
+  front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] },
+  top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] },
+  right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] },
+  iso: (() => { const f = V.norm([1, -1, 1]), r = V.norm(V.cross([0, 0, 1], f)), u = V.cross(f, r); return { r, u, f }; })()
+};
+const SMOOTH = (sid) => /:(side|surface|arc|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid);
+const SHEETS = { A4: [297, 210], A3: [420, 297], A2: [594, 420] };
+const SCALES = [10, 5, 4, 2, 1, 1 / 2, 1 / 2.5, 1 / 4, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100];
+const fmt = (v) => (Math.round(v * 100) / 100).toString();
+const scaleText = (s) => (s >= 1 ? `${fmt(s)}:1` : `1:${fmt(1 / s)}`);
+
+/* lines of one view, each split into visible / hidden runs, in view coordinates (x right, y up, mm) */
+function viewLines(R, view, opts = {}) {
+  const B = VIEWS[view], O = R.originPoint, bodies = R.bodies.filter(b => !b.hidden && !b.solid.isEmpty());
+  const P = (p) => { const q = V.sub(p, O); return [V.dot(q, B.r), V.dot(q, B.u), V.dot(q, B.f)]; };
+  /* occluders */
+  const tris = []; let mn = [Infinity, Infinity], mx = [-Infinity, -Infinity];
+  for (const b of bodies) { const m = b.solid.toMesh(), X = m.positions; for (let i = 0; i < X.length; i += 9) { const t = [P([X[i], X[i + 1], X[i + 2]]), P([X[i + 3], X[i + 4], X[i + 5]]), P([X[i + 6], X[i + 7], X[i + 8]])]; const area = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]); if (Math.abs(area) < 1e-10) continue; tris.push(t); for (const q of t) { mn = [Math.min(mn[0], q[0]), Math.min(mn[1], q[1])]; mx = [Math.max(mx[0], q[0]), Math.max(mx[1], q[1])]; } } }
+  if (!tris.length) return { lines: [], bbox: null };
+  const G = 96, cw = (mx[0] - mn[0]) / G || 1, ch = (mx[1] - mn[1]) / G || 1, grid = Array.from({ length: G * G }, () => []);
+  const cell = (x, y) => [Math.max(0, Math.min(G - 1, Math.floor((x - mn[0]) / cw))), Math.max(0, Math.min(G - 1, Math.floor((y - mn[1]) / ch)))];
+  tris.forEach((t, i) => { const a = cell(Math.min(t[0][0], t[1][0], t[2][0]), Math.min(t[0][1], t[1][1], t[2][1])), b = cell(Math.max(t[0][0], t[1][0], t[2][0]), Math.max(t[0][1], t[1][1], t[2][1])); for (let x = a[0]; x <= b[0]; x++) for (let y = a[1]; y <= b[1]; y++) grid[y * G + x].push(i); });
+  const diag = Math.hypot(mx[0] - mn[0], mx[1] - mn[1]), eps = Math.max(1e-3, diag * 2e-4);
+  const hidden = (x, y, z) => {
+    const [cx, cy] = cell(x, y);
+    for (const i of grid[cy * G + cx]) {
+      const [a, b, c] = tris[i], d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+      const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d, l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d, l3 = 1 - l1 - l2;
+      const tol = 1e-6; if (l1 < tol || l2 < tol || l3 < tol) continue;   /* strictly inside: an edge on a face's boundary is not hidden by that face */
+      if (l1 * a[2] + l2 * b[2] + l3 * c[2] > z + eps) return true;
+    }
+    return false;
+  };
+  /* edges: creases (all), silhouettes of curved surfaces (for this direction) */
+  const segs = [];
+  for (const b of bodies) {
+    for (const [a, c] of K.creaseEdges(b.solid)) segs.push([P(a), P(c)]);
+    for (const [a, c] of K.silhouetteEdges(b.solid, B.f, SMOOTH)) segs.push([P(a), P(c)]);
+  }
+  const lines = [], step = Math.max(diag / 500, 0.05);
+  for (const [a, c] of segs) {
+    const L = Math.hypot(c[0] - a[0], c[1] - a[1]); if (L < 1e-6) continue;
+    const n = Math.max(2, Math.min(80, Math.ceil(L / step))), state = [];
+    for (let k = 0; k <= n; k++) { const t = k / n; state.push(hidden(a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t)); }
+    /* single-sample flips are grazing-angle noise (an edge lying on a surface): follow the neighbours */
+    for (let k = 1; k < n; k++) if (state[k] !== state[k - 1] && state[k] !== state[k + 1]) state[k] = state[k - 1];
+    let s0 = 0;
+    for (let k = 1; k <= n + 1; k++) {
+      if (k === n + 1 || state[k] !== state[s0]) {
+        const t0 = s0 === 0 ? 0 : (s0 - 0.5) / n, t1 = k === n + 1 ? 1 : (k - 0.5) / n;
+        if (t1 - t0 > 1e-6 && (!state[s0] || opts.hidden !== false)) lines.push({ a: [a[0] + (c[0] - a[0]) * t0, a[1] + (c[1] - a[1]) * t0], b: [a[0] + (c[0] - a[0]) * t1, a[1] + (c[1] - a[1]) * t1], hidden: state[s0] });
+        s0 = k;
+      }
+    }
+  }
+  return { lines, bbox: { min: mn, max: mx } };
+}
+
+/* dimensions shown in a view: [{a, b (view coords), dir?, text, kind}] */
+function viewDims(model, view) {
+  const R = model.result, O = R.originPoint, B = VIEWS[view], out = [];
+  const P = (p) => { const q = V.sub(p, O); return [V.dot(q, B.r), V.dot(q, B.u)]; };
+  for (const ob of model.doc.objects) {
+    if (!R.world.has(ob.id) || ['edge', 'pattern', 'weld', 'shell'].includes(ob.type) || (R.off && R.off.has(ob.id))) continue;
+    const M = R.world.get(ob.id), lb = R.local.get(ob.id), lc = lb && !lb.isEmpty() ? V.lerp(lb.bbox().min, lb.bbox().max, 0.5) : [0, 0, 0], c = P(M4.point(M, lc));   /* the part's middle: dimensions go outside it */
+    for (const d of dimsOf(ob)) {
+      const a = M4.point(M, d.a), b = M4.point(M, d.b), dir = V.norm(V.sub(b, a));
+      let v = d.view; if (v === 'auto') { let best = 'front', bs = -1; for (const w of ['front', 'top', 'right']) { const sc = 1 - Math.abs(V.dot(dir, VIEWS[w].f)); if (sc > bs) { bs = sc; best = w; } } v = best; }
+      if (v !== view || Math.abs(V.dot(dir, B.f)) > 0.2) continue;
+      out.push({ a: P(a), b: P(b), text: (d.kind === 'diameter' ? 'Ø' : '') + fmt(ob.params[d.param]), center: c, owner: ob.id });
+    }
+  }
+  for (const md of model.doc.dims || []) {
+    if ((md.view || 'front') !== view) continue;
+    const m = measureDim(R, md); if (!m) continue;
+    out.push({ a: P(m.from), b: P(m.to), dir: [V.dot(m.dir, B.r), V.dot(m.dir, B.u)], text: fmt(m.value), owner: 'm', measured: true });
+  }
+  return out;
+}
+
+/* lay out the sheet; returns everything in sheet mm (origin bottom-left, y up) */
+function layoutSheet(model, opts = {}) {
+  const R = model.result, size = SHEETS[opts.sheet] || SHEETS.A3, [W, H] = size, m = 10, tbH = 36, tbW = 180;
+  const ext = {}; let any = false;
+  for (const v of ['front', 'top', 'right', 'iso']) { const vl = viewLines(R, v, { hidden: v !== 'iso' }); ext[v] = vl; if (vl.bbox) any = true; }
+  if (!any) throw new Error('Nothing to draw: the model is empty');
+  const span = (v, k) => (ext[v].bbox ? ext[v].bbox.max[k] - ext[v].bbox.min[k] : 0);
+  const nParts = bom(model.doc, R).lines.length, partsH = nParts > 1 ? (Math.min(14, nParts) + 1) * 5 + 4 : 0, base = tbH + partsH;   /* the title block and parts list sit bottom-right */
+  const gap = 24, areaW = W - 2 * m - 10, areaH = H - 2 * m - base - 10;
+  const needW = span('front', 0) + span('right', 0), needH = span('top', 1) + span('front', 1);
+  const fit = Math.min((areaW * 0.68 - gap) / (needW || 1), (areaH - gap) / (needH || 1));
+  const scale = opts.scale || SCALES.find(s => s <= fit) || SCALES[SCALES.length - 1];
+  /* view centres: FRONT bottom-left, TOP above it, RIGHT to its right (third angle), ISO top-right */
+  const fx = m + 10 + span('front', 0) * scale / 2, fy = m + base + 14 + span('front', 1) * scale / 2;
+  const place = {
+    front: [fx, fy],
+    top: [fx, fy + span('front', 1) * scale / 2 + gap + span('top', 1) * scale / 2],
+    right: [fx + span('front', 0) * scale / 2 + gap + span('right', 0) * scale / 2, fy]
+  };
+  const isoFit = Math.min((W - m - (place.right[0] + span('right', 0) * scale / 2 + gap)) / (span('iso', 0) || 1), (H - m - (fy + span('front', 1) * scale / 2 + 8)) / (span('iso', 1) || 1));
+  const isoScale = Math.max(Math.min(scale, isoFit * 0.85), scale * 0.35);
+  place.iso = [W - m - 8 - span('iso', 0) * isoScale / 2, H - m - 10 - span('iso', 1) * isoScale / 2];
+  const toSheet = (v, p) => { const bb = ext[v].bbox, s = v === 'iso' ? isoScale : scale, c = [(bb.min[0] + bb.max[0]) / 2, (bb.min[1] + bb.max[1]) / 2]; return [place[v][0] + (p[0] - c[0]) * s, place[v][1] + (p[1] - c[1]) * s]; };
+  const lines = [], dims = [], labels = [];
+  for (const v of ['front', 'top', 'right', 'iso']) {
+    if (!ext[v].bbox) continue;
+    for (const l of ext[v].lines) lines.push({ a: toSheet(v, l.a), b: toSheet(v, l.b), hidden: l.hidden, view: v });
+    const bb = ext[v].bbox, s = v === 'iso' ? isoScale : scale, label = { at: [place[v][0], place[v][1] - (bb.max[1] - bb.min[1]) * s / 2 - 7], text: v === 'iso' ? 'ISOMETRIC' : v.toUpperCase(), size: 3.2 };
+    labels.push(label);
+    if (v === 'iso' || opts.dims === false) continue;
+    const firstDim = dims.length;
+    const counts = new Map();
+    for (const d of viewDims(model, v)) {
+      const A = toSheet(v, d.a), Bp = toSheet(v, d.b);
+      let ux, uy; if (d.dir) { const l = Math.hypot(d.dir[0], d.dir[1]); if (l < 1e-9) continue; ux = d.dir[0] / l; uy = d.dir[1] / l; } else { const l = Math.hypot(Bp[0] - A[0], Bp[1] - A[1]); if (l < 1.5) continue; ux = (Bp[0] - A[0]) / l; uy = (Bp[1] - A[1]) / l; }
+      let nx = -uy, ny = ux;
+      const ctr = d.center ? toSheet(v, d.center) : place[v], mid = [(A[0] + Bp[0]) / 2, (A[1] + Bp[1]) / 2];
+      if (!d.measured && (mid[0] - ctr[0]) * nx + (mid[1] - ctr[1]) * ny < 0) { nx = -nx; ny = -ny; }
+      const da = A[0] * nx + A[1] * ny, db = Bp[0] * nx + Bp[1] * ny, far = Math.max(da, db), key = d.owner + ':' + Math.round(nx * 2) + Math.round(ny * 2), k = counts.get(key) || 0; counts.set(key, k + 1);
+      const off = 7 + k * 6, a2 = [A[0] + nx * (far - da + off), A[1] + ny * (far - da + off)], b2 = [Bp[0] + nx * (far - db + off), Bp[1] + ny * (far - db + off)];
+      if (Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) < 1) continue;
+      dims.push({ ext: [[[A[0] + nx * 1, A[1] + ny * 1], [a2[0] + nx * 1.5, a2[1] + ny * 1.5]], [[Bp[0] + nx * 1, Bp[1] + ny * 1], [b2[0] + nx * 1.5, b2[1] + ny * 1.5]]], line: [a2, b2], text: d.text, at: [(a2[0] + b2[0]) / 2 + nx * 2.2, (a2[1] + b2[1]) / 2 + ny * 2.2], angle: Math.atan2(b2[1] - a2[1], b2[0] - a2[0]) });
+    }
+    /* the view's name goes below its lowest dimension */
+    let low = label.at[1] + 7; for (const d of dims.slice(firstDim)) low = Math.min(low, d.line[0][1], d.line[1][1], d.at[1] - 2);
+    label.at[1] = low - 7;
+  }
+  /* title block + parts list */
+  const rep = massReport(model.doc, R), parts = bom(model.doc, R).lines, mats = [...new Set(rep.parts.map(p => p.material_name).filter(Boolean))];
+  const title = { x: W - m - tbW, y: m, w: tbW, h: tbH, fields: [
+    ['TITLE', model.doc.name || 'Model'], ['SCALE', scaleText(scale)], ['UNITS', 'mm'], ['PROJECTION', 'third angle'],
+    ['MATERIAL', mats.join(', ') || '—'], ['MASS', rep.total_mass_g ? (rep.total_mass_g >= 1000 ? fmt(rep.total_mass_g / 1000) + ' kg' : fmt(rep.total_mass_g) + ' g') : '—'],
+    ['DATE', opts.date || new Date().toISOString().slice(0, 10)], ['DRAWN', 'SketchFlow 3D'], ['SHEET', '1 / 1']
+  ] };
+  return { W, H, m, scale, isoScale, lines, dims, labels, title, parts: parts.length > 1 ? parts : [], sheet: opts.sheet || 'A3' };
+}
+
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function drawingSVG(model, opts = {}) {
+  const S = layoutSheet(model, opts), Y = (y) => S.H - y, o = [];
+  o.push(`<?xml version="1.0" encoding="UTF-8"?>`, `<svg xmlns="http://www.w3.org/2000/svg" width="${S.W}mm" height="${S.H}mm" viewBox="0 0 ${S.W} ${S.H}" font-family="Helvetica, Arial, sans-serif">`);
+  o.push(`<rect x="0" y="0" width="${S.W}" height="${S.H}" fill="#fff"/>`, `<rect x="${S.m}" y="${S.m}" width="${S.W - 2 * S.m}" height="${S.H - 2 * S.m}" fill="none" stroke="#000" stroke-width="0.5"/>`);
+  const L = (a, b, cls) => `<line x1="${a[0].toFixed(3)}" y1="${Y(a[1]).toFixed(3)}" x2="${b[0].toFixed(3)}" y2="${Y(b[1]).toFixed(3)}" class="${cls}"/>`;
+  o.push(`<style>.v{stroke:#000;stroke-width:0.35;stroke-linecap:round}.h{stroke:#000;stroke-width:0.18;stroke-dasharray:1.6 0.9}.d{stroke:#1d4ed8;stroke-width:0.18}.t{fill:#1d4ed8;font-size:3px}.lbl{font-size:3.2px;font-weight:bold;letter-spacing:.3px}.tb{stroke:#000;stroke-width:0.25;fill:none}.k{font-size:2px;fill:#555}.val{font-size:3.4px}</style>`);
+  o.push('<g>', ...S.lines.filter(l => l.hidden).map(l => L(l.a, l.b, 'h')), ...S.lines.filter(l => !l.hidden).map(l => L(l.a, l.b, 'v')), '</g>');
+  for (const d of S.dims) {
+    o.push(L(d.ext[0][0], d.ext[0][1], 'd'), L(d.ext[1][0], d.ext[1][1], 'd'), L(d.line[0], d.line[1], 'd'));
+    const arrow = (p, q) => { const ux = q[0] - p[0], uy = q[1] - p[1], l = Math.hypot(ux, uy) || 1, x = ux / l, y = uy / l, s = 2.4, w = 0.8; return `<polygon points="${p[0]},${Y(p[1])} ${p[0] + x * s - y * w},${Y(p[1] + y * s + x * w)} ${p[0] + x * s + y * w},${Y(p[1] + y * s - x * w)}" fill="#1d4ed8"/>`; };
+    o.push(arrow(d.line[0], d.line[1]), arrow(d.line[1], d.line[0]));
+    let ang = -d.angle * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+    o.push(`<text x="${d.at[0].toFixed(2)}" y="${Y(d.at[1]).toFixed(2)}" class="t" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang.toFixed(1)} ${d.at[0].toFixed(2)} ${Y(d.at[1]).toFixed(2)})">${esc(d.text)}</text>`);
+  }
+  for (const l of S.labels) o.push(`<text x="${l.at[0].toFixed(1)}" y="${Y(l.at[1]).toFixed(1)}" text-anchor="middle" class="lbl">${esc(l.text)}</text>`);
+  /* title block: a 3 × 3 grid of labelled cells */
+  const T = S.title, cw = T.w / 3, chh = T.h / 3;
+  o.push(`<rect x="${T.x}" y="${Y(T.y + T.h)}" width="${T.w}" height="${T.h}" class="tb"/>`);
+  T.fields.forEach(([k, v], i) => { const cx = T.x + (i % 3) * cw, cy = T.y + T.h - Math.floor(i / 3) * chh; o.push(`<rect x="${cx}" y="${Y(cy)}" width="${cw}" height="${chh}" class="tb"/>`, `<text x="${cx + 1.5}" y="${Y(cy - 3)}" class="k">${k}</text>`, `<text x="${cx + 1.5}" y="${Y(cy - chh + 3)}" class="val">${esc(v).slice(0, 40)}</text>`); });
+  /* third-angle symbol */
+  const sx = T.x - 22, sy = T.y + 8; o.push(`<g class="tb"><circle cx="${sx + 14}" cy="${Y(sy + 6)}" r="2"/><circle cx="${sx + 14}" cy="${Y(sy + 6)}" r="4"/><polygon points="${sx},${Y(sy + 4)} ${sx + 8},${Y(sy + 2)} ${sx + 8},${Y(sy + 10)} ${sx},${Y(sy + 8)}"/></g>`);
+  if (S.parts.length) {
+    const rows = S.parts.slice(0, 14), rh = 5, x0 = T.x, y0 = T.y + T.h + 4, cols = [[0, 'ITEM', 12], [12, 'PART', 62], [74, 'NO.', 34], [108, 'MATERIAL', 44], [152, 'QTY', 12], [164, 'g', 16]];
+    o.push(`<rect x="${x0}" y="${Y(y0 + rh * (rows.length + 1))}" width="${T.w}" height="${rh * (rows.length + 1)}" class="tb"/>`);
+    [{ item: 'ITEM' }].concat(rows).forEach((r, i) => { const yy = y0 + rh * (rows.length - i + 1) - 3.4; const vals = i === 0 ? cols.map(c => c[1]) : [r.item, r.part, r.part_no, r.material, r.quantity, r.mass_total_g == null ? '' : fmt(r.mass_total_g)]; cols.forEach(([cx], j) => o.push(`<text x="${x0 + cx + 1}" y="${Y(yy)}" class="${i === 0 ? 'k' : 'val'}" style="font-size:${i === 0 ? 2 : 2.8}px">${esc(vals[j] == null ? '' : vals[j]).slice(0, 26)}</text>`)); o.push(`<line x1="${x0}" y1="${Y(y0 + rh * (rows.length - i))}" x2="${x0 + T.w}" y2="${Y(y0 + rh * (rows.length - i))}" class="tb"/>`); });
+  }
+  o.push('</svg>');
+  return o.join('\n');
+}
+/* DXF (R12 ASCII): layers VISIBLE, HIDDEN (HIDDEN linetype), DIMS, TEXT, BORDER — in sheet mm */
+function drawingDXF(model, opts = {}) {
+  const S = layoutSheet(model, opts), o = [], g = (c, v) => o.push(String(c), String(v));
+  g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'TABLES');
+  g(0, 'TABLE'); g(2, 'LTYPE'); g(70, 2);
+  g(0, 'LTYPE'); g(2, 'CONTINUOUS'); g(70, 0); g(3, 'Solid line'); g(72, 65); g(73, 0); g(40, 0);
+  g(0, 'LTYPE'); g(2, 'HIDDEN'); g(70, 0); g(3, 'Hidden __ __ __'); g(72, 65); g(73, 2); g(40, 2.5); g(49, 1.6); g(49, -0.9);
+  g(0, 'ENDTAB');
+  g(0, 'TABLE'); g(2, 'LAYER'); g(70, 5);
+  for (const [n, col, lt] of [['VISIBLE', 7, 'CONTINUOUS'], ['HIDDEN', 8, 'HIDDEN'], ['DIMS', 5, 'CONTINUOUS'], ['TEXT', 7, 'CONTINUOUS'], ['BORDER', 7, 'CONTINUOUS']]) { g(0, 'LAYER'); g(2, n); g(70, 0); g(62, col); g(6, lt); }
+  g(0, 'ENDTAB'); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'ENTITIES');
+  const line = (a, b, layer) => { g(0, 'LINE'); g(8, layer); g(10, a[0].toFixed(4)); g(20, a[1].toFixed(4)); g(30, 0); g(11, b[0].toFixed(4)); g(21, b[1].toFixed(4)); g(31, 0); };
+  const text = (p, h, t, layer, rot) => { g(0, 'TEXT'); g(8, layer); g(10, p[0].toFixed(3)); g(20, p[1].toFixed(3)); g(30, 0); g(40, h); g(1, String(t).replace(/Ø/g, '%%c')); if (rot) g(50, rot.toFixed(2)); };
+  const rect = (x, y, w, h, layer) => { line([x, y], [x + w, y], layer); line([x + w, y], [x + w, y + h], layer); line([x + w, y + h], [x, y + h], layer); line([x, y + h], [x, y], layer); };
+  rect(S.m, S.m, S.W - 2 * S.m, S.H - 2 * S.m, 'BORDER');
+  for (const l of S.lines) line(l.a, l.b, l.hidden ? 'HIDDEN' : 'VISIBLE');
+  for (const d of S.dims) { line(d.ext[0][0], d.ext[0][1], 'DIMS'); line(d.ext[1][0], d.ext[1][1], 'DIMS'); line(d.line[0], d.line[1], 'DIMS'); let ang = d.angle * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; text([d.at[0] - d.text.length * 0.9, d.at[1] - 1], 2.5, d.text, 'DIMS', ang); }
+  for (const l of S.labels) text([l.at[0] - l.text.length * 1.1, l.at[1]], 3, l.text, 'TEXT');
+  const T = S.title, cw = T.w / 3, chh = T.h / 3; rect(T.x, T.y, T.w, T.h, 'BORDER');
+  T.fields.forEach(([k, v], i) => { const cx = T.x + (i % 3) * cw, cy = T.y + T.h - Math.floor(i / 3) * chh; rect(cx, cy - chh, cw, chh, 'BORDER'); text([cx + 1.5, cy - 3.5], 1.8, k, 'TEXT'); text([cx + 1.5, cy - chh + 2.5], 3, String(v).slice(0, 40), 'TEXT'); });
+  g(0, 'ENDSEC'); g(0, 'EOF');
+  return o.join('\n');
+}
+
+return { DRAWING_VIEWS: VIEWS, scaleText, viewLines, layoutSheet, drawingSVG, drawingDXF };
 })();
 
 __sf3.gears = (() => {
@@ -3003,9 +3237,10 @@ return { default: __default };
 __sf3.app = (() => {
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles } = __sf3.model;
+const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } = __sf3.model;
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
+const { drawingSVG, drawingDXF } = __sf3.drawing;
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -3069,7 +3304,9 @@ function subOf(o) {
     case 'sphere': return `Ø${fmt(p.diameter)}`;
     case 'edge': return `${p.style} ${fmt(p.size)}${o._resolved && o._resolved.round ? ' round' : ''} · on ${name(o.into)}`;
     case 'fillet': return `${p.style} ${fmt(p.size)} × ${fmt(p.length)}`;
-    case 'extrude': case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}`;
+    case 'extrude': if (p.shape && p.shape !== 'points') return `${p.shape === 'rect' ? 'rectangle ' + fmt(p.width) + ' × ' + fmt(p.height) + (p.radius ? ' r' + fmt(p.radius) : '') : p.shape === 'slot' ? 'slot ' + fmt(p.width) + ' × ' + fmt(p.height) : (p.shape === 'polygon' ? p.sides + '-gon Ø' : 'circle Ø') + fmt(p.diameter)} · ${fmt(p.length)}${o.into ? ' · cut' : ''}`;
+    /* falls through */
+    case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}`;
     case 'revolve': return `${p.profile.length} pts · ${fmt(p.degrees)}°`;
     case 'sweep': return `${p.profile.length} pts · ${p.path.length - 1} segments`;
     case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
@@ -3274,7 +3511,7 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] } };
+const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] } };
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -3370,7 +3607,9 @@ function renderProps() {
   }
   const s1 = sec(TYPES[o.type] ? TYPES[o.type].label : o.type);
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
-  const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params) : Object.keys(o.params);
+  const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
+    : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'twist', 'scale'] : ['profile', 'length', 'twist', 'scale', 'direction'])
+      : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
   if (o.type === 'edge' && o._resolved) s1.append(el('div', { class: 'f' }, 'edge', el('span', null, (o._resolved.convex ? 'outer (convex) → removes' : 'inner (concave) → adds') + ' · ' + o._resolved.angle + '°' + (o._resolved.round ? ' · all round' : ''))));
   if (o.type === 'pattern') {
@@ -3549,12 +3788,25 @@ $('#fileBtn').onclick = (e) => {
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
   item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
+  item('Export drawing (SVG, A3)', () => { try { download(new Blob([drawingSVG(model, { sheet: 'A3' })], { type: 'image/svg+xml' }), slug() + '-drawing.svg'); } catch (e) { toast(e.message, 3000); } });
+  item('Export drawing (DXF)', () => { try { download(new Blob([drawingDXF(model, { sheet: 'A3' })], { type: 'application/dxf' }), slug() + '-drawing.dxf'); } catch (e) { toast(e.message, 3000); } });
+  item('Preview drawing', previewDrawing);
   item('Import STL / OBJ…', () => $('#meshIn').click());
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
   item('Versions…', showVersions);
   item('Load the demo model', demo);
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
+/* the drawing sheet in an overlay (works in the artifact viewer too, where downloads are blocked) */
+function previewDrawing() {
+  let svg; try { svg = drawingSVG(model, { sheet: prefs.sheet || 'A3' }); } catch (e) { toast(e.message, 3000); return; }
+  const ov = el('div', { class: 'sheetov', onclick: (e) => { if (e.target === ov) ov.remove(); } });
+  const bar = el('div', { class: 'sheetbar' }, el('b', null, 'Drawing'), el('span', { class: 'note' }, 'Third-angle views, hidden lines dashed, dimensions from the model'),
+    el('span', { style: 'flex:1' }), ...['A4', 'A3', 'A2'].map(sz => el('button', { class: 'btn' + ((prefs.sheet || 'A3') === sz ? ' pri' : ''), onclick: () => { prefs.sheet = sz; savePrefs(); ov.remove(); previewDrawing(); } }, sz)),
+    el('button', { class: 'btn', onclick: () => download(new Blob([svg], { type: 'image/svg+xml' }), slug() + '-drawing.svg') }, 'SVG'), el('button', { class: 'btn', onclick: () => download(new Blob([drawingDXF(model, { sheet: prefs.sheet || 'A3' })], { type: 'application/dxf' }), slug() + '-drawing.dxf') }, 'DXF'), el('button', { class: 'btn', onclick: () => ov.remove() }, 'Close'));
+  const img = el('img', { src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), alt: 'Drawing sheet' });
+  ov.append(el('div', { class: 'sheetbox' }, bar, el('div', { class: 'sheetimg' }, img))); document.body.append(ov);
+}
 function showVersions() {
   const vs = model.listVersions();
   if (!vs.length) { toast('No versions yet: File → Save version… keeps a named copy'); return; }
@@ -3642,8 +3894,44 @@ function setTool(name, arg) {
     document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
-  else if (name === 'sketch') { tool.data.points = []; if (!arg) pendingLoft = null; hint(pendingLoft ? 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)' : 'Sketch: click points in FRONT, TOP or RIGHT · click the first point (or Enter) to close · Shift = straight'); }
+  else if (name === 'sketch') { tool.data.points = []; tool.data.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); if (!arg) pendingLoft = null; sketchHint(); }
   syncBar(); views.draw();
+}
+const SKETCH_HELP = { polyline: 'click points · click the first point (or Enter) to close · Shift = straight', rect: 'click one corner, then the opposite corner', circle: 'click the centre, then a point on the circle', slot: 'click one end, then the other (along the view’s horizontal)', polygon: 'click the centre, then a corner' };
+function sketchHint() {
+  const h = $('#hint'), d = tool.data; h.hidden = false; h.innerHTML = '';
+  if (pendingLoft) { h.append(el('span', null, 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)'), el('button', { onclick: () => setTool(null) }, 'Esc')); return; }
+  h.append(el('span', null, 'Profile in FRONT, TOP or RIGHT:'));
+  for (const [k, t] of [['polyline', 'Polyline'], ['rect', 'Rectangle'], ['circle', 'Circle'], ['slot', 'Slot'], ['polygon', 'Polygon']]) h.append(el('button', { class: d.mode === k ? 'on' : '', onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; d.points = []; d.pane = null; views.preview = null; sketchHint(); views.draw(); } }, t));
+  if (d.mode === 'polygon') { const i = el('input', { type: 'number', min: 3, step: 1, value: prefs.sides || 6, 'aria-label': 'sides', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.sides = Math.max(3, Math.round(+i.value)); savePrefs(); }); h.append(el('label', { class: 'hf' }, 'sides', i)); }
+  if (d.mode === 'slot') { const i = el('input', { type: 'number', min: 1, step: 'any', value: prefs.slotW || 10, 'aria-label': 'slot width', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.slotW = +i.value; savePrefs(); }); h.append(el('label', { class: 'hf' }, 'width', i)); }
+  h.append(el('span', { class: 'note' }, SKETCH_HELP[d.mode]), el('button', { onclick: () => setTool(null) }, 'Esc'));
+}
+/* a shape from two sketch clicks (in the view's 2D coordinates) */
+function shapeFrom(mode, a, b) {
+  if (mode === 'rect') return { shape: 'rect', x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), radius: 0 };
+  if (mode === 'circle') return { shape: 'circle', x: a[0], y: a[1], diameter: 2 * Math.hypot(b[0] - a[0], b[1] - a[1]) };
+  if (mode === 'polygon') return { shape: 'polygon', x: a[0], y: a[1], diameter: 2 * Math.hypot(b[0] - a[0], b[1] - a[1]), sides: prefs.sides || 6 };
+  if (mode === 'slot') { const h = prefs.slotW || 10; return { shape: 'slot', x: (a[0] + b[0]) / 2, y: a[1], width: Math.abs(b[0] - a[0]) + h, height: h }; }
+  return null;
+}
+function shapePoints3(spec, B) { try { return shapeProfile(spec).map(([x, y]) => V.add(V.mul(B.r, x), V.mul(B.u, y))); } catch (e) { return []; } }
+function finishShape(spec) {
+  const d = tool.data, B = d.basis, pts2 = shapeProfile(spec);
+  views.preview = { pane: d.pane, points: shapePoints3(spec, B), closed: true }; views.draw();
+  const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]), pose = poseFromMatrix(frame);
+  const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt), name = { rect: 'Rectangle', circle: 'Circle', slot: 'Slot', polygon: 'Polygon' }[spec.shape];
+  /* the part under the shape (for Cut): pick through the shape's centre in that view */
+  const pane = views.panes().find(q => q.id === d.pane), cs = views.project(pane, V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y))), under = views.pick(pane, cs.x, cs.y), target = under && model.resolveId(under.id);
+  const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, profile: pts2 }, spec)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
+  if (target && !(R.virtual && R.virtual.has(under.id))) actions.push(['Cut through ' + (model.get(target) || {}).name, () => {
+    const body = model.bodyContaining(target), bb = body.solid.bbox(), corners = []; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) corners.push(V.dot(V.sub([x, y, z], R.originPoint), B.f));
+    const f0 = Math.min(...corners) - 1, f1 = Math.max(...corners) + 1, at = V.add(pose.at, V.mul(B.f, f0));
+    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+  }]);
+  actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
+  hint(`${name} ${spec.shape === 'rect' || spec.shape === 'slot' ? fmt(spec.width) + ' × ' + fmt(spec.height) : 'Ø' + fmt(spec.diameter)} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['degrees', 'revolve °', 360]]);
+  tool.step = 9;
 }
 function finishSketch() {
   const d = tool.data; if (!d.points || d.points.length < 3) { toast('A profile needs at least 3 points'); return; }
@@ -3697,7 +3985,8 @@ stage.addEventListener('pointermove', (e) => {
     let pp = views.planePoint(pane, x, y); if (!pp) return;
     if (tool.data.pane && tool.data.pane !== pane.id) { views.draw(); return; }
     let p = snapSketch(pane, pp, e.shiftKey);
-    views.preview = { pane: pane.id, points: tool.data.points, cursor: p };
+    if (tool.data.mode && tool.data.mode !== 'polyline' && tool.data.points.length === 1) { const B = BASISof(pane.id), a = tool.data.points[0], spec = shapeFrom(tool.data.mode, [V.dot(a, B.r), V.dot(a, B.u)], [V.dot(p, B.r), V.dot(p, B.u)]); views.preview = { pane: pane.id, points: shapePoints3(spec, B), closed: true }; }
+    else views.preview = { pane: pane.id, points: tool.data.points, cursor: p };
   }
   stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube') ? 'pointer' : tool ? 'crosshair' : 'default';
   views.draw();
@@ -3742,6 +4031,13 @@ function clickTool(pane, x, y, hit, e) {
     if (t.data.pane && t.data.pane !== pane.id) { toast('Keep the whole profile in one view'); return; }
     const pp = views.planePoint(pane, x, y), p = snapSketch(pane, pp, e.shiftKey);
     t.data.pane = pane.id; t.data.basis = BASISof(pane.id);
+    if (t.data.mode && t.data.mode !== 'polyline') {
+      if (!t.data.points.length) { t.data.points.push(p); views.preview = { pane: pane.id, points: [p] }; views.draw(); return; }
+      const B = t.data.basis, a = t.data.points[0], spec = shapeFrom(t.data.mode, [V.dot(a, B.r), V.dot(a, B.u)], [V.dot(p, B.r), V.dot(p, B.u)]);
+      if (!spec || (spec.width === 0 || spec.height === 0 || spec.diameter === 0)) { toast('Drag it out a little bigger'); return; }
+      try { shapeProfile(spec); } catch (err) { toast(err.message); return; }
+      finishShape(spec); return;
+    }
     if (t.data.points.length >= 3) { const f = views.project(pane, t.data.points[0]); if (Math.hypot(f.x - x, f.y - y) < 10) { finishSketch(); return; } }
     t.data.points.push(p); views.preview = { pane: pane.id, points: t.data.points }; views.draw(); return;
   }
@@ -3957,7 +4253,7 @@ async function runCmd(cmd, a) {
       return out;
     }
     case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
-    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : JSON.stringify(model.doc, null, 1) }; }
+    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3' }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3' }) : JSON.stringify(model.doc, null, 1) }; }
     case 'model.select': select(a.id || null); return { selected };
     case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }

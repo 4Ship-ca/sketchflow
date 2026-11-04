@@ -13,7 +13,7 @@ export const TYPES = {
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
-  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1] } },
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6 } },
   loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0 } },
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
@@ -95,7 +95,7 @@ function connectorsOf(o, solid) {
       /* features: start/end faces + bounding-box faces & centre (add-on shapes add their own connectors first) */
       const T = TYPES[o.type], c = T && T.def && T.def.connectors ? T.def.connectors(p, addonApi).slice() : [];
       if (o.type === 'extrude' || o.type === 'loft') {
-        const cen = centroid2(p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
+        const cen = centroid2(o.type === 'extrude' && p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
         const end = o.type === 'extrude' ? V.add([cen[0], cen[1], 0], V.mul(dir, L / (dir[2] || 1))) : [cen[0], cen[1], L];
         c.push(conn('start', [cen[0], cen[1], 0], [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
       }
@@ -205,7 +205,7 @@ function shellCavity(root, p) {
     case 'sphere': { const R = q.diameter / 2 - t; if (R <= 0) throw new Error('walls too thick'); return K.sphere(R, 32).transform(M4.translate([0, 0, t])); }
     case 'extrude': {
       if ((q.twist || 0) !== 0 || (q.scale != null && q.scale !== 1)) throw new Error('shell works on straight extrudes (no twist or taper)');
-      const inner = insetPolygon(q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
+      const inner = insetPolygon(q.shape && q.shape !== 'points' ? shapeProfile(q) : q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
       const z0 = open === 'start' || open === 'bottom' ? -E : t, z1 = open === 'end' || open === 'top' ? q.length + E : q.length - t;
       return K.extrude(inner, { length: z1 - z0, dir: q.direction }).transform(M4.translate(V.mul(V.norm(q.direction || [0, 0, 1]), z0 / (V.norm(q.direction || [0, 0, 1])[2] || 1))));
     }
@@ -260,6 +260,23 @@ export function parseMesh(name, data) {
   for (let i = 0; i < tri.length; i++) tri[i] -= c[i % 3];
   return { triangles: Float32Array.from(tri), count: tri.length / 9, size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] };
 }
+/* ---------- parametric sketch shapes (extrude profiles that keep their sizes as dimensions) ---------- */
+export const SKETCH_SHAPES = { rect: ['x', 'y', 'width', 'height', 'radius'], circle: ['x', 'y', 'diameter'], slot: ['x', 'y', 'width', 'height'], polygon: ['x', 'y', 'diameter', 'sides'] };
+export function shapeProfile(p) {
+  const cx = +p.x || 0, cy = +p.y || 0, out = [], arc = (x, y, r, a0, a1, n) => { for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([x + r * Math.cos(a), y + r * Math.sin(a)]); } };
+  switch (p.shape) {
+    case 'rect': {
+      const w = +p.width, h = +p.height, r = Math.max(0, Math.min(+p.radius || 0, w / 2 - 1e-6, h / 2 - 1e-6)); if (!(w > 0 && h > 0)) throw new Error('width and height must be above 0');
+      if (r <= 1e-6) return [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
+      arc(cx + w / 2 - r, cy - h / 2 + r, r, -Math.PI / 2, 0, 8); arc(cx + w / 2 - r, cy + h / 2 - r, r, 0, Math.PI / 2, 8); arc(cx - w / 2 + r, cy + h / 2 - r, r, Math.PI / 2, Math.PI, 8); arc(cx - w / 2 + r, cy - h / 2 + r, r, Math.PI, 1.5 * Math.PI, 8);
+      return out;
+    }
+    case 'circle': { const r = +p.diameter / 2; if (!(r > 0)) throw new Error('diameter must be above 0'); for (let i = 0; i < SEG; i++) out.push([cx + r * Math.cos(2 * Math.PI * i / SEG), cy + r * Math.sin(2 * Math.PI * i / SEG)]); return out; }
+    case 'slot': { const L = +p.width, h = +p.height, r = h / 2; if (!(L > h && h > 0)) throw new Error('a slot needs width (overall length) greater than height'); arc(cx + L / 2 - r, cy, r, -Math.PI / 2, Math.PI / 2, 16); arc(cx - L / 2 + r, cy, r, Math.PI / 2, 1.5 * Math.PI, 16); return out; }
+    case 'polygon': { const n = Math.max(3, Math.round(+p.sides || 6)), r = +p.diameter / 2; if (!(r > 0)) throw new Error('diameter must be above 0'); for (let i = 0; i < n; i++) out.push([cx + r * Math.cos(Math.PI / 2 + 2 * Math.PI * i / n), cy + r * Math.sin(Math.PI / 2 + 2 * Math.PI * i / n)]); return out; }
+  }
+  return p.profile;
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -271,7 +288,7 @@ function buildLocal(o) {
     case 'cone': return K.cylinder(p.diameter / 2, Math.max(0, (p.top || 0) / 2), p.height, p.segments || SEG);
     case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
     case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
-    case 'extrude': return K.extrude(p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
+    case 'extrude': return K.extrude(p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
     case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
@@ -298,7 +315,14 @@ export function dimsOf(o) {
     case 'cone': { const o2 = [D('diameter', [-p.diameter / 2, 0, 0], [p.diameter / 2, 0, 0], 'front', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')]; if (p.top > 0) o2.push(D('top', [-p.top / 2, 0, p.height], [p.top / 2, 0, p.height], 'front', 'diameter')); return o2; }
     case 'sphere': return [D('diameter', [-p.diameter / 2, 0, p.diameter / 2], [p.diameter / 2, 0, p.diameter / 2], 'front', 'diameter')];
     case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
-    case 'extrude': { const c = centroid2(p.profile), dir = V.norm(p.direction || [0, 0, 1]); return [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')]; }
+    case 'extrude': {
+      const prof = p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, c = centroid2(prof), dir = V.norm(p.direction || [0, 0, 1]);
+      const out = [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')], x = +p.x || 0, y = +p.y || 0;
+      /* a shape's own sizes are dimensions in its sketch plane */
+      if (p.shape === 'rect' || p.shape === 'slot') out.push(D('width', [x - p.width / 2, y - p.height / 2, 0], [x + p.width / 2, y - p.height / 2, 0], 'auto'), D('height', [x - p.width / 2, y - p.height / 2, 0], [x - p.width / 2, y + p.height / 2, 0], 'auto'));
+      if (p.shape === 'circle' || p.shape === 'polygon') out.push(D('diameter', [x - p.diameter / 2, y, 0], [x + p.diameter / 2, y, 0], 'auto', 'diameter'));
+      return out;
+    }
     case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto')]; }
     default: { const T = TYPES[o.type]; if (T && T.def && T.def.dims) { try { return T.def.dims(p, addonApi) || []; } catch (e) { return []; } } return []; }
   }

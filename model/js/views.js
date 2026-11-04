@@ -270,7 +270,8 @@ export class Views {
       if (it.dir) { const o0 = this.project(pane, [0, 0, 0], cam), o1 = this.project(pane, it.dir, cam), l = Math.hypot(o1.x - o0.x, o1.y - o0.y); if (l < 1e-9) continue; ux = (o1.x - o0.x) / l; uy = (o1.y - o0.y) / l; }
       else { const L0 = Math.hypot(Bp.x - A.x, Bp.y - A.y); if (L0 < 6) continue; ux = (Bp.x - A.x) / L0; uy = (Bp.y - A.y) / L0; }
       let nx = -uy, ny = ux;
-      const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), [0, 0, 0]), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
+      const lb = it.ob && R.local.get(it.ob.id), lc = lb && !lb.isEmpty() ? V.lerp(lb.bbox().min, lb.bbox().max, 0.5) : [0, 0, 0];   /* dimensions go outside the part's middle */
+      const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), lc), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
       const mid = { x: (A.x + Bp.x) / 2, y: (A.y + Bp.y) / 2 }; if (!it.measure && (mid.x - bc.x) * nx + (mid.y - bc.y) * ny < 0) { nx = -nx; ny = -ny; }
       /* both extension lines reach a common dimension line, beyond the further point */
       const da = A.x * nx + A.y * ny, db = Bp.x * nx + Bp.y * ny, far = Math.max(da, db);
