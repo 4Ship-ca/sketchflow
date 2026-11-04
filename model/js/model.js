@@ -18,6 +18,10 @@ export const TYPES = {
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
+  /* a linked copy of another part: same shape and features, its own place */
+  instance: { label: 'Instance', params: {} },
+  /* an imported triangle mesh (STL / OBJ), stored in doc.meshes */
+  mesh: { label: 'Mesh', params: { scale: 1 } },
   /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
   hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0 } },
   /* hollow a part to a wall thickness, optionally open on one face */
@@ -221,6 +225,41 @@ function insetPolygon(pts, t) {
   }
   return K.area2(out) > 1e-6 ? out : null;
 }
+/* ---------- imported meshes ---------- */
+let MESH_STORE = {};   /* set per evaluation from doc.meshes: id → { b64 (Float32 xyz per vertex, 3 per triangle), tris } */
+export function encodeTriangles(arr) { const f = arr instanceof Float32Array ? arr : Float32Array.from(arr), u = new Uint8Array(f.buffer, f.byteOffset, f.byteLength); let sx = ''; for (let i = 0; i < u.length; i += 0x8000) sx += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return typeof btoa === 'function' ? btoa(sx) : Buffer.from(u).toString('base64'); }
+function decodeTriangles(b64) { const bin = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary'), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Float32Array(u.buffer); }
+function meshSolid(o) {
+  const m = MESH_STORE[o.params.ref || o.id]; if (!m) throw new Error('the mesh data is missing (re-import it)');
+  const P = decodeTriangles(m.b64), sc = +o.params.scale || 1, polys = [];
+  for (let i = 0; i + 8 < P.length; i += 9) { const q = K.poly([[P[i] * sc, P[i + 1] * sc, P[i + 2] * sc], [P[i + 3] * sc, P[i + 4] * sc, P[i + 5] * sc], [P[i + 6] * sc, P[i + 7] * sc, P[i + 8] * sc]], 'mesh'); if (q) polys.push(q); }
+  const s = new K.Solid(polys); if (s.volume() < 0) for (const q of s.polys) q.flip();
+  return s;
+}
+/* parse STL (binary or ASCII) or OBJ into one flat triangle array, re-centred on its base (like the built-in shapes) */
+export function parseMesh(name, data) {
+  const lower = String(name || '').toLowerCase(), tri = [];
+  const asText = typeof data === 'string' ? data : new TextDecoder().decode(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+  if (lower.endsWith('.obj')) {
+    const v = [];
+    for (const line of asText.split(/\r?\n/)) {
+      const t = line.trim().split(/\s+/);
+      if (t[0] === 'v') v.push([+t[1], +t[2], +t[3]]);
+      else if (t[0] === 'f') { const idx = t.slice(1).map(x => { const k = parseInt(x.split('/')[0], 10); return k < 0 ? v.length + k : k - 1; }); for (let i = 1; i < idx.length - 1; i++) for (const k of [idx[0], idx[i], idx[i + 1]]) tri.push(...v[k]); }
+    }
+  } else {
+    const bytes = typeof data === 'string' ? null : (data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+    const isAscii = !bytes || (/^\s*solid/.test(asText.slice(0, 80)) && /facet\s+normal/.test(asText.slice(0, 1000)));
+    if (isAscii) { const re = /vertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/g; let mm; while ((mm = re.exec(asText))) tri.push(+mm[1], +mm[2], +mm[3]); }
+    else { const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), n = dv.getUint32(80, true); for (let i = 0; i < n; i++) { const o0 = 84 + i * 50 + 12; for (let k = 0; k < 9; k++) tri.push(dv.getFloat32(o0 + k * 4, true)); } }
+  }
+  if (tri.length < 9) throw new Error('no triangles found in ' + name);
+  const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < tri.length; i++) { const k = i % 3; mn[k] = Math.min(mn[k], tri[i]); mx[k] = Math.max(mx[k], tri[i]); }
+  const c = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]];
+  for (let i = 0; i < tri.length; i++) tri[i] -= c[i % 3];
+  return { triangles: Float32Array.from(tri), count: tri.length / 9, size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] };
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -237,6 +276,8 @@ function buildLocal(o) {
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
     case 'hole': return buildHole(p);
+    case 'mesh': return meshSolid(o);
+    case 'instance': return K.Solid.empty();   /* geometry comes from its source part, after the bodies are built */
   }
   const T = TYPES[o.type]; if (T && T.def) return T.def.build(p, addonApi);
   throw new Error('Unknown shape ' + o.type);
@@ -318,9 +359,9 @@ function evalTree(tree, look) {
   throw new Error('bad formula');
 }
 /* resolve every linked parameter (leaders before followers); writes the numbers into params, returns warnings */
-export function resolveLinks(doc) {
+export function resolveLinks(doc, cfg) {
   const warn = [], byId = new Map(doc.objects.map(o => [o.id, o])), byName = new Map(doc.objects.map(o => [String(o.name || '').replace(/\s+/g, '_'), o]));
-  const vars = doc.vars || {}, state = new Map(), varState = new Map(), varVal = new Map();
+  const vars = Object.assign({}, doc.vars || {}, (cfg && cfg.vars) || {}), state = new Map(), varState = new Map(), varVal = new Map();
   const varOf = (name, chain) => {
     if (varVal.has(name)) return varVal.get(name);
     if (!(name in vars)) throw new Error(`no variable #${name}`);
@@ -433,9 +474,12 @@ export function posedDoc(doc, pose) {
 }
 export function evaluate(doc, opts) {
   const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map(), spin: new Map() };
-  R.warnings.push(...resolveLinks(doc));
+  MESH_STORE = doc.meshes || {};
+  const cfg = (doc.configs || []).find(c => c.name === doc.config) || null;
+  R.warnings.push(...resolveLinks(doc, cfg));
   /* suppressed features, and everything after the rollback bar, are placed but make no geometry */
-  const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, off = new Set(doc.objects.filter((o, i) => o.suppressed || i >= rb).map(o => o.id));
+  const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, cfgOff = new Set((cfg && cfg.suppress) || []), off = new Set(doc.objects.filter((o, i) => o.suppressed || cfgOff.has(o.id) || i >= rb).map(o => o.id));
+  R.config = cfg ? cfg.name : null;
   R.off = off;
   const byId = new Map(doc.objects.map(o => [o.id, o]));
   const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
@@ -445,6 +489,7 @@ export function evaluate(doc, opts) {
     if (META.has(o.type)) continue;
     /* a through hole is as deep as its part is big (so it stays through when the part changes) */
     if (o.type === 'hole' && o.params.through && o.into && R.local.has(o.into)) { const bb = R.local.get(o.into).bbox(), L = Math.ceil(V.len(V.sub(bb.max, bb.min)) + 2); if (o.params.depth !== L) o.params.depth = L; }
+    if (o.type === 'instance') { const src = byId.get(o.of); R.conns.set(o.id, src && R.conns.has(src.id) ? R.conns.get(src.id) : []); if (!src) R.errors.set(o.id, 'its source part was deleted'); continue; }
     try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
     catch (e) { R.errors.set(o.id, e.message); let c = []; try { c = connectorsOf(o, null); } catch (e2) { /* an add-on shape with bad parameters has no connectors */ } R.conns.set(o.id, c); }
   }
@@ -574,6 +619,16 @@ export function evaluate(doc, opts) {
   };
   for (const o of objs) {
     if (META.has(o.type) || (o.into && byId.has(o.into)) || off.has(o.id)) continue;
+    if (o.type === 'instance') {
+      /* the source part's finished body, moved from where the source is to where this instance is */
+      const src = R.bodies.find(b => b.id === o.of), Ws = R.world.get(o.of), Wi = R.world.get(o.id);
+      if (!src || !Ws || !Wi) { if (byId.has(o.of)) R.warnings.push({ kind: 'error', id: o.id, text: `${o.name}: its source has no geometry (suppressed, or later in the list)` }); continue; }
+      const sm = MATERIALS[((byId.get(o.of) || {}).meta || {}).material] || MATERIALS[doc.material];
+      const Mi = M4.mul(Wi, M4.inv(Ws)), ik = serialOf(src.solid) + '|' + Array.from(Mi, v => Math.round(v * 1e7)).join(',');
+      let isol = INST_CACHE.get(ik); if (!isol) { isol = src.solid.transform(Mi); INST_CACHE.set(ik, isol); if (INST_CACHE.size > 120) INST_CACHE.delete(INST_CACHE.keys().next().value); }
+      R.bodies.push({ id: o.id, solid: isol, color: o.color || src.color || (sm ? sm.color : null), name: o.name, hidden: !!o.hidden, instance: o.of });
+      R.roots.push(o.id); continue;
+    }
     const s = cachedBody(o.id);
     if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
     const mat = MATERIALS[(o.meta || {}).material] || MATERIALS[doc.material];
@@ -625,7 +680,7 @@ function patternTransforms(P, R) {
 /* ---------- welds ---------- */
 const solidSerial = new WeakMap(); let serialN = 0;
 const serialOf = (s) => { let n = solidSerial.get(s); if (!n) solidSerial.set(s, (n = ++serialN)); return n; };
-const WELD_CACHE = new Map();
+const WELD_CACHE = new Map(), INST_CACHE = new Map();
 const rootIdOf = (id, byId) => { let cur = byId.get(id); const seen = new Set(); while (cur && cur.into && byId.has(cur.into) && !seen.has(cur.id)) { seen.add(cur.id); cur = byId.get(cur.into); } return cur ? cur.id : null; };
 const sidSet = (s) => new Set(s.polys.map(p => p.sid));
 /* the inside-corner edges where two separate bodies meet (found on their union, faces from one body on each side) */
@@ -836,13 +891,13 @@ export function massReport(doc, R) {
   const byId = new Map(doc.objects.map(o => [o.id, o])), O = R.originPoint, parts = [];
   for (const b of R.bodies) {
     if (b.hidden || b.solid.isEmpty()) continue;
-    const v = R.virtual && R.virtual.get(b.id), src = byId.get(v ? v.source : b.id); if (!src) continue;
+    const v = R.virtual && R.virtual.get(b.id), srcId = v ? v.source : b.instance || b.id, src = byId.get(srcId); if (!src) continue;
     let meta = src.meta || {};
     if (src.type === 'weld' && !meta.material && !meta.density) { const base = byId.get(src.joins && src.joins[0]); meta = Object.assign({}, base && base.meta, meta); }
     const matKey = meta.material || doc.material || null, mat = matKey ? MATERIALS[matKey] : null;
     const density = meta.density || (mat ? mat.density : null), fill = meta.fill || 1, mp = massOf(b.solid);
     const rho = density ? density * fill / 1000 : null;   /* g per mm³ */
-    parts.push({ id: b.id, name: b.name, source: v ? v.source : undefined, weld: b.weld || undefined, material: matKey, material_name: mat ? mat.name : (meta.density ? 'custom' : null), assumed: !meta.material && !meta.density && !!doc.material,
+    parts.push({ id: b.id, name: b.name, source: v ? v.source : b.instance || undefined, weld: b.weld || undefined, material: matKey, material_name: mat ? mat.name : (meta.density ? 'custom' : null), assumed: !meta.material && !meta.density && !!doc.material,
       density, fill: fill < 1 ? fill : undefined, volume_mm3: mp.volume, mass_g: rho == null ? null : mp.volume * rho, centroid: V.sub(mp.centroid, O), inertia_kg_mm2: rho == null ? null : mp.inertia.map(x => x * rho / 1000), meta });
   }
   const known = parts.filter(p => p.mass_g != null), M = known.reduce((t, p) => t + p.mass_g, 0);
@@ -943,10 +998,20 @@ export class Model {
     for (const md of dims) { const cur = measureDim(this.result, md); if (cur && Math.abs(cur.value - md.drive) > 1e-3) this.result.warnings.push({ kind: 'dim', id: md.a.obj, text: `A ${md.drive} dimension can't be held (now ${cur.value.toFixed(2)}) — another dimension or mate fights it` }); }
   }
   get(id) { return this.doc.objects.find(o => o.id === id); }
-  snapshot() { return JSON.stringify(this.doc); }
+  /* undo snapshots leave out saved versions (they belong to the document, not to its history) */
+  snapshot() { const { versions, ...rest } = this.doc; return JSON.stringify(rest); }
+  saveVersion(name) {
+    const v = { id: uid('ver'), name: String(name || `Version ${(this.doc.versions || []).length + 1}`), at: Date.now(), json: this.snapshot() };
+    this.doc.versions = [...(this.doc.versions || []), v].slice(-30); this.emit(); return { id: v.id, name: v.name, at: v.at };
+  }
+  listVersions() { return (this.doc.versions || []).map(v => ({ id: v.id, name: v.name, at: v.at, objects: JSON.parse(v.json).objects.length })); }
+  restoreVersion(id) {
+    const v = (this.doc.versions || []).find(x => x.id === id || x.name === id); if (!v) throw new Error('No version ' + id);
+    const before = this.snapshot(), vers = this.doc.versions; this.doc = JSON.parse(v.json); this.doc.versions = vers; this.commit(`Restore “${v.name}”`, before); return { restored: v.name };
+  }
   commit(label, before, t0) { this.undoStack.push({ label, json: before }); if (this.undoStack.length > 150) this.undoStack.shift(); this.redoStack = []; this.doc.updated = Date.now(); this.recompute(); if (t0 != null) this.result.ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0; this.emit(); }
-  undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
-  redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
+  undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
+  redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
   load(doc) { const before = this.snapshot(); this.doc = doc; this.commit('Open model', before); }
   /* apply a batch of operations atomically (one undo step). Returns per-op results. */
   /* opts.relative: positions (at, near) are measured from the ephemeral world origin, the same frame describe() reports */
@@ -954,7 +1019,7 @@ export class Model {
     const before = this.snapshot(), out = [], t0 = (typeof performance !== 'undefined' ? performance : Date).now();
     this.rel = !!opts.relative;
     try { (Array.isArray(ops) ? ops : [ops]).forEach((op, i) => { try { out.push(this.op(op)); } catch (e) { e.message = `op ${i + 1} (${op && op.op}): ${e.message}`; throw e; } }); }
-    catch (e) { this.doc = JSON.parse(before); this.recompute(); throw e; }
+    catch (e) { const vers = this.doc.versions; this.doc = JSON.parse(before); if (vers) this.doc.versions = vers; this.recompute(); throw e; }
     finally { this.rel = false; }
     this.commit(label || (out.length === 1 ? out[0].label : out.length + ' changes'), before, t0);   /* ms = the whole batch, what the user waited for */
     return out.map(r => { delete r.label; return r; });
@@ -1004,7 +1069,7 @@ export class Model {
           x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
         }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
-        const sconns = this.result.conns.get(x.id) || connectorsOf(x, null);
+        const sconns = this.result.conns.get(x.id) || (x.type === 'instance' ? this.result.conns.get(x.of) : null) || connectorsOf(x, null);
         const a = o.a || 'top', b = o.b || 'bottom';
         if (!tconns.find(c => c.name === a)) throw new Error(`No connector “${a}” on the target. Try: ${tconns.map(c => c.name).join(', ')}`);
         if (!sconns.find(c => c.name === b)) throw new Error(`No connector “${b}” on ${x.name}. Try: ${sconns.map(c => c.name).join(', ')}`);
@@ -1087,6 +1152,7 @@ export class Model {
         if (Number.isInteger(d.rollback) && xi < d.rollback) d.rollback = Math.max(0, d.rollback - 1);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
         if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
+        if (x.type === 'mesh' && d.meshes && !d.objects.some(y => y.type === 'mesh' && (y.params.ref || y.id) === (x.params.ref || x.id))) { d.meshes = Object.assign({}, d.meshes); delete d.meshes[x.params.ref || x.id]; }
         this.recompute(); return { label: 'Delete ' + x.name, id: x.id };
       }
       case 'origin': { if (o.obj) need(o.obj); d.origin = o.obj ? { obj: o.obj, conn: o.conn || 'bottom' } : null; this.recompute(); return { label: 'Set world origin', origin: d.origin }; }
@@ -1175,6 +1241,39 @@ export class Model {
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('shl');
         this.insert({ id, name: o.name || `Shell ${o.thickness}`, type: 'shell', params: { thickness: +o.thickness, open: o.open || 'none' }, into: root.id, op: 'shell', pose: null, mate: null });
         this.recompute(); return { label: `Shell ${root.name} (${o.thickness} mm walls${o.open && o.open !== 'none' ? ', open ' + o.open : ''})`, id };
+      }
+      case 'config': {
+        /* configurations: named tables of variable values (and features to switch off): {action: add|set|activate|delete|rename, name, vars, suppress, to} */
+        d.configs = (d.configs || []).map(c => Object.assign({}, c));
+        const act = o.action || 'activate', c = d.configs.find(x => x.name === o.name);
+        if (act === 'add') { if (!o.name) throw new Error('Give the configuration a name'); if (c) throw new Error(`“${o.name}” exists`); d.configs.push({ name: String(o.name), vars: Object.assign({}, o.vars || {}), suppress: (o.suppress || []).slice() }); if (o.activate !== false) d.config = String(o.name); }
+        else if (act === 'set') { if (!c) throw new Error(`No configuration “${o.name}”`); if (o.vars) { c.vars = Object.assign({}, c.vars || {}, o.vars); for (const [k, v] of Object.entries(c.vars)) if (v === null || v === '') delete c.vars[k]; } if (o.suppress) c.suppress = o.suppress.slice(); }
+        else if (act === 'activate') { if (o.name && !c) throw new Error(`No configuration “${o.name}”. Have: ${d.configs.map(x => x.name).join(', ') || 'none'}`); d.config = o.name || null; }
+        else if (act === 'delete') { d.configs = d.configs.filter(x => x.name !== o.name); if (d.config === o.name) d.config = null; }
+        else if (act === 'rename') { if (!c) throw new Error(`No configuration “${o.name}”`); c.name = String(o.to); if (d.config === o.name) d.config = c.name; }
+        else throw new Error('action is add, set, activate, delete or rename');
+        this.recompute(); return { label: act === 'activate' ? `Configuration: ${d.config || 'Default'}` : `Configuration ${o.name}: ${act}`, configs: d.configs.map(x => x.name), active: d.config || null };
+      }
+      case 'instance': {
+        /* a linked copy: edits to the source part show in every instance */
+        const src = need(o.of); if (src.into || META.has(src.type) || src.type === 'instance') throw new Error('Instance a whole part (not a tool, an edge or another instance)');
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('ins'), n = d.objects.filter(x => x.type === 'instance' && x.of === src.id).length + 2;
+        const ob = { id, name: o.name || `${src.name} #${n}`, type: 'instance', of: src.id, params: {}, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed };
+        this.insert(ob); this.recompute();
+        if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
+        else if (!o.at && src.mate && !src.mate.kind) { const step = o.offset || [Math.max(10, ((src.params || {}).width || (src.params || {}).diameter || 20) + 10) * (n - 1), 0]; ob.mate = Object.assign({}, src.mate, { slide: [(src.mate.slide || [0, 0])[0] + step[0], (src.mate.slide || [0, 0])[1] + step[1]] }); delete ob.mate.joint; }
+        else if (!o.at) { const Ws = this.result.world.get(src.id); if (Ws) { const pz = poseFromMatrix(M4.mul(M4.translate([((src.params || {}).width || 30) + 10, 0, 0]), Ws)); ob.pose = pz; ob.fixed = true; } }
+        this.recompute(); return { label: `Instance of ${src.name}`, id, name: ob.name };
+      }
+      case 'import': {
+        /* {name, triangles: base64 Float32 (xyz per vertex) | data: file text, format, scale} → a mesh part */
+        let tri = o.triangles, count = o.count, size = null;
+        if (!tri && o.data) { const parsed = parseMesh(o.name || ('mesh.' + (o.format || 'stl')), o.data); tri = encodeTriangles(parsed.triangles); count = parsed.count; size = parsed.size; }
+        if (!tri) throw new Error('Give triangles (base64) or data (file text)');
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('msh');
+        d.meshes = Object.assign({}, d.meshes || {}, { [id]: { b64: tri, tris: count || null, name: o.name || null } });
+        const r = this.op({ op: 'add', type: 'mesh', id, name: (o.name || 'Mesh').replace(/\.(stl|obj)$/i, ''), params: { scale: +o.scale || 1, ref: id }, mate: o.mate, at: o.at, material: o.material });
+        return { label: `Import ${o.name || 'mesh'}`, id: r.id, triangles: count, size };
       }
       case 'suppress': {
         const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;
@@ -1271,6 +1370,7 @@ export class Model {
       material: this.doc.material || null,
       vars: this.doc.vars && Object.keys(this.doc.vars).length ? this.doc.vars : undefined,
       rollback: Number.isInteger(this.doc.rollback) ? this.doc.rollback : undefined,
+      configurations: (this.doc.configs || []).length ? { active: this.doc.config || 'Default', list: this.doc.configs.map(c => ({ name: c.name, vars: c.vars, suppress: c.suppress && c.suppress.length ? c.suppress : undefined })) } : undefined,
       joints: (() => { const j = jointsOf(this.doc); return j.length ? j : undefined; })(),
       dimensions: (this.doc.dims || []).length ? this.doc.dims.map(md => { const m = measureDim(R, md); return { id: md.id, a: md.a, b: md.b, view: md.view, axis: md.axis, value: m ? +m.value.toFixed(3) : null, driving: md.drive != null ? md.drive : undefined }; }) : undefined,
       mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),

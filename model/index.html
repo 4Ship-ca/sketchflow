@@ -81,6 +81,10 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 #motion .mhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap} #motion .mhead b{font:700 13px var(--f-brand)}
 #motion .mrow{display:grid;grid-template-columns:minmax(120px,220px) 1fr 70px 28px;gap:10px;align-items:center;padding:4px 2px;border-radius:8px} #motion .mrow.on{background:var(--sel)}
 #motion .mname{font:600 12px var(--f-ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #motion input[type=range]{width:100%;accent-color:var(--accent)}
+#cfgSel{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:8px;padding:5px 8px;font:600 12px var(--f-ui)}
+.tblwrap{overflow-x:auto} table.cfg{border-collapse:collapse;font-size:12px;width:100%} table.cfg th{font:700 10px var(--f-ui);color:var(--ink-3);text-align:left;padding:2px 4px} table.cfg td{padding:2px 3px} table.cfg tr.on td{background:var(--sel)}
+table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 5px;font:500 12px var(--f-mono)}
+#hint input.vname{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:500 12px var(--f-ui);min-width:200px}
 .row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
 @media (hover:none){ .row .more{opacity:1} }
 .row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
@@ -102,6 +106,7 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
   <header id="bar">
     <div class="brand"><i></i>SketchFlow 3D</div>
     <input id="name" value="Model" aria-label="Model name" spellcheck="false">
+    <select id="cfgSel" hidden title="Configuration (size variant)" aria-label="Configuration"></select>
     <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
     <div class="grp"><span class="lbl">Add</span>
       <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
@@ -154,4 +159,5 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 </div>
 <div id="toasts" aria-live="polite"></div>
 <input type="file" id="openIn" hidden accept=".json,.sf3d,application/json">
+<input type="file" id="meshIn" hidden accept=".stl,.obj,model/stl">
 <script type="module" src="js/app.js"></script>

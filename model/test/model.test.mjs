@@ -213,6 +213,26 @@ Sh.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, hei
 ok('shell hollows a box to its walls, open on top', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 30 - 76 * 46 * 28, 1e-6));
 Sh.apply([{ op: 'set', id: 'b', params: { height: 40 } }]);
 ok('shell walls stay the same when the part changes', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 40 - 76 * 46 * 38, 1e-6));
+/* configurations, instances, imported meshes, versions */
+const Cf = new Model();
+Cf.apply([{ op: 'var', name: 'len', value: 100 }, { op: 'add', type: 'box', id: 'bar', params: { width: '=#len', depth: 20, height: 10 } }, { op: 'add', type: 'cylinder', id: 'h', params: { diameter: 6, height: 12 }, mate: { to: 'bar', a: 'top', b: 'top', flip: false, offset: 1 }, into: 'bar', mode: 'subtract' }]);
+Cf.apply([{ op: 'config', action: 'add', name: 'Long', vars: { len: 200 }, suppress: ['h'] }]);
+ok('a configuration sets its variables and switches features off', Cf.get('bar').params.width === 200 && near(Cf.result.bodies[0].solid.volume(), 200 * 20 * 10));
+Cf.apply([{ op: 'config', name: null }]);
+ok('switching back to Default restores everything', Cf.get('bar').params.width === 100 && Cf.result.bodies[0].solid.volume() < 100 * 20 * 10);
+const In = new Model();
+In.apply([{ op: 'add', type: 'box', id: 'base', params: { width: 200, depth: 100, height: 5 } }, { op: 'add', type: 'cylinder', id: 'leg', params: { diameter: 10, height: 40 }, mate: { to: 'base', a: 'bottom', b: 'top', slide: [-90, -40] }, material: 'steel' }]);
+In.apply([{ op: 'instance', of: 'leg', mate: { to: 'base', a: 'bottom', b: 'top', slide: [90, -40] } }, { op: 'instance', of: 'leg', mate: { to: 'base', a: 'bottom', b: 'top', slide: [90, 40] } }]);
+In.apply([{ op: 'set', id: 'leg', params: { diameter: 16 } }]);
+const legsV = In.result.bodies.filter(b => b.id === 'leg' || b.instance === 'leg').map(b => b.solid.volume());
+ok('instances are linked copies: the source change shows in all', legsV.length === 3 && legsV.every(v => near(v, legsV[0])) && legsV[0] > 7000);
+ok('the parts list counts instances as quantity', bom(In.doc, In.result).lines.find(l => l.part === In.get('leg').name).quantity === 3);
+const cube = 'solid c\n' + [['0 0 0', '10 10 0', '10 0 0'], ['0 0 0', '0 10 0', '10 10 0'], ['0 0 10', '10 0 10', '10 10 10'], ['0 0 10', '10 10 10', '0 10 10'], ['0 0 0', '10 0 0', '10 0 10'], ['0 0 0', '10 0 10', '0 0 10'], ['10 0 0', '10 10 0', '10 10 10'], ['10 0 0', '10 10 10', '10 0 10'], ['10 10 0', '0 10 0', '0 10 10'], ['10 10 0', '0 10 10', '10 10 10'], ['0 10 0', '0 0 0', '0 0 10'], ['0 10 0', '0 0 10', '0 10 10']].map(t => 'facet normal 0 0 0\nouter loop\n' + t.map(v => 'vertex ' + v).join('\n') + '\nendloop\nendfacet').join('\n') + '\nendsolid c';
+const [imp] = In.apply([{ op: 'import', name: 'cube.stl', data: cube, material: 'pla' }]);
+const ib = In.result.bodies.find(b => b.id === imp.id);
+ok('STL import: a closed mesh part with volume and mass', imp.triangles === 12 && near(ib.solid.volume(), 1000, 1e-6) && near(massReport(In.doc, In.result).parts.find(q => q.id === imp.id).mass_g, 1.24, 1e-6));
+const vv = In.saveVersion('before'); In.apply([{ op: 'delete', id: imp.id }]); In.restoreVersion(vv.id);
+ok('a saved version restores (and survives undo)', In.doc.objects.some(o => o.id === imp.id) && In.listVersions().length === 1 && (In.undo(), In.listVersions().length === 1));
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

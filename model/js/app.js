@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec } from './model.js';
+import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 const { V, M4 } = K;
@@ -28,7 +28,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -73,6 +73,8 @@ function subOf(o) {
     case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
     case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
     case 'hole': { try { return holeSpec(p).label + (p.through ? ' · through' : ` · ${fmt(p.depth)} deep`); } catch (e) { return p.size + ' ' + p.kind; } }
+    case 'instance': return `linked copy of ${name(o.of)}`;
+    case 'mesh': { const mm = (model.doc.meshes || {})[p.ref || o.id]; return `imported mesh${mm && mm.tris ? ' · ' + mm.tris.toLocaleString() + ' triangles' : ''}${p.scale !== 1 ? ' · ×' + p.scale : ''}`; }
     case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
   }
@@ -136,6 +138,7 @@ function keepPose() {
 }
 function closeMotion() { stopAnim(); clearPreview(); $('#motion').hidden = true; }
 /* the ⋯ / right-click menu of a feature-list row */
+const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 function rowMenu(o, r) {
   const m = el('div', { class: 'menu', style: `left:${Math.min(r.left, innerWidth - 230)}px;top:${r.bottom + 4}px` }), idx = model.doc.objects.indexOf(o);
   const item = (t, fn, disabled) => m.append(el('button', { onclick: () => { m.remove(); fn(); }, disabled: disabled ? true : null }, t));
@@ -143,6 +146,9 @@ function rowMenu(o, r) {
   item(o.suppressed ? 'Unsuppress' : 'Suppress (turn off, keep it)', () => apply([{ op: 'suppress', id: o.id }]));
   if (!['edge', 'pattern'].includes(o.type)) item(o.hidden ? 'Show' : 'Hide', () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]));
   if (!['edge', 'pattern', 'weld'].includes(o.type)) { item('Duplicate  (Ctrl D)', () => { const r2 = apply([{ op: 'duplicate', id: o.id }])[0]; select(r2.id); }); item('Pattern…  (P)', () => { select(o.id); patternHint(o.id); }); }
+  if (!META.has(o.type) && !o.into && o.type !== 'instance') item('Insert instance (linked copy)', () => { const r2 = apply([{ op: 'instance', of: o.id }])[0]; select(r2.id); toast('Linked copy: change the original and every instance follows', 2400); });
+  const cfg = (model.doc.configs || []).find(c => c.name === model.doc.config);
+  if (cfg) { const inCfg = (cfg.suppress || []).includes(o.id); item(inCfg ? `Include in “${cfg.name}”` : `Suppress in “${cfg.name}” only`, () => apply([{ op: 'config', action: 'set', name: cfg.name, suppress: inCfg ? cfg.suppress.filter(x => x !== o.id) : [...(cfg.suppress || []), o.id] }])); }
   item('Roll back to here', () => apply([{ op: 'rollback', to: idx + 1 }]));
   item('Move up', () => apply([{ op: 'move', id: o.id, to: idx - 1 }]), idx === 0);
   item('Move down', () => apply([{ op: 'move', id: o.id, to: idx + 2 }]), idx === model.doc.objects.length - 1);
@@ -324,6 +330,23 @@ function renderProps() {
     s.append(field('material for parts without one', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
     s.append(el('div', { class: 'note' }, own.length === partsAll.length ? `All ${partsAll.length} parts have their own material, so this default changes nothing.` : `${partsAll.length - own.length} of ${partsAll.length} parts use this default; ${own.length} have their own.`));
     if (model.doc.material && own.length) s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply(own.map(o => ({ op: 'set', id: o.id, meta: { material: model.doc.material, density: null } })), `All parts ${MATERIALS[model.doc.material].name}`) }, `Use ${MATERIALS[model.doc.material].name} for all ${partsAll.length} parts`)));
+    /* configurations: named tables of variable values (S / M / L…) */
+    const cfgs = model.doc.configs || [], varNames = Object.keys(model.doc.vars || {});
+    const sc = sec('Configurations');
+    if (!cfgs.length) sc.append(el('div', { class: 'note' }, varNames.length ? 'Save the current variable values as a size (S / M / L…), then switch between sizes from the toolbar.' : 'Add a variable first (below), use it in sizes (=#len), then make configurations with different values.'));
+    else {
+      const tbl = el('table', { class: 'cfg' }), hdr = el('tr', null, el('th', null, ''), el('th', null, 'name'), ...varNames.map(v => el('th', null, '#' + v)), el('th', null, ''));
+      tbl.append(hdr);
+      const rowOf = (c) => {
+        const active = c ? model.doc.config === c.name : !model.doc.config;
+        const radio = el('input', { type: 'radio', name: 'cfg', checked: active ? true : null }); radio.onchange = () => apply([{ op: 'config', name: c ? c.name : null }]);
+        const cells = varNames.map(v => { const val = c ? (c.vars || {})[v] : model.doc.vars[v]; const inp = textInput(val == null ? '' : val, nv => apply([c ? { op: 'config', action: 'set', name: c.name, vars: { [v]: nv === '' ? null : (isFinite(+nv) ? +nv : nv) } } : { op: 'var', name: v, value: nv }]), { placeholder: c ? String(model.doc.vars[v]) : '' }); return el('td', null, inp); });
+        return el('tr', { class: active ? 'on' : '' }, el('td', null, radio), el('td', null, c ? c.name : 'Default'), ...cells, el('td', null, c ? el('button', { class: 'chain', title: 'Delete configuration', onclick: () => apply([{ op: 'config', action: 'delete', name: c.name }]) }, '×') : ''));
+      };
+      tbl.append(rowOf(null)); for (const c of cfgs) tbl.append(rowOf(c));
+      sc.append(el('div', { class: 'tblwrap' }, tbl));
+    }
+    if (varNames.length) { const cn = textInput('', () => {}, { placeholder: 'new size, e.g. Large' }); sc.append(el('div', { class: 'varadd', style: 'grid-template-columns:1fr auto' }, cn, el('button', { class: 'btn', onclick: () => { if (cn.value) apply([{ op: 'config', action: 'add', name: cn.value, vars: Object.assign({}, model.doc.vars) }]); } }, 'Add configuration'))); }
     /* model variables, usable as #name in any dimension */
     const sv = sec('Variables'), vars = model.doc.vars || {};
     for (const [k, v] of Object.entries(vars)) sv.append(field('#' + k, el('span', { class: 'pin' }, textInput(typeof v === 'number' ? fmt(v) : v, val => apply([{ op: 'var', name: k, value: val === '' ? null : val }])), el('button', { class: 'chain', title: 'Remove', onclick: () => apply([{ op: 'var', name: k, value: null }]) }, '×'))));
@@ -476,6 +499,8 @@ function syncBar() {
   $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
   $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
+  const cs = $('#cfgSel'), cfgs = model.doc.configs || [];
+  cs.hidden = !cfgs.length; if (cfgs.length) { cs.innerHTML = ''; cs.append(el('option', { value: '' }, 'Default'), ...cfgs.map(c => el('option', { value: c.name, selected: model.doc.config === c.name ? true : null }, c.name))); }
   $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG); $('#sectionBtn').classList.toggle('on', !!views.section);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
@@ -509,6 +534,7 @@ $('#hiddenBtn').onclick = () => { views.showHidden = !views.showHidden; syncBar(
 $('#dimsBtn').onclick = () => { views.showDims = !views.showDims; syncBar(); views.draw(); };
 $('#theme').onclick = () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); };
 $('#name').addEventListener('change', () => apply([{ op: 'rename', name: $('#name').value }]));
+$('#cfgSel').addEventListener('change', () => apply([{ op: 'config', name: $('#cfgSel').value || null }]));
 $('#name').addEventListener('keydown', e => e.stopPropagation());
 $('#fileBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
@@ -520,9 +546,31 @@ $('#fileBtn').onclick = (e) => {
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
   item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
+  item('Import STL / OBJ…', () => $('#meshIn').click());
+  item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
+  item('Versions…', showVersions);
   item('Load the demo model', demo);
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
+function showVersions() {
+  const vs = model.listVersions();
+  if (!vs.length) { toast('No versions yet: File → Save version… keeps a named copy'); return; }
+  const h = $('#hint'); setTool(null); h.hidden = false; h.innerHTML = '';
+  h.append(el('span', null, 'Versions:'));
+  for (const v of vs.slice().reverse()) h.append(el('button', { title: new Date(v.at).toLocaleString() + ` · ${v.objects} features`, onclick: () => { model.restoreVersion(v.id); hint(null); select(null); views.fitAll(); toast(`Restored “${v.name}” (Undo to go back)`); } }, `${v.name} · ${new Date(v.at).toLocaleDateString()} ${new Date(v.at).toLocaleTimeString().slice(0, 5)}`));
+  h.append(el('button', { onclick: () => hint(null) }, 'Close'));
+}
+$('#meshIn').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const parsed = parseMesh(f.name, await f.arrayBuffer());
+    if (parsed.count > 60000) toast(`${parsed.count.toLocaleString()} triangles: booleans on it will be slow`, 3200);
+    const big = Math.max(...parsed.size), scale = big < 2 ? 25.4 : 1;
+    const r = apply([{ op: 'import', name: f.name, triangles: encodeTriangles(parsed.triangles), count: parsed.count, scale }], `Import ${f.name}`)[0];
+    select(r.id); views.fitAll();
+    toast(`${f.name}: ${parsed.count.toLocaleString()} triangles, ${parsed.size.map(v => fmt(v * scale)).join(' × ')} mm${scale !== 1 ? ' (looked like inches — scaled ×25.4; change scale in Properties)' : ''}`, 3600);
+  } catch (err) { toast('Could not import: ' + err.message, 3600); }
+});
 $('#openIn').addEventListener('change', async (e) => { const f = e.target.files[0]; if (!f) return; try { model.load(JSON.parse(await f.text())); select(null); views.fitAll(); toast('Opened ' + f.name); } catch (err) { toast('Could not open: ' + err.message); } e.target.value = ''; });
 const slug = () => (model.doc.name || 'model').replace(/[^\w-]+/g, '-');
 function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000); toast('Saved ' + name); }
@@ -914,6 +962,12 @@ async function runCmd(cmd, a) {
     case 'model.load': { const doc = typeof a.doc === 'string' ? JSON.parse(a.doc) : a.doc; if (!doc || !Array.isArray(doc.objects)) throw new Error('Not a SketchFlow 3D model (needs objects[])'); model.load(Object.assign(newDoc(doc.name || 'Model'), doc)); select(null); views.fitAll(); return { model: model.describe() }; }
     case 'model.demo': demo(); return { model: model.describe() };
     case 'model.say': toast('🤖 ' + String(a.text || ''), Math.max(1500, (a.seconds || 6) * 1000)); return { ok: true };
+    case 'model.version': return a.restore ? model.restoreVersion(a.restore) : a.name !== undefined || a.save ? model.saveVersion(a.name) : { versions: model.listVersions() };
+    case 'model.import': {
+      let tri = a.triangles, count = a.count, data = a.data;
+      if (a.file_b64) { const bin = atob(a.file_b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const parsed = parseMesh(a.name, u); tri = encodeTriangles(parsed.triangles); count = parsed.count; data = undefined; }
+      const r = model.apply([{ op: 'import', name: a.name, triangles: tri, count, data, scale: a.scale, material: a.material }], `Import ${a.name}`, { relative: true })[0]; views.fitAll(); return { result: r, model: model.describe() };
+    }
     case 'model.mass': return { mass: massReport(model.doc, model.result), parts_list: bom(model.doc, model.result), materials: Object.fromEntries(Object.entries(MATERIALS).map(([k, m]) => [k, `${m.name} ${m.density} g/cm³`])) };
     case 'model.addon': {
       if (!a.addon) return { addons: listAddons() };

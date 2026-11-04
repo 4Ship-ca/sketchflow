@@ -54,6 +54,7 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 #hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font:600 12.5px/1.3 var(--f-ui);box-shadow:0 6px 20px #0000003a;display:flex;gap:10px;align-items:center;max-width:90%;z-index:5;flex-wrap:wrap;justify-content:center}
 #hint .hf{display:flex;align-items:center;gap:4px;font:600 11px var(--f-ui);color:var(--ink-2);white-space:nowrap}
 #hint .hf input{width:56px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-mono);-webkit-user-select:text;user-select:text}
+#hint button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} #hint input[type=range]{width:160px;accent-color:var(--accent)}
 #hint button{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:5px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
 .sec{padding:4px 14px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid var(--line)}
 .sec h4{margin:8px 0 2px;font:700 10px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
@@ -69,7 +70,7 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 .f a{color:var(--accent)}
 .empty{padding:16px;color:var(--ink-3);font-size:12.5px;line-height:1.5}
 #dimEd{position:absolute;z-index:8;width:90px;font:600 13px var(--f-mono);border:2px solid var(--accent);border-radius:8px;padding:4px 7px;background:var(--panel);color:var(--ink)}
-#toasts{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
+#toasts{position:fixed;left:50%;top:110px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
 .toast{background:var(--ink);color:var(--bg);padding:8px 13px;border-radius:10px;font:600 12.5px var(--f-ui);box-shadow:0 6px 20px #0000003a}
 .toast.act{pointer-events:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:min(560px,92vw)}
 .toast.act button{border:0;border-radius:7px;padding:5px 10px;font:700 12px var(--f-ui);background:var(--accent);color:var(--accent-ink);cursor:pointer}
@@ -80,6 +81,21 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 .chain svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round} .chain.on{color:var(--ai);border-color:var(--ai)}
 .note{font-size:11.5px;line-height:1.45;color:var(--ink-3)}
 .varadd{display:grid;grid-template-columns:1fr 1fr auto;gap:6px} .varadd input{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font:500 12px var(--f-mono);min-width:0}
+#motion{position:absolute;left:12px;right:12px;bottom:12px;max-height:42%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
+#motion .mhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap} #motion .mhead b{font:700 13px var(--f-brand)}
+#motion .mrow{display:grid;grid-template-columns:minmax(120px,220px) 1fr 70px 28px;gap:10px;align-items:center;padding:4px 2px;border-radius:8px} #motion .mrow.on{background:var(--sel)}
+#motion .mname{font:600 12px var(--f-ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #motion input[type=range]{width:100%;accent-color:var(--accent)}
+#cfgSel{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:8px;padding:5px 8px;font:600 12px var(--f-ui)}
+.tblwrap{overflow-x:auto} table.cfg{border-collapse:collapse;font-size:12px;width:100%} table.cfg th{font:700 10px var(--f-ui);color:var(--ink-3);text-align:left;padding:2px 4px} table.cfg td{padding:2px 3px} table.cfg tr.on td{background:var(--sel)}
+table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 5px;font:500 12px var(--f-mono)}
+#hint input.vname{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:500 12px var(--f-ui);min-width:200px}
+.row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
+@media (hover:none){ .row .more{opacity:1} }
+.row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
+.rollbar{margin:2px 10px;padding:3px 8px;border-top:3px solid var(--cool);font:700 10px/1.2 var(--f-ui);letter-spacing:.04em;color:var(--cool);cursor:grab;user-select:none}
+#banner{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--cool);color:var(--ink);border-radius:10px;padding:6px 8px 6px 12px;font:600 12.5px var(--f-ui);display:flex;gap:10px;align-items:center;z-index:6;box-shadow:0 6px 20px #0000002a}
+#banner button{border:0;border-radius:7px;padding:5px 9px;background:var(--cool);color:#fff;font:700 12px var(--f-ui);cursor:pointer}
+.menu button[disabled]{opacity:.4;pointer-events:none}
 .seg{display:flex;gap:2px;margin:0 10px 6px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)} .seg button{flex:1;border:0;background:transparent;border-radius:6px;padding:5px;font:600 11.5px var(--f-ui);color:var(--ink-2);cursor:pointer} .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px #0000002a}
 .menu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px #0000004a;padding:5px;display:flex;flex-direction:column;min-width:170px}
 .menu button{text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)}
@@ -94,6 +110,7 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
   <header id="bar">
     <div class="brand"><i></i>SketchFlow 3D</div>
     <input id="name" value="Model" aria-label="Model name" spellcheck="false">
+    <select id="cfgSel" hidden title="Configuration (size variant)" aria-label="Configuration"></select>
     <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
     <div class="grp"><span class="lbl">Add</span>
       <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
@@ -112,7 +129,8 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
       <button class="tb" data-tool="bool-subtract" title="Subtract: target, then tool" data-icon="subtract">Subtract</button>
       <button class="tb" data-tool="bool-intersect" title="Intersect: target, then tool" data-icon="intersect">Intersect</button>
     </div>
-    <div class="grp"><span class="lbl">Edge</span>
+    <div class="grp"><span class="lbl">Features</span>
+      <button class="tb" data-tool="hole" title="Hole wizard: ISO clearance, counterbore, countersink, tapped, heat-set insert — click a face" data-icon="hole">Hole</button>
       <button class="tb" data-tool="edge-fillet" title="Fillet an edge: rounds outer edges, fills inner corners; on the seam between two parts it merges them into one" data-icon="fillet">Fillet</button>
       <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
       <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
@@ -128,6 +146,8 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
       <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
       <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
       <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="sectionBtn" title="Section view: cut the model with a plane (X)" data-icon="section"></button>
+      <button class="tb" id="motionBtn" title="Motion: move joints, play, see gears turn (J)" data-icon="motion"></button>
       <button class="tb" id="explodeBtn" title="Pull apart: exploded view of the parts (E)" data-icon="explode"></button>
       <button class="tb" id="cogBtn" title="Show the centre of gravity (mass and balance are in Properties)" data-icon="cog"></button>
       <button class="tb" id="theme" title="Light / dark" data-icon="sun"></button>
@@ -138,11 +158,12 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>
 <input type="file" id="openIn" hidden accept=".json,.sf3d,application/json">
+<input type="file" id="meshIn" hidden accept=".stl,.obj,model/stl">
 <script type="module">
 const __sf3 = {};
 __sf3.kernel = (() => {
@@ -763,6 +784,14 @@ const TYPES = {
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
+  /* a linked copy of another part: same shape and features, its own place */
+  instance: { label: 'Instance', params: {} },
+  /* an imported triangle mesh (STL / OBJ), stored in doc.meshes */
+  mesh: { label: 'Mesh', params: { scale: 1 } },
+  /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
+  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0 } },
+  /* hollow a part to a wall thickness, optionally open on one face */
+  shell: { label: 'Shell', params: { thickness: 2, open: 'top' } },
   /* array of other features: linear (1 or 2 directions), circular (about an axis), mirror (across a plane) */
   pattern: { label: 'Pattern', params: { kind: 'linear', count: 3, spacing: 20, direction: [1, 0, 0], count2: 1, spacing2: 20, direction2: [0, 1, 0], angle: 360, axis: [0, 0, 1], center: [0, 0, 0], about: null, plane: 'yz', offset: 0 } },
   /* weld bead joining two separate parts; the parts stay separate components (an assembly), unlike a fillet, which merges */
@@ -786,7 +815,7 @@ const MATERIALS = {
   glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
 };
 /* object types that are not shapes of their own */
-const META = new Set(['edge', 'pattern', 'weld']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
@@ -825,6 +854,7 @@ function connectorsOf(o, solid) {
     case 'cylinder': return roundLike(p.diameter / 2, p.height);
     case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
+    case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
       conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
     default: {
@@ -887,6 +917,115 @@ function listAddons() {
   }));
 }
 
+/* ---------- holes: ISO metric (clearance ISO 273, counterbore for ISO 4762 heads, countersink for ISO 10642, tap drill, heat-set inserts) ---------- */
+const HOLES = {
+  M2: { close: 2.2, normal: 2.4, loose: 2.6, cb: [4.4, 2.2], cs: 4.4, tap: 1.6, pitch: 0.4, insert: [3.2, 4] },
+  'M2.5': { close: 2.7, normal: 2.9, loose: 3.1, cb: [5.5, 2.7], cs: 5.5, tap: 2.05, pitch: 0.45, insert: [3.6, 5] },
+  M3: { close: 3.2, normal: 3.4, loose: 3.6, cb: [6.5, 3.3], cs: 6.7, tap: 2.5, pitch: 0.5, insert: [4.0, 5.7] },
+  M4: { close: 4.3, normal: 4.5, loose: 4.8, cb: [8, 4.4], cs: 9, tap: 3.3, pitch: 0.7, insert: [5.6, 8.1] },
+  M5: { close: 5.3, normal: 5.5, loose: 5.8, cb: [10, 5.4], cs: 11.2, tap: 4.2, pitch: 0.8, insert: [6.4, 9.5] },
+  M6: { close: 6.4, normal: 6.6, loose: 7, cb: [11, 6.4], cs: 13.4, tap: 5, pitch: 1, insert: [8, 12.7] },
+  M8: { close: 8.4, normal: 9, loose: 10, cb: [15, 8.6], cs: 17.9, tap: 6.8, pitch: 1.25, insert: [9.6, 12.7] },
+  M10: { close: 10.5, normal: 11, loose: 12, cb: [18, 10.8], cs: 22.4, tap: 8.5, pitch: 1.5 },
+  M12: { close: 13, normal: 13.5, loose: 14.5, cb: [20, 13], cs: 26.9, tap: 10.2, pitch: 1.75 },
+  M16: { close: 17, normal: 17.5, loose: 18.5, cb: [26, 17.5], cs: 33.6, tap: 14, pitch: 2 }
+};
+function holeSpec(p) {
+  const H = HOLES[String(p.size || 'M6').toUpperCase().replace('M2.5', 'M2.5')] || HOLES[p.size]; if (!H && !(+p.diameter > 0)) throw new Error(`size is one of ${Object.keys(HOLES).join(', ')} (or set diameter)`);
+  const kind = p.kind || 'simple', fit = p.fit || 'normal';
+  let d = +p.diameter > 0 ? +p.diameter : kind === 'tapped' ? H.tap : kind === 'insert' ? (H.insert ? H.insert[0] : null) : fit === 'print' ? H.normal + 0.2 : H[fit] || H.normal;
+  if (!d) throw new Error(`no heat-set insert size for ${p.size}`);
+  const out = { d, kind, cb: H && H.cb ? [H.cb[0] + (fit === 'print' ? 0.3 : 0), H.cb[1]] : null, cs: H ? H.cs : null, tap: H ? H.tap : null, pitch: H ? H.pitch : null, insertDepth: H && H.insert ? H.insert[1] : null };
+  if (!H) { out.label = `Ø${d} ${kind}`; return out; }
+  out.label = kind === 'tapped' ? `${p.size}×${H.pitch} tapped (Ø${H.tap} drill)` : kind === 'insert' ? `${p.size} heat-set insert Ø${d} × ${out.insertDepth}` : `${p.size} ${fit} clearance Ø${d}${kind === 'counterbore' ? `, counterbore Ø${out.cb[0]} × ${out.cb[1]}` : kind === 'countersink' ? `, countersink Ø${out.cs} × 90°` : ''}`;
+  return out;
+}
+function buildHole(p) {
+  const h = holeSpec(p), r = h.d / 2, depth = p.kind === 'insert' && !p.through ? (+p.depth || h.insertDepth) : Math.max(0.5, +p.depth || 10);
+  const seg = 48, up = 1, tr = (sol, z) => sol.transform(M4.translate([0, 0, z]));
+  let s = tr(K.cylinder(r, r, depth + up, seg), -depth);
+  if (!p.through) { const tip = r / Math.tan(59 * Math.PI / 180); s = s.union(tr(K.cylinder(0.0001, r, tip, seg), -depth - tip)); }
+  if (h.kind === 'counterbore' && h.cb) s = s.union(tr(K.cylinder(h.cb[0] / 2, h.cb[0] / 2, h.cb[1] + up, seg), -h.cb[1]));
+  if (h.kind === 'countersink' && h.cs) { const rc = h.cs / 2, dz = rc - r; s = s.union(tr(K.cylinder(r, rc, dz, seg), -dz)).union(tr(K.cylinder(rc, rc, up, seg), 0)); }
+  return s;
+}
+/* shell cavity in the part's own frame: the same shape, thinner by t, opened through one face */
+function shellCavity(root, p) {
+  const t = +p.thickness, q = root.params, open = p.open || 'none', E = 1;
+  if (!(t > 0)) throw new Error('thickness must be above 0');
+  const box = (w, d, h, x, y, z) => K.box(w, d, h).transform(M4.translate([x, y, z]));
+  switch (root.type) {
+    case 'box': {
+      const W = q.width - 2 * t, D = q.depth - 2 * t; if (W <= 0 || D <= 0 || q.height - 2 * t <= 0) throw new Error(`walls of ${t} leave nothing inside`);
+      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? q.height + E : q.height - t;
+      let x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2;
+      if (open === 'front') y0 = -q.depth / 2 - E; if (open === 'back') y1 = q.depth / 2 + E; if (open === 'left') x0 = -q.width / 2 - E; if (open === 'right') x1 = q.width / 2 + E;
+      return box(x1 - x0, y1 - y0, z1 - z0, (x0 + x1) / 2, (y0 + y1) / 2, z0);
+    }
+    case 'cylinder': case 'cone': {
+      const R1 = q.diameter / 2, R2 = root.type === 'cone' ? (q.top || 0) / 2 : R1, H = q.height, slope = (R1 - R2) / H, k = Math.sqrt(1 + slope * slope);
+      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? H + E : H - t, rAt = (z) => R1 - slope * z - t * k;
+      if (rAt(Math.max(0, z0)) <= 0) throw new Error(`walls of ${t} leave nothing inside`);
+      return K.cylinder(Math.max(0.01, rAt(z0)), Math.max(0.01, rAt(z1)), z1 - z0, SEG).transform(M4.translate([0, 0, z0]));
+    }
+    case 'sphere': { const R = q.diameter / 2 - t; if (R <= 0) throw new Error('walls too thick'); return K.sphere(R, 32).transform(M4.translate([0, 0, t])); }
+    case 'extrude': {
+      if ((q.twist || 0) !== 0 || (q.scale != null && q.scale !== 1)) throw new Error('shell works on straight extrudes (no twist or taper)');
+      const inner = insetPolygon(q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
+      const z0 = open === 'start' || open === 'bottom' ? -E : t, z1 = open === 'end' || open === 'top' ? q.length + E : q.length - t;
+      return K.extrude(inner, { length: z1 - z0, dir: q.direction }).transform(M4.translate(V.mul(V.norm(q.direction || [0, 0, 1]), z0 / (V.norm(q.direction || [0, 0, 1])[2] || 1))));
+    }
+  }
+  throw new Error('shell works on boxes, cylinders, cones, spheres and straight extrudes');
+}
+/* inward offset of a simple polygon (mitred corners) */
+function insetPolygon(pts, t) {
+  let P = pts.slice(); if (K.area2(P) < 0) P = P.reverse();
+  const n = P.length, lines = [];
+  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L; lines.push([[a[0] + nx * t, a[1] + ny * t], [dx / L, dy / L]]); }
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [p1, d1] = lines[(i + n - 1) % n], [p2, d2] = lines[i], den = d1[0] * d2[1] - d1[1] * d2[0];
+    if (Math.abs(den) < 1e-9) { out.push(p2); continue; }
+    const u = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den; out.push([p1[0] + d1[0] * u, p1[1] + d1[1] * u]);
+  }
+  return K.area2(out) > 1e-6 ? out : null;
+}
+/* ---------- imported meshes ---------- */
+let MESH_STORE = {};   /* set per evaluation from doc.meshes: id → { b64 (Float32 xyz per vertex, 3 per triangle), tris } */
+function encodeTriangles(arr) { const f = arr instanceof Float32Array ? arr : Float32Array.from(arr), u = new Uint8Array(f.buffer, f.byteOffset, f.byteLength); let sx = ''; for (let i = 0; i < u.length; i += 0x8000) sx += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return typeof btoa === 'function' ? btoa(sx) : Buffer.from(u).toString('base64'); }
+function decodeTriangles(b64) { const bin = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary'), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Float32Array(u.buffer); }
+function meshSolid(o) {
+  const m = MESH_STORE[o.params.ref || o.id]; if (!m) throw new Error('the mesh data is missing (re-import it)');
+  const P = decodeTriangles(m.b64), sc = +o.params.scale || 1, polys = [];
+  for (let i = 0; i + 8 < P.length; i += 9) { const q = K.poly([[P[i] * sc, P[i + 1] * sc, P[i + 2] * sc], [P[i + 3] * sc, P[i + 4] * sc, P[i + 5] * sc], [P[i + 6] * sc, P[i + 7] * sc, P[i + 8] * sc]], 'mesh'); if (q) polys.push(q); }
+  const s = new K.Solid(polys); if (s.volume() < 0) for (const q of s.polys) q.flip();
+  return s;
+}
+/* parse STL (binary or ASCII) or OBJ into one flat triangle array, re-centred on its base (like the built-in shapes) */
+function parseMesh(name, data) {
+  const lower = String(name || '').toLowerCase(), tri = [];
+  const asText = typeof data === 'string' ? data : new TextDecoder().decode(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+  if (lower.endsWith('.obj')) {
+    const v = [];
+    for (const line of asText.split(/\r?\n/)) {
+      const t = line.trim().split(/\s+/);
+      if (t[0] === 'v') v.push([+t[1], +t[2], +t[3]]);
+      else if (t[0] === 'f') { const idx = t.slice(1).map(x => { const k = parseInt(x.split('/')[0], 10); return k < 0 ? v.length + k : k - 1; }); for (let i = 1; i < idx.length - 1; i++) for (const k of [idx[0], idx[i], idx[i + 1]]) tri.push(...v[k]); }
+    }
+  } else {
+    const bytes = typeof data === 'string' ? null : (data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+    const isAscii = !bytes || (/^\s*solid/.test(asText.slice(0, 80)) && /facet\s+normal/.test(asText.slice(0, 1000)));
+    if (isAscii) { const re = /vertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/g; let mm; while ((mm = re.exec(asText))) tri.push(+mm[1], +mm[2], +mm[3]); }
+    else { const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), n = dv.getUint32(80, true); for (let i = 0; i < n; i++) { const o0 = 84 + i * 50 + 12; for (let k = 0; k < 9; k++) tri.push(dv.getFloat32(o0 + k * 4, true)); } }
+  }
+  if (tri.length < 9) throw new Error('no triangles found in ' + name);
+  const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < tri.length; i++) { const k = i % 3; mn[k] = Math.min(mn[k], tri[i]); mx[k] = Math.max(mx[k], tri[i]); }
+  const c = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]];
+  for (let i = 0; i < tri.length; i++) tri[i] -= c[i % 3];
+  return { triangles: Float32Array.from(tri), count: tri.length / 9, size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] };
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -902,6 +1041,9 @@ function buildLocal(o) {
     case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
+    case 'hole': return buildHole(p);
+    case 'mesh': return meshSolid(o);
+    case 'instance': return K.Solid.empty();   /* geometry comes from its source part, after the bodies are built */
   }
   const T = TYPES[o.type]; if (T && T.def) return T.def.build(p, addonApi);
   throw new Error('Unknown shape ' + o.type);
@@ -983,9 +1125,9 @@ function evalTree(tree, look) {
   throw new Error('bad formula');
 }
 /* resolve every linked parameter (leaders before followers); writes the numbers into params, returns warnings */
-function resolveLinks(doc) {
+function resolveLinks(doc, cfg) {
   const warn = [], byId = new Map(doc.objects.map(o => [o.id, o])), byName = new Map(doc.objects.map(o => [String(o.name || '').replace(/\s+/g, '_'), o]));
-  const vars = doc.vars || {}, state = new Map(), varState = new Map(), varVal = new Map();
+  const vars = Object.assign({}, doc.vars || {}, (cfg && cfg.vars) || {}), state = new Map(), varState = new Map(), varVal = new Map();
   const varOf = (name, chain) => {
     if (varVal.has(name)) return varVal.get(name);
     if (!(name in vars)) throw new Error(`no variable #${name}`);
@@ -1063,15 +1205,57 @@ function cachedLocal(o) {
   if (!s) { s = localSolid(o); LOCAL_CACHE.set(key, s); if (LOCAL_CACHE.size > 200) LOCAL_CACHE.delete(LOCAL_CACHE.keys().next().value); }
   return s;
 }
-function evaluate(doc) {
-  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map() };
-  R.warnings.push(...resolveLinks(doc));
+/* ---------- joints (moving mates) ----------
+   mate.joint: fixed | revolute (spins about the connector axis) | slider (travels along axis n / u / v) | cylindrical (spin + travel)
+   | planar (slides on the face + spin). The joint's values are the mate's own angle / offset / slide, so a pose is just data. */
+const JOINTS = {
+  revolute: [{ key: 'angle', unit: '°', min: -180, max: 180 }],
+  slider: [{ key: 'travel', unit: 'mm', min: -50, max: 50 }],
+  cylindrical: [{ key: 'angle', unit: '°', min: -180, max: 180 }, { key: 'offset', unit: 'mm', min: -50, max: 50 }],
+  planar: [{ key: 'u', unit: 'mm', min: -50, max: 50 }, { key: 'v', unit: 'mm', min: -50, max: 50 }, { key: 'angle', unit: '°', min: -180, max: 180 }]
+};
+const dofGet = (m, key) => key === 'angle' ? (m.angle || 0) : key === 'offset' ? (m.offset || 0) : key === 'u' ? (m.slide || [0, 0])[0] : key === 'v' ? (m.slide || [0, 0])[1]
+  : key === 'travel' ? (m.axis === 'u' ? (m.slide || [0, 0])[0] : m.axis === 'v' ? (m.slide || [0, 0])[1] : (m.offset || 0)) : 0;
+function dofSet(m, key, v) {
+  const sl = (m.slide || [0, 0]).slice();
+  if (key === 'angle') m.angle = v; else if (key === 'offset') m.offset = v; else if (key === 'u') { sl[0] = v; m.slide = sl; } else if (key === 'v') { sl[1] = v; m.slide = sl; }
+  else if (key === 'travel') { if (m.axis === 'u') { sl[0] = v; m.slide = sl; } else if (m.axis === 'v') { sl[1] = v; m.slide = sl; } else m.offset = v; }
+}
+function jointsOf(doc) {
+  return doc.objects.filter(o => o.mate && o.mate.joint && JOINTS[o.mate.joint]).map(o => ({
+    id: o.id, name: o.name, joint: o.mate.joint, axis: o.mate.axis,
+    dofs: JOINTS[o.mate.joint].map(d => { const lim = (o.mate.limits || {})[d.key]; return { key: d.key, unit: d.unit, value: dofGet(o.mate, d.key), min: lim ? lim[0] : d.min, max: lim ? lim[1] : d.max, limited: !!lim }; })
+  }));
+}
+/* apply joint values {id: {key: value}} to a copy of the document (a pose to look at, without editing the model) */
+function posedDoc(doc, pose) {
+  const d = JSON.parse(JSON.stringify(doc));
+  for (const [id, vals] of Object.entries(pose || {})) {
+    const o = d.objects.find(x => x.id === id); if (!o || !o.mate) continue;
+    for (const [key, v] of Object.entries(typeof vals === 'number' ? { [JOINTS[o.mate.joint] ? JOINTS[o.mate.joint][0].key : 'angle']: vals } : vals)) {
+      const lim = (o.mate.limits || {})[key]; dofSet(o.mate, key, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v);
+    }
+  }
+  return d;
+}
+function evaluate(doc, opts) {
+  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map(), spin: new Map() };
+  MESH_STORE = doc.meshes || {};
+  const cfg = (doc.configs || []).find(c => c.name === doc.config) || null;
+  R.warnings.push(...resolveLinks(doc, cfg));
+  /* suppressed features, and everything after the rollback bar, are placed but make no geometry */
+  const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, cfgOff = new Set((cfg && cfg.suppress) || []), off = new Set(doc.objects.filter((o, i) => o.suppressed || cfgOff.has(o.id) || i >= rb).map(o => o.id));
+  R.config = cfg ? cfg.name : null;
+  R.off = off;
   const byId = new Map(doc.objects.map(o => [o.id, o]));
   const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
   R.ground = ground;
   /* local solids + connectors */
   for (const o of doc.objects) {
     if (META.has(o.type)) continue;
+    /* a through hole is as deep as its part is big (so it stays through when the part changes) */
+    if (o.type === 'hole' && o.params.through && o.into && R.local.has(o.into)) { const bb = R.local.get(o.into).bbox(), L = Math.ceil(V.len(V.sub(bb.max, bb.min)) + 2); if (o.params.depth !== L) o.params.depth = L; }
+    if (o.type === 'instance') { const src = byId.get(o.of); R.conns.set(o.id, src && R.conns.has(src.id) ? R.conns.get(src.id) : []); if (!src) R.errors.set(o.id, 'its source part was deleted'); continue; }
     try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
     catch (e) { R.errors.set(o.id, e.message); let c = []; try { c = connectorsOf(o, null); } catch (e2) { /* an add-on shape with bad parameters has no connectors */ } R.conns.set(o.id, c); }
   }
@@ -1090,7 +1274,7 @@ function evaluate(doc) {
       if (m.kind && target) {
         const mk = ADDON_MATES.get(m.kind);
         if (!mk) { R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate kind “${m.kind}” needs its add-on` }); m = null; }
-        else { try { m = Object.assign({}, m, mk.solve({ self: o, target, mate: m, api: addonApi, targetWorld: worldOf(m.to) })); } catch (e) { R.warnings.push({ kind: 'error', id, text: `${o.name}: ${e.message}` }); m = null; } }
+        else { try { const tw = worldOf(m.to); m = Object.assign({}, m, mk.solve({ self: o, target, mate: m, api: addonApi, targetWorld: tw, targetSpin: R.spin.get(m.to) })); if (m._spin != null) R.spin.set(id, m._spin); } catch (e) { R.warnings.push({ kind: 'error', id, text: `${o.name}: ${e.message}` }); m = null; } }
       }
       if (!m) { /* keep its own pose */ }
       else if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
@@ -1115,7 +1299,7 @@ function evaluate(doc) {
   if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
   R.originRef = og;
   /* floating = not grounded, not fixed, no mate chain to the ground / origin, and not welded to something that is */
-  const welds = doc.objects.filter(o => o.type === 'weld' && Array.isArray(o.joins));
+  const welds = doc.objects.filter(o => o.type === 'weld' && Array.isArray(o.joins) && !off.has(o.id));
   const grounded = (id, seen = new Set()) => {
     if (id === ground) return true; const o = byId.get(id); if (!o || seen.has(id)) return false; seen.add(id);
     if (o.fixed) return true;
@@ -1123,11 +1307,11 @@ function evaluate(doc) {
     for (const w of welds) { const k = w.joins.indexOf(id); if (k >= 0 && grounded(w.joins[1 - k], seen)) return true; }
     return false;
   };
-  for (const o of doc.objects) if (!META.has(o.type) && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
+  for (const o of doc.objects) if (!META.has(o.type) && !off.has(o.id) && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
   /* patterns: virtual copies of their source features (live: they follow the source's parameters) */
   const objs = doc.objects.slice();
-  for (const P of doc.objects.filter(o => o.type === 'pattern')) {
-    const srcs = (P.of || []).map(id => byId.get(id)).filter(Boolean);
+  for (const P of doc.objects.filter(o => o.type === 'pattern' && !off.has(o.id))) {
+    const srcs = (P.of || []).map(id => byId.get(id)).filter(x => x && !off.has(x.id));
     if (!srcs.length) { R.warnings.push({ kind: 'orphan', id: P.id, text: `${P.name}: nothing to repeat (its source was deleted)` }); continue; }
     let Ts; try { Ts = patternTransforms(P, R, byId); } catch (e) { R.warnings.push({ kind: 'error', id: P.id, text: `${P.name}: ${e.message}` }); continue; }
     const add = [];
@@ -1153,7 +1337,8 @@ function evaluate(doc) {
     });
     objs.splice(objs.indexOf(P) + 1, 0, ...add);
   }
-  const intoOf = new Map(); for (const t of objs) if (t.into) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
+  if (opts && opts.placementOnly) return R;   /* motion frames only need where everything is */
+  const intoOf = new Map(); for (const t of objs) if (t.into && !off.has(t.id)) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
   const bodyOf = (id, chain = new Set()) => {
@@ -1165,6 +1350,7 @@ function evaluate(doc) {
       R.consumed.add(t.id);
       try {
         if (t.type === 'edge') { s = applyEdge(s, t, o, R); continue; }
+        if (t.type === 'shell') { s = s.subtract(shellCavity(o, t.params).transform(R.world.get(o.id)).tag(t.id)); continue; }
         if (META.has(t.type)) continue;
         const tool = bodyOf(t.id, chain);
         const op = t.op || 'subtract';
@@ -1198,7 +1384,17 @@ function evaluate(doc) {
     return solid;
   };
   for (const o of objs) {
-    if (META.has(o.type) || (o.into && byId.has(o.into))) continue;
+    if (META.has(o.type) || (o.into && byId.has(o.into)) || off.has(o.id)) continue;
+    if (o.type === 'instance') {
+      /* the source part's finished body, moved from where the source is to where this instance is */
+      const src = R.bodies.find(b => b.id === o.of), Ws = R.world.get(o.of), Wi = R.world.get(o.id);
+      if (!src || !Ws || !Wi) { if (byId.has(o.of)) R.warnings.push({ kind: 'error', id: o.id, text: `${o.name}: its source has no geometry (suppressed, or later in the list)` }); continue; }
+      const sm = MATERIALS[((byId.get(o.of) || {}).meta || {}).material] || MATERIALS[doc.material];
+      const Mi = M4.mul(Wi, M4.inv(Ws)), ik = serialOf(src.solid) + '|' + Array.from(Mi, v => Math.round(v * 1e7)).join(',');
+      let isol = INST_CACHE.get(ik); if (!isol) { isol = src.solid.transform(Mi); INST_CACHE.set(ik, isol); if (INST_CACHE.size > 120) INST_CACHE.delete(INST_CACHE.keys().next().value); }
+      R.bodies.push({ id: o.id, solid: isol, color: o.color || src.color || (sm ? sm.color : null), name: o.name, hidden: !!o.hidden, instance: o.of });
+      R.roots.push(o.id); continue;
+    }
     const s = cachedBody(o.id);
     if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
     const mat = MATERIALS[(o.meta || {}).material] || MATERIALS[doc.material];
@@ -1250,7 +1446,7 @@ function patternTransforms(P, R) {
 /* ---------- welds ---------- */
 const solidSerial = new WeakMap(); let serialN = 0;
 const serialOf = (s) => { let n = solidSerial.get(s); if (!n) solidSerial.set(s, (n = ++serialN)); return n; };
-const WELD_CACHE = new Map();
+const WELD_CACHE = new Map(), INST_CACHE = new Map();
 const rootIdOf = (id, byId) => { let cur = byId.get(id); const seen = new Set(); while (cur && cur.into && byId.has(cur.into) && !seen.has(cur.id)) { seen.add(cur.id); cur = byId.get(cur.into); } return cur ? cur.id : null; };
 const sidSet = (s) => new Set(s.polys.map(p => p.sid));
 /* the inside-corner edges where two separate bodies meet (found on their union, faces from one body on each side) */
@@ -1461,13 +1657,13 @@ function massReport(doc, R) {
   const byId = new Map(doc.objects.map(o => [o.id, o])), O = R.originPoint, parts = [];
   for (const b of R.bodies) {
     if (b.hidden || b.solid.isEmpty()) continue;
-    const v = R.virtual && R.virtual.get(b.id), src = byId.get(v ? v.source : b.id); if (!src) continue;
+    const v = R.virtual && R.virtual.get(b.id), srcId = v ? v.source : b.instance || b.id, src = byId.get(srcId); if (!src) continue;
     let meta = src.meta || {};
     if (src.type === 'weld' && !meta.material && !meta.density) { const base = byId.get(src.joins && src.joins[0]); meta = Object.assign({}, base && base.meta, meta); }
     const matKey = meta.material || doc.material || null, mat = matKey ? MATERIALS[matKey] : null;
     const density = meta.density || (mat ? mat.density : null), fill = meta.fill || 1, mp = massOf(b.solid);
     const rho = density ? density * fill / 1000 : null;   /* g per mm³ */
-    parts.push({ id: b.id, name: b.name, source: v ? v.source : undefined, weld: b.weld || undefined, material: matKey, material_name: mat ? mat.name : (meta.density ? 'custom' : null), assumed: !meta.material && !meta.density && !!doc.material,
+    parts.push({ id: b.id, name: b.name, source: v ? v.source : b.instance || undefined, weld: b.weld || undefined, material: matKey, material_name: mat ? mat.name : (meta.density ? 'custom' : null), assumed: !meta.material && !meta.density && !!doc.material,
       density, fill: fill < 1 ? fill : undefined, volume_mm3: mp.volume, mass_g: rho == null ? null : mp.volume * rho, centroid: V.sub(mp.centroid, O), inertia_kg_mm2: rho == null ? null : mp.inertia.map(x => x * rho / 1000), meta });
   }
   const known = parts.filter(p => p.mass_g != null), M = known.reduce((t, p) => t + p.mass_g, 0);
@@ -1524,6 +1720,20 @@ class Model {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
   recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  /* new features go at the rollback bar when it is up (and the bar moves down past them) */
+  insert(ob) {
+    const d = this.doc, rb = Number.isInteger(d.rollback) ? Math.min(d.rollback, d.objects.length) : null;
+    if (rb == null || rb >= d.objects.length) { d.objects.push(ob); if (rb != null) d.rollback = null; return; }
+    d.objects.splice(rb, 0, ob); d.rollback = rb + 1;
+  }
+  /* order rules: a tool after what it cuts / joins, an edge after its part, a pattern after what it repeats */
+  checkOrder() {
+    const idx = new Map(this.doc.objects.map((o, i) => [o.id, i]));
+    for (const o of this.doc.objects) {
+      if (o.into && idx.has(o.into) && idx.get(o.id) < idx.get(o.into)) throw new Error(`${o.name} must come after ${this.get(o.into).name} (it ${o.type === 'edge' ? 'shapes' : o.op === 'add' ? 'joins' : 'cuts'} it)`);
+      if (o.type === 'pattern') for (const s2 of o.of || []) if (idx.has(s2) && idx.get(o.id) < idx.get(s2)) throw new Error(`${o.name} must come after ${this.get(s2).name}, which it repeats`);
+    }
+  }
   /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
   dimMover(md) {
     const A = this.get(md.a.obj), B = this.get(md.b.obj); if (!A || !B) return null;
@@ -1554,10 +1764,20 @@ class Model {
     for (const md of dims) { const cur = measureDim(this.result, md); if (cur && Math.abs(cur.value - md.drive) > 1e-3) this.result.warnings.push({ kind: 'dim', id: md.a.obj, text: `A ${md.drive} dimension can't be held (now ${cur.value.toFixed(2)}) — another dimension or mate fights it` }); }
   }
   get(id) { return this.doc.objects.find(o => o.id === id); }
-  snapshot() { return JSON.stringify(this.doc); }
+  /* undo snapshots leave out saved versions (they belong to the document, not to its history) */
+  snapshot() { const { versions, ...rest } = this.doc; return JSON.stringify(rest); }
+  saveVersion(name) {
+    const v = { id: uid('ver'), name: String(name || `Version ${(this.doc.versions || []).length + 1}`), at: Date.now(), json: this.snapshot() };
+    this.doc.versions = [...(this.doc.versions || []), v].slice(-30); this.emit(); return { id: v.id, name: v.name, at: v.at };
+  }
+  listVersions() { return (this.doc.versions || []).map(v => ({ id: v.id, name: v.name, at: v.at, objects: JSON.parse(v.json).objects.length })); }
+  restoreVersion(id) {
+    const v = (this.doc.versions || []).find(x => x.id === id || x.name === id); if (!v) throw new Error('No version ' + id);
+    const before = this.snapshot(), vers = this.doc.versions; this.doc = JSON.parse(v.json); this.doc.versions = vers; this.commit(`Restore “${v.name}”`, before); return { restored: v.name };
+  }
   commit(label, before, t0) { this.undoStack.push({ label, json: before }); if (this.undoStack.length > 150) this.undoStack.shift(); this.redoStack = []; this.doc.updated = Date.now(); this.recompute(); if (t0 != null) this.result.ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0; this.emit(); }
-  undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
-  redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
+  undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
+  redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
   load(doc) { const before = this.snapshot(); this.doc = doc; this.commit('Open model', before); }
   /* apply a batch of operations atomically (one undo step). Returns per-op results. */
   /* opts.relative: positions (at, near) are measured from the ephemeral world origin, the same frame describe() reports */
@@ -1565,7 +1785,7 @@ class Model {
     const before = this.snapshot(), out = [], t0 = (typeof performance !== 'undefined' ? performance : Date).now();
     this.rel = !!opts.relative;
     try { (Array.isArray(ops) ? ops : [ops]).forEach((op, i) => { try { out.push(this.op(op)); } catch (e) { e.message = `op ${i + 1} (${op && op.op}): ${e.message}`; throw e; } }); }
-    catch (e) { this.doc = JSON.parse(before); this.recompute(); throw e; }
+    catch (e) { const vers = this.doc.versions; this.doc = JSON.parse(before); if (vers) this.doc.versions = vers; this.recompute(); throw e; }
     finally { this.rel = false; }
     this.commit(label || (out.length === 1 ? out[0].label : out.length + ' changes'), before, t0);   /* ms = the whole batch, what the user waited for */
     return out.map(r => { delete r.label; return r; });
@@ -1579,7 +1799,7 @@ class Model {
         const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
         const sp = splitParams(type, o.params);
         const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
-        d.objects.push(ob);
+        this.insert(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
           /* rapid prototyping default: sit it on top of the ground object */
@@ -1615,7 +1835,7 @@ class Model {
           x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
         }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
-        const sconns = this.result.conns.get(x.id) || connectorsOf(x, null);
+        const sconns = this.result.conns.get(x.id) || (x.type === 'instance' ? this.result.conns.get(x.of) : null) || connectorsOf(x, null);
         const a = o.a || 'top', b = o.b || 'bottom';
         if (!tconns.find(c => c.name === a)) throw new Error(`No connector “${a}” on the target. Try: ${tconns.map(c => c.name).join(', ')}`);
         if (!sconns.find(c => c.name === b)) throw new Error(`No connector “${b}” on ${x.name}. Try: ${sconns.map(c => c.name).join(', ')}`);
@@ -1641,7 +1861,7 @@ class Model {
         const e = findEdge(body.solid, { m: near, d: o.d || null, tol: o.tol || 5 }); if (!e) throw new Error('No straight edge between two flat faces near that point');
         const Mi = M4.inv(this.result.world.get(body.id));
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('edg'), style = ['fillet', 'weld', 'chamfer'].includes(o.style) ? o.style : 'fillet';
-        d.objects.push({ id, name: o.name || (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' ' + (d.objects.filter(x => x.type === 'edge').length + 1), type: 'edge', params: { style, size: num(o.size, 4), mode: o.mode || 'auto' }, edge: { m: M4.point(Mi, e.m), d: M4.dir(Mi, e.d), faces: e.sids }, into: body.id, op: 'edge', pose: null, mate: null });
+        this.insert({ id, name: o.name || (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' ' + (d.objects.filter(x => x.type === 'edge').length + 1), type: 'edge', params: { style, size: num(o.size, 4), mode: o.mode || 'auto' }, edge: { m: M4.point(Mi, e.m), d: M4.dir(Mi, e.d), faces: e.sids }, into: body.id, op: 'edge', pose: null, mate: null });
         this.recompute();
         return { label: (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' edge', id, convex: e.convex, angle: +e.angle.toFixed(2), mode: o.mode || (e.convex ? 'subtract' : 'add'), round: e.loop ? { diameter: +(e.radius * 2).toFixed(3), closed: e.closed } : undefined };
       }
@@ -1662,7 +1882,7 @@ class Model {
         if (!['linear', 'circular', 'mirror'].includes(params.kind)) throw new Error('kind is linear, circular or mirror');
         if (params.about && params.about.obj && params.about.obj !== 'origin') need(params.about.obj);
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('pat');
-        d.objects.push({ id, name: o.name || (params.kind === 'mirror' ? 'Mirror ' : params.kind === 'circular' ? 'Circular array ' : 'Array ') + (d.objects.filter(x => x.type === 'pattern').length + 1), type: 'pattern', params, of, pose: null, mate: null, into: null, op: null });
+        this.insert({ id, name: o.name || (params.kind === 'mirror' ? 'Mirror ' : params.kind === 'circular' ? 'Circular array ' : 'Array ') + (d.objects.filter(x => x.type === 'pattern').length + 1), type: 'pattern', params, of, pose: null, mate: null, into: null, op: null });
         this.recompute();
         const copies = [...this.result.virtual.values()].filter(v => v.pattern === id).length;
         return { label: 'Pattern ' + of.map(i => this.get(i).name).join(', '), id, of, copies };
@@ -1679,7 +1899,7 @@ class Model {
         else e = concave.reduce((b2, c) => ((c.loop ? 2 * Math.PI * c.radius : V.len(V.sub(c.b, c.a))) > (b2.loop ? 2 * Math.PI * b2.radius : V.len(V.sub(b2.b, b2.a))) ? c : b2));
         const Wa = this.result.world.get(ba.id), id = o.id && !this.get(o.id) ? String(o.id) : uid('wld');
         const params = defaultParams('weld', o.params); for (const k of ['size', 'profile', 'all_around']) if (o[k] !== undefined) params[k] = o[k];
-        d.objects.push({ id, name: o.name || 'Weld ' + (d.objects.filter(x => x.type === 'weld').length + 1), type: 'weld', params, joins: [A.id, B.id], seam: { m: M4.point(M4.inv(Wa), e.m), faces: e.sids }, color: o.color || null, pose: null, mate: null, into: null, op: null });
+        this.insert({ id, name: o.name || 'Weld ' + (d.objects.filter(x => x.type === 'weld').length + 1), type: 'weld', params, joins: [A.id, B.id], seam: { m: M4.point(M4.inv(Wa), e.m), faces: e.sids }, color: o.color || null, pose: null, mate: null, into: null, op: null });
         this.recompute();
         const r = this.get(id)._resolved || {};
         const mat = (x) => (x.meta && x.meta.material) || d.material || null, advice = weldAdvice(mat(this.get(ba.id) || A), mat(this.get(bb.id) || B));
@@ -1694,9 +1914,11 @@ class Model {
         return { label: res.label || `${a.name || a.id}: ${o.action}`, info: res.info, results };
       }
       case 'delete': {
-        const x = need(o.id); d.objects = d.objects.filter(y => y.id !== x.id);
+        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id);
+        if (Number.isInteger(d.rollback) && xi < d.rollback) d.rollback = Math.max(0, d.rollback - 1);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
         if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
+        if (x.type === 'mesh' && d.meshes && !d.objects.some(y => y.type === 'mesh' && (y.params.ref || y.id) === (x.params.ref || x.id))) { d.meshes = Object.assign({}, d.meshes); delete d.meshes[x.params.ref || x.id]; }
         this.recompute(); return { label: 'Delete ' + x.name, id: x.id };
       }
       case 'origin': { if (o.obj) need(o.obj); d.origin = o.obj ? { obj: o.obj, conn: o.conn || 'bottom' } : null; this.recompute(); return { label: 'Set world origin', origin: d.origin }; }
@@ -1737,6 +1959,125 @@ class Model {
         md.drive = value; this.recompute();
         const after = measureDim(this.result, md), other = this.get(mover.id === md.b.obj ? md.a.obj : md.b.obj);
         return { label: `${mover.name}: ${+value.toFixed(3)} from ${other ? other.name : 'it'}`, id: o.id, moved: mover.id, value: after ? +after.value.toFixed(4) : null };
+      }
+      case 'joint': {
+        /* make a mate a moving joint: {id, joint: fixed|revolute|slider|cylindrical|planar, axis: n|u|v (slider), limits: {angle:[lo,hi], travel:[..], offset, u, v}} */
+        const x = need(o.id); if (!x.mate) throw new Error(`${x.name} is not mated: mate it first, then make the mate a joint`);
+        if (x.mate.kind) throw new Error(`${x.name} is placed by a ${x.mate.kind} mate; make its partner a joint instead and it will follow`);
+        const j = o.joint || 'revolute'; if (j !== 'fixed' && !JOINTS[j]) throw new Error(`joint is one of fixed, ${Object.keys(JOINTS).join(', ')}`);
+        x.mate = Object.assign({}, x.mate); if (j === 'fixed') { delete x.mate.joint; delete x.mate.limits; delete x.mate.axis; }
+        else { x.mate.joint = j; if (o.axis) x.mate.axis = o.axis; else if (j === 'slider' && !x.mate.axis) x.mate.axis = 'n'; if (o.limits !== undefined) x.mate.limits = o.limits || undefined; }
+        this.recompute(); return { label: `${x.name}: ${j} joint`, id: x.id, joints: jointsOf(d).find(q => q.id === x.id) };
+      }
+      case 'drive': {
+        /* set joint values: {values: {id: {angle: 30}} } or {id, key, value} */
+        const vals = o.values || { [o.id]: { [o.key || 'angle']: o.value } };
+        for (const [id, kv] of Object.entries(vals)) { const x = need(id); if (!x.mate || !x.mate.joint) throw new Error(`${x.name} is not a joint`); x.mate = Object.assign({}, x.mate); for (const [k, v] of Object.entries(kv)) { const lim = (x.mate.limits || {})[k]; dofSet(x.mate, k, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v); } }
+        this.recompute(); return { label: 'Move joints', joints: jointsOf(d) };
+      }
+      case 'hole': {
+        /* {target, at:[x,y,z] on a face (origin-relative), normal?, size, kind, fit, through, depth, dims:true} */
+        const t = need(o.target), body = this.bodyContaining(t.id); if (!body) throw new Error('That part has no geometry');
+        const root = this.get(body.id), at = W(o.at); if (!at) throw new Error('Give at:[x,y,z], a point on the face');
+        let n = o.normal ? V.norm(o.normal) : null;
+        const faces = worldConnectors(this.result, root.id).filter(c => c.kind === 'face');
+        if (!n) { let bd = Infinity; for (const c of faces) { const dd = Math.abs(V.dot(V.sub(at, c.o), c.n)); if (dd < bd) { bd = dd; n = c.n; } } }
+        const face = faces.filter(c => V.dot(c.n, n) > 0.999).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0];
+        /* through unless a depth is given (an insert is blind by default) */
+        const through = o.through !== undefined ? !!o.through : !(+o.depth > 0) && o.kind !== 'insert';
+        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0 };
+        holeSpec(params);
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('hol'), add = { op: 'add', type: 'hole', id, name: o.name || `${params.size} ${params.kind === 'simple' ? 'hole' : params.kind}`, params, into: root.id, mode: 'subtract', stack: false };
+        if (face) { const d0 = V.sub(at, face.o), vv = V.cross(face.n, face.u); add.mate = { to: root.id, a: face.name, b: 'top', flip: false, slide: [+V.dot(d0, face.u).toFixed(4), +V.dot(d0, vv).toFixed(4)] }; }
+        else { const fr = M4.frame(at, Math.abs(n[2]) < 0.9 ? V.cross([0, 0, 1], n) : [1, 0, 0], n); const pose = poseFromMatrix(fr); add.at = this.rel ? V.sub(pose.at, this.result.originPoint) : pose.at; add.rot = pose.rot; add.fixed = true; }
+        const r = this.op(add), out = { label: `${add.name} in ${root.name}`, id: r.id, on: face ? face.name : 'free', spec: holeSpec(params).label };
+        /* dimension it from the two nearest edges (driving), like a hole wizard's placement sketch */
+        if (o.dims !== false && face) {
+          const view = Math.abs(face.n[2]) > 0.9 ? 'top' : Math.abs(face.n[1]) > 0.9 ? 'front' : 'right';
+          const side = faces.filter(c => Math.abs(V.dot(c.n, face.n)) < 0.01), picks = [];
+          for (const ax of [face.u, V.cross(face.n, face.u)]) { const c2 = side.filter(c => Math.abs(V.dot(c.n, ax)) > 0.99).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0]; if (c2) picks.push(c2); }
+          out.dims = [];
+          for (const c2 of picks) { const dr = this.op({ op: 'dim', a: { obj: r.id, conn: 'top' }, b: { obj: root.id, conn: c2.name }, view, axis: 'normal' }); if (dr.value != null) { this.op({ op: 'setdim', id: dr.id, value: Math.round(dr.value * 2) / 2 }); out.dims.push({ id: dr.id, from: c2.name, value: Math.round(dr.value * 2) / 2 }); } }
+        }
+        return out;
+      }
+      case 'shell': {
+        const t = need(o.target), root = this.get((this.bodyContaining(t.id) || {}).id || t.id);
+        shellCavity(root, { thickness: o.thickness, open: o.open });
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('shl');
+        this.insert({ id, name: o.name || `Shell ${o.thickness}`, type: 'shell', params: { thickness: +o.thickness, open: o.open || 'none' }, into: root.id, op: 'shell', pose: null, mate: null });
+        this.recompute(); return { label: `Shell ${root.name} (${o.thickness} mm walls${o.open && o.open !== 'none' ? ', open ' + o.open : ''})`, id };
+      }
+      case 'config': {
+        /* configurations: named tables of variable values (and features to switch off): {action: add|set|activate|delete|rename, name, vars, suppress, to} */
+        d.configs = (d.configs || []).map(c => Object.assign({}, c));
+        const act = o.action || 'activate', c = d.configs.find(x => x.name === o.name);
+        if (act === 'add') { if (!o.name) throw new Error('Give the configuration a name'); if (c) throw new Error(`“${o.name}” exists`); d.configs.push({ name: String(o.name), vars: Object.assign({}, o.vars || {}), suppress: (o.suppress || []).slice() }); if (o.activate !== false) d.config = String(o.name); }
+        else if (act === 'set') { if (!c) throw new Error(`No configuration “${o.name}”`); if (o.vars) { c.vars = Object.assign({}, c.vars || {}, o.vars); for (const [k, v] of Object.entries(c.vars)) if (v === null || v === '') delete c.vars[k]; } if (o.suppress) c.suppress = o.suppress.slice(); }
+        else if (act === 'activate') { if (o.name && !c) throw new Error(`No configuration “${o.name}”. Have: ${d.configs.map(x => x.name).join(', ') || 'none'}`); d.config = o.name || null; }
+        else if (act === 'delete') { d.configs = d.configs.filter(x => x.name !== o.name); if (d.config === o.name) d.config = null; }
+        else if (act === 'rename') { if (!c) throw new Error(`No configuration “${o.name}”`); c.name = String(o.to); if (d.config === o.name) d.config = c.name; }
+        else throw new Error('action is add, set, activate, delete or rename');
+        this.recompute(); return { label: act === 'activate' ? `Configuration: ${d.config || 'Default'}` : `Configuration ${o.name}: ${act}`, configs: d.configs.map(x => x.name), active: d.config || null };
+      }
+      case 'instance': {
+        /* a linked copy: edits to the source part show in every instance */
+        const src = need(o.of); if (src.into || META.has(src.type) || src.type === 'instance') throw new Error('Instance a whole part (not a tool, an edge or another instance)');
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('ins'), n = d.objects.filter(x => x.type === 'instance' && x.of === src.id).length + 2;
+        const ob = { id, name: o.name || `${src.name} #${n}`, type: 'instance', of: src.id, params: {}, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed };
+        this.insert(ob); this.recompute();
+        if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
+        else if (!o.at && src.mate && !src.mate.kind) { const step = o.offset || [Math.max(10, ((src.params || {}).width || (src.params || {}).diameter || 20) + 10) * (n - 1), 0]; ob.mate = Object.assign({}, src.mate, { slide: [(src.mate.slide || [0, 0])[0] + step[0], (src.mate.slide || [0, 0])[1] + step[1]] }); delete ob.mate.joint; }
+        else if (!o.at) { const Ws = this.result.world.get(src.id); if (Ws) { const pz = poseFromMatrix(M4.mul(M4.translate([((src.params || {}).width || 30) + 10, 0, 0]), Ws)); ob.pose = pz; ob.fixed = true; } }
+        this.recompute(); return { label: `Instance of ${src.name}`, id, name: ob.name };
+      }
+      case 'import': {
+        /* {name, triangles: base64 Float32 (xyz per vertex) | data: file text, format, scale} → a mesh part */
+        let tri = o.triangles, count = o.count, size = null;
+        if (!tri && o.data) { const parsed = parseMesh(o.name || ('mesh.' + (o.format || 'stl')), o.data); tri = encodeTriangles(parsed.triangles); count = parsed.count; size = parsed.size; }
+        if (!tri) throw new Error('Give triangles (base64) or data (file text)');
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('msh');
+        d.meshes = Object.assign({}, d.meshes || {}, { [id]: { b64: tri, tris: count || null, name: o.name || null } });
+        const r = this.op({ op: 'add', type: 'mesh', id, name: (o.name || 'Mesh').replace(/\.(stl|obj)$/i, ''), params: { scale: +o.scale || 1, ref: id }, mate: o.mate, at: o.at, material: o.material });
+        return { label: `Import ${o.name || 'mesh'}`, id: r.id, triangles: count, size };
+      }
+      case 'suppress': {
+        const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;
+        for (const x of items) { if (on) x.suppressed = true; else delete x.suppressed; }
+        this.recompute(); return { label: `${on ? 'Suppress' : 'Unsuppress'} ${items.map(x => x.name).join(', ')}`, ids, suppressed: on };
+      }
+      case 'rollback': {
+        /* to: index (features before it stay active), an id (roll back to just after it), or null (roll to the end) */
+        let to = o.to;
+        if (typeof to === 'string') { const i = d.objects.findIndex(x => x.id === to); if (i < 0) throw new Error('No object ' + to); to = i + 1; }
+        d.rollback = to == null || to >= d.objects.length ? null : Math.max(0, Math.round(to));
+        this.recompute(); return { label: d.rollback == null ? 'Roll to the end' : `Roll back to ${d.rollback ? d.objects[d.rollback - 1].name : 'the start'}`, rollback: d.rollback };
+      }
+      case 'move': {
+        const x = need(o.id), from = d.objects.indexOf(x);
+        let to = o.to != null ? Math.round(o.to) : o.before ? d.objects.findIndex(y => y.id === o.before) : o.after ? d.objects.findIndex(y => y.id === o.after) + 1 : -1;
+        if (to < 0 || to > d.objects.length) throw new Error('Give to (index), before or after');
+        d.objects.splice(from, 1); if (to > from) to--; d.objects.splice(to, 0, x);
+        this.checkOrder(); this.recompute(); return { label: `Move ${x.name}`, id: x.id, index: to };
+      }
+      case 'duplicate': {
+        /* a copy of a part with everything that shapes it (tools, edges), placed next to the original */
+        const x = need(o.id); if (['edge', 'weld', 'pattern'].includes(x.type)) throw new Error('Duplicate the part, not its ' + x.type);
+        const sub = []; const walk = (id) => { for (const y of d.objects) if (y.into === id && !sub.includes(y)) { sub.push(y); walk(y.id); } }; walk(x.id);
+        const map = new Map([[x.id, uid(x.type.slice(0, 3))], ...sub.map(y => [y.id, uid(y.type.slice(0, 3))])]);
+        const copy = (y) => {
+          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved;
+          if (y === x) { c.name = (o.name || y.name + ' copy'); c.into = x.into; }
+          else { c.name = y.name; c.into = map.get(y.into) || y.into; }
+          if (c.mate && map.has(c.mate.to)) c.mate.to = map.get(c.mate.to);
+          if (c.edge && c.edge.faces) c.edge.faces = c.edge.faces.map(f => { const i = f.indexOf(':'), pre = f.slice(0, i); return map.has(pre) ? map.get(pre) + f.slice(i) : f; });
+          return c;
+        };
+        const top = copy(x), step = o.offset || [Math.max(10, ((x.params || {}).width || (x.params || {}).diameter || 20) + 10), 0];
+        if (top.mate && !top.mate.kind) top.mate.slide = [(top.mate.slide || [0, 0])[0] + step[0], (top.mate.slide || [0, 0])[1] + step[1]];
+        else if (!top.mate) { const p0 = top.pose || { at: [0, 0, 0], rot: [0, 0, 0] }; top.pose = { at: V.add(p0.at, [step[0], step[1], 0]), rot: p0.rot }; }
+        this.insert(top); for (const y of sub) this.insert(copy(y));
+        this.recompute(); return { label: `Duplicate ${x.name}`, id: top.id, name: top.name };
       }
       case 'var': {
         const name = String(o.name || '').replace(/^#/, ''); if (!/^[A-Za-z_]\w*$/.test(name)) throw new Error('A variable name is letters, digits and _ (e.g. wall)');
@@ -1785,6 +2126,7 @@ class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+          suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
@@ -1793,6 +2135,9 @@ class Model {
       assembly: R.bodies.length > 1 ? { parts: R.bodies.filter(b => !b.weld).length, welds: R.bodies.filter(b => b.weld).length } : undefined,
       material: this.doc.material || null,
       vars: this.doc.vars && Object.keys(this.doc.vars).length ? this.doc.vars : undefined,
+      rollback: Number.isInteger(this.doc.rollback) ? this.doc.rollback : undefined,
+      configurations: (this.doc.configs || []).length ? { active: this.doc.config || 'Default', list: this.doc.configs.map(c => ({ name: c.name, vars: c.vars, suppress: c.suppress && c.suppress.length ? c.suppress : undefined })) } : undefined,
+      joints: (() => { const j = jointsOf(this.doc); return j.length ? j : undefined; })(),
       dimensions: (this.doc.dims || []).length ? this.doc.dims.map(md => { const m = measureDim(R, md); return { id: md.id, a: md.a, b: md.b, view: md.view, axis: md.axis, value: m ? +m.value.toFixed(3) : null, driving: md.drive != null ? md.drive : undefined }; }) : undefined,
       mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),
       addons: [...ADDONS.keys()],
@@ -1809,7 +2154,7 @@ function poseFromMatrix(M) {
   return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
 }
 
-return { K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
+return { K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
 })();
 
 __sf3.views = (() => {
@@ -1827,27 +2172,32 @@ const CUBE_FACE_AXES = { FRONT: { r: [1, 0, 0], u: [0, 0, 1] }, BACK: { r: [-1, 
 const BASIS = { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } };
 const LABEL = { top: 'TOP', front: 'FRONT', right: 'RIGHT', '3d': '3D' };
 
+const IDENT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 function mat4mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
 function viewMat(r, u, f, eye) { return new Float32Array([r[0], u[0], f[0], 0, r[1], u[1], f[1], 0, r[2], u[2], f[2], 0, -V.dot(r, eye), -V.dot(u, eye), -V.dot(f, eye), 1]); }
 function ortho(hw, hh, n, f) { return new Float32Array([1 / hw, 0, 0, 0, 0, 1 / hh, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
 function persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); }
 
+/* uM: per-part transform (motion, exploded view); uClip: section plane (world normal, offset) — inside faces show as a hatched cut */
 const MESH_VS = `#version 300 es
-in vec3 aP; in vec3 aN; uniform mat4 uVP; uniform vec3 uO; out vec3 vN;
-void main(){ vN = aN; gl_Position = uVP * vec4(aP - uO, 1.0); }`;
+in vec3 aP; in vec3 aN; uniform mat4 uVP; uniform mat4 uM; uniform vec3 uO; out vec3 vN; out vec3 vW;
+void main(){ vec4 w = uM * vec4(aP, 1.0); vW = w.xyz; vN = mat3(uM) * aN; gl_Position = uVP * vec4(w.xyz - uO, 1.0); }`;
 const MESH_FS = `#version 300 es
-precision highp float; in vec3 vN; uniform vec3 uC; uniform vec3 uL; uniform float uA; uniform float uFlat; out vec4 o;
-void main(){ vec3 n = normalize(vN); float d = max(dot(n, uL), 0.0); float h = 0.5 + 0.5 * n.z;
+precision highp float; in vec3 vN; in vec3 vW; uniform vec3 uC; uniform vec3 uL; uniform float uA; uniform float uFlat; uniform vec4 uClip; uniform float uClipOn; uniform vec3 uCap; out vec4 o;
+void main(){
+  if (uClipOn > 0.5 && dot(vW, uClip.xyz) > uClip.w) discard;
+  if (uClipOn > 0.5 && !gl_FrontFacing) { float s = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 10.0)); o = vec4(mix(uCap, uCap * 0.62, s), 1.0); return; }
+  vec3 n = normalize(vN); float d = max(dot(n, uL), 0.0); float h = 0.5 + 0.5 * n.z;
   vec3 c = uC * (mix(0.42 + 0.58 * d + 0.12 * h, 0.94 + 0.06 * d, uFlat)); o = vec4(c, uA); }`;
 /* thick lines: each segment is a screen-space quad */
 const LINE_VS = `#version 300 es
-in vec3 aA; in vec3 aB; in float aS; in float aT; uniform mat4 uVP; uniform vec3 uO; uniform vec2 uVp; uniform float uW; out float vD;
-void main(){ vec4 a = uVP * vec4(aA - uO, 1.0), b = uVP * vec4(aB - uO, 1.0); vec2 sa = a.xy / a.w * uVp, sb = b.xy / b.w * uVp;
+in vec3 aA; in vec3 aB; in float aS; in float aT; uniform mat4 uVP; uniform mat4 uM; uniform vec3 uO; uniform vec2 uVp; uniform float uW; out float vD; out vec3 vW;
+void main(){ vec3 wa = (uM * vec4(aA, 1.0)).xyz, wb = (uM * vec4(aB, 1.0)).xyz; vW = aT < 0.5 ? wa : wb; vec4 a = uVP * vec4(wa - uO, 1.0), b = uVP * vec4(wb - uO, 1.0); vec2 sa = a.xy / a.w * uVp, sb = b.xy / b.w * uVp;
   vec2 d = normalize(sb - sa + vec2(1e-6)); vec2 n = vec2(-d.y, d.x); vec4 p = aT < 0.5 ? a : b;
   vec2 off = n * aS * uW / uVp; p.xy += off * p.w; vD = (aT < 0.5 ? 0.0 : length(sb - sa)); gl_Position = p; }`;
 const LINE_FS = `#version 300 es
-precision highp float; in float vD; uniform vec4 uC; uniform float uDash; out vec4 o;
-void main(){ if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard; o = uC; }`;
+precision highp float; in float vD; in vec3 vW; uniform vec4 uC; uniform float uDash; uniform vec4 uClip; uniform float uClipOn; out vec4 o;
+void main(){ if (uClipOn > 0.5 && dot(vW, uClip.xyz) > uClip.w + 1e-3) discard; if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard; o = uC; }`;
 
 class Views {
   constructor(canvas, overlay, model) {
@@ -1858,7 +2208,7 @@ class Views {
     this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
     this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
-    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map();
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null;
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
@@ -1946,7 +2296,20 @@ class Views {
     const step = () => { const k = Math.min(1, (performance.now() - t0) / dur), e = 1 - Math.pow(1 - k, 3); this.explode = from + (target - from) * e; this.computeOffsets(); this.drawNow(); if (k < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step);
   }
-  offsetO(id) { const off = this.offsets.get(id); return off ? V.sub(this.O, off) : this.O; }
+  offsetO(id) { return this.O; }
+  /* a part's display transform: its motion pose (joints being moved) and its exploded-view offset */
+  bodyMatrix(id) {
+    let M = this.motion && this.motion.get(id); const off = this.offsets.get(id);
+    if (!M && !off) return IDENT;
+    M = M ? Float32Array.from(M) : Float32Array.from(IDENT);
+    if (off) { M[12] += off[0]; M[13] += off[1]; M[14] += off[2]; }
+    return M;
+  }
+  setClip(prog) {
+    const gl = this.gl, S = this.section;
+    gl.uniform1f(prog.loc.uClipOn, S ? 1 : 0);
+    if (S) { gl.uniform4fv(prog.loc.uClip, [S.n[0], S.n[1], S.n[2], S.d]); if (prog.loc.uCap) gl.uniform3fv(prog.loc.uCap, this.dark ? [0.86, 0.44, 0.25] : [0.93, 0.48, 0.27]); }
+  }
   upload(solid, body) {
     const gl = this.gl, mesh = solid.toMesh();
     const mb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
@@ -1982,29 +2345,31 @@ class Views {
       gl.clearColor(...C.bg, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const cam = this.vp(pane), ortho = pane.id !== '3d';
       /* faces */
-      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O);
+      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O); this.setClip(mp);
       gl.uniform3fv(mp.loc.uL, V.norm(V.add(V.mul(cam.f, 0.6), [0.3, 0.2, 0.75])));
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
         const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
-        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniform3fv(mp.loc.uO, this.offsetO(id));
+        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniformMatrix4fv(mp.loc.uM, false, this.bodyMatrix(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       /* edges: visible solid, hidden dashed (drawings) */
-      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]);
+      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]); this.setClip(lp);
       const passes = ortho && this.showHidden ? ['hidden', 'visible'] : ['visible'];
       for (const pass of passes) {
         gl.depthFunc(pass === 'hidden' ? gl.GREATER : gl.LEQUAL); gl.depthMask(false);
         gl.uniform4fv(lp.loc.uC, pass === 'hidden' ? C.hidden : C.edge); gl.uniform1f(lp.loc.uDash, pass === 'hidden' ? 9 * dpr : 0); gl.uniform1f(lp.loc.uW, (pass === 'hidden' ? 0.9 : 1.25) * dpr);
         for (const [id, b] of this.buffers) {
-          gl.uniform3fv(lp.loc.uO, this.offsetO(id));
+          const BM = this.bodyMatrix(id); gl.uniformMatrix4fv(lp.loc.uM, false, BM);
           this.drawLines(lp, b.edges);
-          this.drawLines(lp, this.silhouettes(id, b, cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f).buf);
+          let vd = cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f;
+          if (BM !== IDENT) vd = [BM[0] * vd[0] + BM[1] * vd[1] + BM[2] * vd[2], BM[4] * vd[0] + BM[5] * vd[1] + BM[6] * vd[2], BM[8] * vd[0] + BM[9] * vd[1] + BM[10] * vd[2]];   /* view direction in the part's own pose */
+          this.drawLines(lp, this.silhouettes(id, b, vd).buf);
         }
       }
-      gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniform3fv(lp.loc.uO, this.O);
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniformMatrix4fv(lp.loc.uM, false, IDENT);
       /* ghost of a selected tool / consumed object: drawn through everything */
       if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
     }
@@ -2027,9 +2392,10 @@ class Views {
       const axLen = cam.persp ? this.cam.dist * 0.06 : 16 / this.ortho.s;
       for (const [x, y, z, col] of ax) { const p = this.project(pane, [x * axLen, y * axLen, z * axLen], cam); if (Math.hypot(p.x - o.x, p.y - o.y) < 2) continue; c.beginPath(); c.moveTo(o.x, o.y); c.lineTo(p.x, p.y); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
       c.beginPath(); c.arc(o.x, o.y, 3, 0, Math.PI * 2); c.fillStyle = C.ink; c.fill();
-      if (pane.id !== '3d' && this.showDims && !this.explode) this.drawDims(c, pane, cam, R, O);
-      if (this.connectorsFor && !this.explode) this.drawConnectors(c, pane, cam);
-      if (this.showCoG && !this.explode) this.drawCoG(c, pane, cam);
+      const still = !this.explode && !this.motion;
+      if (pane.id !== '3d' && this.showDims && still) this.drawDims(c, pane, cam, R, O);
+      if (this.connectorsFor && still) this.drawConnectors(c, pane, cam);
+      if (this.showCoG && still) this.drawCoG(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -2202,9 +2568,11 @@ class Views {
   pick(pane, px, py) {
     const r = this.ray(pane, px, py); let best = null;
     for (const [id, b] of this.buffers) {
-      const P = b.tris.positions, O = this.offsetO(id);
+      const P = b.tris.positions, O = this.O, BM = this.bodyMatrix(id), moved = BM !== IDENT;
+      const X = (k) => (moved ? [BM[0] * P[k] + BM[4] * P[k + 1] + BM[8] * P[k + 2] + BM[12] - O[0], BM[1] * P[k] + BM[5] * P[k + 1] + BM[9] * P[k + 2] + BM[13] - O[1], BM[2] * P[k] + BM[6] * P[k + 1] + BM[10] * P[k + 2] + BM[14] - O[2]] : [P[k] - O[0], P[k + 1] - O[1], P[k + 2] - O[2]]);
       for (let i = 0; i < P.length; i += 9) {
-        const a = [P[i] - O[0], P[i + 1] - O[1], P[i + 2] - O[2]], bb = [P[i + 3] - O[0], P[i + 4] - O[1], P[i + 5] - O[2]], cc = [P[i + 6] - O[0], P[i + 7] - O[1], P[i + 8] - O[2]];
+        const a = X(i), bb = X(i + 3), cc = X(i + 6);
+        if (this.section) { const S = this.section, cen = [(a[0] + bb[0] + cc[0]) / 3 + O[0], (a[1] + bb[1] + cc[1]) / 3 + O[1], (a[2] + bb[2] + cc[2]) / 3 + O[2]]; if (V.dot(cen, S.n) > S.d) continue; }
         const t = rayTri(r.o, r.d, a, bb, cc);
         if (t != null && (!best || t < best.t)) { const poly = b.tris.polysOfTri[i / 9]; best = { t, id, point: V.add(V.add(r.o, V.mul(r.d, t)), O), normal: poly.plane.n, sid: poly.sid }; }
       }
@@ -2351,24 +2719,27 @@ function meshPlacement(A, B, mate) {
   if (ga.internal && gb.internal) throw new Error('two ring gears cannot mesh');
   if (Math.abs(Math.abs(helA) - Math.abs(helB)) > 1e-9 || (helA && (oneRing ? Math.sign(helA) !== Math.sign(helB) : Math.sign(helA) === Math.sign(helB))) || (A.style === 'herringbone') !== (B.style === 'herringbone'))
     throw new Error(oneRing ? 'a ring and its pinion need the same helix angle and hand' : 'helical pairs need equal helix angles of opposite hand (one +, one −)');
-  const phi = (+mate.around || 0) * DEG, za = ga.z, zb = gb.z;
+  /* around = world direction of this gear from the target; spin = the target's own (continuous) rotation.
+     phi is the direction in the target's turned frame; d is how far the target's nearest tooth is from the
+     line of centres — kept continuous in spin, so the driven gear turns smoothly instead of snapping tooth to tooth */
+  const around = (+mate.around || 0) * DEG, spin = (+mate.spin || 0) * DEG, phi = around - spin, za = ga.z, zb = gb.z;
   let a, beta;
   const nearest = (ang, z) => ang - (2 * Math.PI / z) * Math.round(ang / (2 * Math.PI / z));
   if (!oneRing) {
     a = ga.r + gb.r + (ga.x + gb.x) * ga.m;
-    const d = nearest(phi, za);
+    const d = nearest(around, za) - spin;
     beta = phi + Math.PI + Math.PI / zb + d * za / zb;
   } else if (ga.internal) {            /* ring (target) with a pinion inside */
     a = ga.r - gb.r;
-    const d = nearest(phi, za);
+    const d = nearest(around, za) - spin;
     beta = phi + Math.PI / zb - d * za / zb;
   } else {                              /* this gear is the ring around the target pinion */
     a = gb.r - ga.r;
-    const d = nearest(phi + Math.PI, za);
+    const d = nearest(around + Math.PI, za) - spin;
     beta = phi + Math.PI + Math.PI / zb - d * za / zb;
   }
   beta += (+mate.phase || 0) * DEG;
-  return { a, phi, beta };
+  return { a, phi, beta, spinSelf: (spin + beta) / DEG };
 }
 
 /* ---------- advisor: purpose + process → module, teeth, form, tolerances ---------- */
@@ -2527,18 +2898,25 @@ const __default = {
   mates: {
     gear: {
       doc: 'Keeps this gear in mesh with the target gear: centre distance and tooth phase follow both gears\' live parameters. Fields: around (direction from the target, degrees), axial (shift along the axis, mm), phase (extra spin, degrees).',
-      solve({ self, target, mate, api, targetWorld }) {
+      solve({ self, target, mate, api, targetWorld, targetSpin }) {
         if (!target || target.type !== 'gear' || self.type !== 'gear') throw new Error('a gear mate joins two gears');
-        /* "around" is a world direction: take out the target's own spin (a meshed gear has turned to engage) */
+        /* "around" is a world direction: take out the target's own spin (a meshed gear has turned to engage, a driven one turns) */
         let spin = 0;
-        if (targetWorld && api) {
+        if (targetSpin != null) spin = targetSpin;
+        else if (targetWorld && api) {
           const V = api.V, xl = V.norm([targetWorld[0], targetWorld[1], targetWorld[2]]), zl = V.norm([targetWorld[8], targetWorld[9], targetWorld[10]]);
           let ref = V.sub([1, 0, 0], V.mul(zl, zl[0])); if (V.len(ref) < 1e-6) ref = V.sub([0, 1, 0], V.mul(zl, zl[1])); ref = V.norm(ref);
           spin = Math.atan2(V.dot(V.cross(ref, xl), zl), V.dot(ref, xl)) / DEG;
+          /* a revolute target keeps counting past ±180°: its mate angle turns it about its own mate face's normal,
+             which points along +z or −z of the gear (bottom face → the world turn is −angle) */
+          if (target.mate && !target.mate.kind) {
+            const nb = target.mate.b === 'bottom' ? -1 : target.mate.b === 'top' || target.mate.b === 'center' ? 1 : 0;
+            if (nb) { const th = nb * (+target.mate.angle || 0); let c = spin - th; c -= 360 * Math.round(c / 360); spin = th + c; }
+          }
         }
-        const { a, phi, beta } = meshPlacement(target.params, self.params, Object.assign({}, mate, { around: (+mate.around || 0) - spin }));
+        const { a, phi, beta, spinSelf } = meshPlacement(target.params, self.params, Object.assign({}, mate, { spin }));
         /* expressed as an ordinary mate between the two bottom faces (frame: u = +x, v = −y, normal −z) */
-        return { a: 'bottom', b: 'bottom', flip: false, offset: -(+mate.axial || 0), slide: [a * Math.cos(phi), -a * Math.sin(phi)], angle: -beta / DEG };
+        return { a: 'bottom', b: 'bottom', flip: false, offset: -(+mate.axial || 0), slide: [a * Math.cos(phi), -a * Math.sin(phi)], angle: -beta / DEG, _spin: spinSelf };
       }
     }
   },
@@ -2625,7 +3003,7 @@ return { default: __default };
 __sf3.app = (() => {
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr } = __sf3.model;
+const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles } = __sf3.model;
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
 const { V, M4 } = K;
@@ -2633,11 +3011,14 @@ const { V, M4 } = K;
 registerAddon(gears);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
-const toast = (t, ms) => { const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); setTimeout(() => d.remove(), ms || 2200); };
+/* toasts sit at the top of the views (the bottom belongs to the tool bar and the motion drawer); at most three at once */
+const placeToasts = () => { const st = document.querySelector('#stage'), T = document.querySelector('#toasts'); if (st && T) T.style.top = (st.getBoundingClientRect().top + 48) + 'px'; };
+const trimToasts = () => { const T = $('#toasts'); while (T.children.length > 3) T.firstChild.remove(); };
+const toast = (t, ms) => { placeToasts(); const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); trimToasts(); setTimeout(() => d.remove(), ms || 2200); };
 /* a toast with buttons (stays until used, dismissed or timed out) */
 const toastAct = (t, actions, ms) => {
   const d = el('div', { class: 'toast act' }, el('span', null, t), ...actions.map(([label, fn]) => el('button', { onclick: () => { d.remove(); fn(); } }, label)), el('button', { class: 'x', onclick: () => d.remove(), 'aria-label': 'Dismiss' }, '×'));
-  $('#toasts').append(d); setTimeout(() => d.remove(), ms || 9000); return d;
+  placeToasts(); $('#toasts').append(d); trimToasts(); setTimeout(() => d.remove(), ms || 9000); return d;
 };
 
 const ICON = {
@@ -2650,7 +3031,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -2667,7 +3048,7 @@ const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify
 if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
 const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 views.setTheme(isDark());
-model.on(() => { views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); });
+model.on(() => { if (views.motion && !anim) { motionPose = null; views.motion = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
 function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
 
 /* ---------- tree ---------- */
@@ -2694,10 +3075,89 @@ function subOf(o) {
     case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
     case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
     case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
+    case 'hole': { try { return holeSpec(p).label + (p.through ? ' · through' : ` · ${fmt(p.depth)} deep`); } catch (e) { return p.size + ' ' + p.kind; } }
+    case 'instance': return `linked copy of ${name(o.of)}`;
+    case 'mesh': { const mm = (model.doc.meshes || {})[p.ref || o.id]; return `imported mesh${mm && mm.tris ? ' · ' + mm.tris.toLocaleString() + ' triangles' : ''}${p.scale !== 1 ? ' · ×' + p.scale : ''}`; }
+    case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
   }
 }
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
+/* ---------- motion: preview joint poses by moving the existing meshes (the model is untouched until you keep a pose) ---------- */
+let motionPose = null;
+function previewPose(pose) {
+  motionPose = Object.assign({}, motionPose || {}); for (const [id, kv] of Object.entries(pose)) motionPose[id] = Object.assign({}, motionPose[id] || {}, kv);
+  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map();
+  for (const b of R.bodies) {
+    const w = b.weld ? model.get(b.id) : null, root = w ? (model.bodyContaining((w.joins || [])[0]) || {}).id : b.id;
+    const Wo = R.world.get(root), Wn = R2.world.get(root); if (!Wo || !Wn) continue;
+    deltas.set(b.id, Float32Array.from(M4.mul(Wn, M4.inv(Wo))));
+  }
+  views.motion = deltas; views.draw();
+}
+function clearPreview() { motionPose = null; views.motion = null; views.draw(); }
+let anim = null;
+function openMotion(focusId) {
+  const box = $('#motion'); box.hidden = false; box.innerHTML = '';
+  const joints = jointsOf(model.doc);
+  const head = el('div', { class: 'mhead' }, el('b', null, 'Motion'), el('span', { class: 'note' }, joints.length ? 'Drag a slider or press play. Meshed gears and mated parts follow.' : 'No joints yet.'),
+    el('span', { style: 'flex:1' }), el('button', { class: 'btn pri keep', hidden: !motionPose, onclick: keepPose, title: 'Make this pose the model’s position (undoable)' }, 'Keep this pose'), el('button', { class: 'btn', onclick: () => { stopAnim(); clearPreview(); openMotion(); } }, 'Reset'), el('button', { class: 'btn', onclick: closeMotion }, 'Close'));
+  box.append(head);
+  if (!joints.length) {
+    const cands = model.doc.objects.filter(o => o.mate && !o.mate.kind && o.mate.to !== 'origin');
+    box.append(el('div', { class: 'note', style: 'padding:4px 2px 8px' }, 'Select a mated part and choose a Joint type in Properties (Revolute spins it, Slider moves it along a line). Parts mated or meshed to it follow.'));
+    const gearDriver = cands.find(o => o.type === 'gear' && model.doc.objects.some(g => g.mate && g.mate.kind === 'gear' && g.mate.to === o.id));
+    if (gearDriver) box.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => { apply([{ op: 'joint', id: gearDriver.id, joint: 'revolute' }], `${gearDriver.name}: revolute`); openMotion(gearDriver.id); } }, `Make ${gearDriver.name} spin`)));
+    return;
+  }
+  for (const j of joints) for (const dof of j.dofs) {
+    const cur = motionPose && motionPose[j.id] && motionPose[j.id][dof.key] != null ? motionPose[j.id][dof.key] : dof.value;
+    const val = el('span', { class: 'mono' }, fmt(cur) + dof.unit), rng = el('input', { type: 'range', min: dof.min, max: dof.max, step: dof.unit === '°' ? 0.5 : 0.25, value: cur });
+    rng.addEventListener('input', () => { stopAnim(); previewPose({ [j.id]: { [dof.key]: +rng.value } }); val.textContent = fmt(+rng.value) + dof.unit; head.querySelector('.keep').hidden = false; });
+    const play = el('button', { class: 'chain', title: 'Play', onclick: () => startAnim(j, dof, rng, val, play) }, '▶');
+    box.append(el('div', { class: 'mrow' + (j.id === focusId ? ' on' : '') }, el('span', { class: 'mname' }, `${j.name} · ${dof.key}`), rng, val, play));
+  }
+}
+function startAnim(j, dof, rng, val, btn) {
+  if (anim && anim.btn === btn) { stopAnim(); return; }
+  stopAnim();
+  const spin = dof.unit === '°' && !dof.limited, speed = spin ? 60 : (dof.max - dof.min) / 2.5;   /* °/s for free spins, a full stroke in 2.5 s otherwise */
+  let t0 = performance.now(), v0 = +rng.value, dir = 1;
+  btn.textContent = '❚❚';
+  const step = (now) => {
+    if (!anim) return;
+    const dt = (now - t0) / 1000; t0 = now;
+    if (spin) v0 += speed * dt; else { v0 += dir * speed * dt; if (v0 > dof.max) { v0 = dof.max; dir = -1; } if (v0 < dof.min) { v0 = dof.min; dir = 1; } }
+    previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false; rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
+    anim.raf = requestAnimationFrame(step);
+  };
+  anim = { btn, raf: requestAnimationFrame(step) };
+}
+function stopAnim() { if (anim) { cancelAnimationFrame(anim.raf); if (anim.btn) anim.btn.textContent = '▶'; anim = null; } }
+function keepPose() {
+  stopAnim(); if (!motionPose) return;
+  const pose = motionPose; clearPreview();
+  apply([{ op: 'drive', values: pose }], 'Keep pose'); openMotion();
+}
+function closeMotion() { stopAnim(); clearPreview(); $('#motion').hidden = true; }
+/* the ⋯ / right-click menu of a feature-list row */
+const META = new Set(['edge', 'pattern', 'weld', 'shell']);
+function rowMenu(o, r) {
+  const m = el('div', { class: 'menu', style: `left:${Math.min(r.left, innerWidth - 230)}px;top:${r.bottom + 4}px` }), idx = model.doc.objects.indexOf(o);
+  const item = (t, fn, disabled) => m.append(el('button', { onclick: () => { m.remove(); fn(); }, disabled: disabled ? true : null }, t));
+  item('Rename', () => { select(o.id); setTimeout(() => { const i = document.querySelector('#pbody input'); if (i) { i.focus(); i.select(); } }, 30); });
+  item(o.suppressed ? 'Unsuppress' : 'Suppress (turn off, keep it)', () => apply([{ op: 'suppress', id: o.id }]));
+  if (!['edge', 'pattern'].includes(o.type)) item(o.hidden ? 'Show' : 'Hide', () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]));
+  if (!['edge', 'pattern', 'weld'].includes(o.type)) { item('Duplicate  (Ctrl D)', () => { const r2 = apply([{ op: 'duplicate', id: o.id }])[0]; select(r2.id); }); item('Pattern…  (P)', () => { select(o.id); patternHint(o.id); }); }
+  if (!META.has(o.type) && !o.into && o.type !== 'instance') item('Insert instance (linked copy)', () => { const r2 = apply([{ op: 'instance', of: o.id }])[0]; select(r2.id); toast('Linked copy: change the original and every instance follows', 2400); });
+  const cfg = (model.doc.configs || []).find(c => c.name === model.doc.config);
+  if (cfg) { const inCfg = (cfg.suppress || []).includes(o.id); item(inCfg ? `Include in “${cfg.name}”` : `Suppress in “${cfg.name}” only`, () => apply([{ op: 'config', action: 'set', name: cfg.name, suppress: inCfg ? cfg.suppress.filter(x => x !== o.id) : [...(cfg.suppress || []), o.id] }])); }
+  item('Roll back to here', () => apply([{ op: 'rollback', to: idx + 1 }]));
+  item('Move up', () => apply([{ op: 'move', id: o.id, to: idx - 1 }]), idx === 0);
+  item('Move down', () => apply([{ op: 'move', id: o.id, to: idx + 2 }]), idx === model.doc.objects.length - 1);
+  item('Delete', () => { apply([{ op: 'delete', id: o.id }]); select(null); });
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function offm(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', offm); } }), 0);
+}
 /* "By part": each part with what shapes it (its tools, edges, patterns, welds); "History": the order things were made */
 function treeOrder() {
   const objs = model.doc.objects;
@@ -2720,14 +3180,40 @@ function renderTree() {
   const mode = prefs.treeMode || 'part';
   list.append(el('div', { class: 'seg' }, ...[['part', 'By part'], ['history', 'History']].map(([k, t]) => el('button', { class: mode === k ? 'on' : '', onclick: () => { prefs.treeMode = k; savePrefs(); renderTree(); } }, t))));
   if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
-  for (const { o, depth } of treeOrder()) {
+  const off = model.result.off || new Set(), rb = Number.isInteger(model.doc.rollback) ? model.doc.rollback : objs.length;
+  const bar = () => {
+    const b = el('div', { class: 'rollbar', draggable: 'true', title: 'Rollback bar: drag it up to see the model as it was; new features go here. Double-click: roll to the end' }, el('span', null, rb < objs.length ? 'Rolled back — drag down or double-click to roll to the end' : 'Rollback bar'));
+    b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/sf-roll', '1'); e.dataTransfer.effectAllowed = 'move'; });
+    b.addEventListener('dblclick', () => apply([{ op: 'rollback', to: null }]));
+    return b;
+  };
+  const rows = treeOrder();
+  rows.forEach(({ o, depth }, k) => {
     const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '');
-    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
+    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
-      el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, sub)),
-      el('div', { style: 'display:flex;gap:3px' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t))));
+      el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
+      el('div', { style: 'display:flex;gap:3px;align-items:center' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t)), el('button', { class: 'more', title: 'More…', onclick: (e) => { e.stopPropagation(); rowMenu(o, e.currentTarget.getBoundingClientRect()); } }, '⋯')));
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); rowMenu(o, { left: e.clientX, right: e.clientX, bottom: e.clientY }); });
+    if (mode === 'history') {
+      row.draggable = true;
+      row.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/sf-id', o.id); e.dataTransfer.effectAllowed = 'move'; });
+      row.addEventListener('dragover', (e) => { e.preventDefault(); const r = row.getBoundingClientRect(); row.classList.toggle('dropafter', e.clientY > r.top + r.height / 2); row.classList.toggle('dropbefore', e.clientY <= r.top + r.height / 2); });
+      row.addEventListener('dragleave', () => row.classList.remove('dropafter', 'dropbefore'));
+      row.addEventListener('drop', (e) => {
+        e.preventDefault(); const after = row.classList.contains('dropafter'); row.classList.remove('dropafter', 'dropbefore');
+        const idx = objs.indexOf(o) + (after ? 1 : 0);
+        if (e.dataTransfer.getData('text/sf-roll')) { apply([{ op: 'rollback', to: idx }]); return; }
+        const id = e.dataTransfer.getData('text/sf-id'); if (!id || id === o.id) return;
+        try { apply([{ op: 'move', id, to: idx }]); } catch (err) { /* toast shown */ }
+      });
+    }
+    if (mode === 'history' && k === rb) list.append(bar());
     list.append(row);
-  }
+  });
+  if (mode === 'history' && rb >= objs.length && objs.length) list.append(bar());
+  const ban = $('#banner');
+  if (ban) { ban.hidden = !(rb < objs.length); ban.innerHTML = ''; if (rb < objs.length) ban.append(el('span', null, `Rolled back: ${objs.length - rb} feature${objs.length - rb > 1 ? 's are' : ' is'} off; new features go at the bar.`), el('button', { onclick: () => apply([{ op: 'rollback', to: null }]) }, 'Roll to the end')); }
   const w = model.result.warnings, box = $('#warn');
   box.hidden = !w.length; box.innerHTML = '';
   if (w.length) {
@@ -2788,7 +3274,7 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] } };
+const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] } };
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -2847,6 +3333,23 @@ function renderProps() {
     s.append(field('material for parts without one', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
     s.append(el('div', { class: 'note' }, own.length === partsAll.length ? `All ${partsAll.length} parts have their own material, so this default changes nothing.` : `${partsAll.length - own.length} of ${partsAll.length} parts use this default; ${own.length} have their own.`));
     if (model.doc.material && own.length) s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply(own.map(o => ({ op: 'set', id: o.id, meta: { material: model.doc.material, density: null } })), `All parts ${MATERIALS[model.doc.material].name}`) }, `Use ${MATERIALS[model.doc.material].name} for all ${partsAll.length} parts`)));
+    /* configurations: named tables of variable values (S / M / L…) */
+    const cfgs = model.doc.configs || [], varNames = Object.keys(model.doc.vars || {});
+    const sc = sec('Configurations');
+    if (!cfgs.length) sc.append(el('div', { class: 'note' }, varNames.length ? 'Save the current variable values as a size (S / M / L…), then switch between sizes from the toolbar.' : 'Add a variable first (below), use it in sizes (=#len), then make configurations with different values.'));
+    else {
+      const tbl = el('table', { class: 'cfg' }), hdr = el('tr', null, el('th', null, ''), el('th', null, 'name'), ...varNames.map(v => el('th', null, '#' + v)), el('th', null, ''));
+      tbl.append(hdr);
+      const rowOf = (c) => {
+        const active = c ? model.doc.config === c.name : !model.doc.config;
+        const radio = el('input', { type: 'radio', name: 'cfg', checked: active ? true : null }); radio.onchange = () => apply([{ op: 'config', name: c ? c.name : null }]);
+        const cells = varNames.map(v => { const val = c ? (c.vars || {})[v] : model.doc.vars[v]; const inp = textInput(val == null ? '' : val, nv => apply([c ? { op: 'config', action: 'set', name: c.name, vars: { [v]: nv === '' ? null : (isFinite(+nv) ? +nv : nv) } } : { op: 'var', name: v, value: nv }]), { placeholder: c ? String(model.doc.vars[v]) : '' }); return el('td', null, inp); });
+        return el('tr', { class: active ? 'on' : '' }, el('td', null, radio), el('td', null, c ? c.name : 'Default'), ...cells, el('td', null, c ? el('button', { class: 'chain', title: 'Delete configuration', onclick: () => apply([{ op: 'config', action: 'delete', name: c.name }]) }, '×') : ''));
+      };
+      tbl.append(rowOf(null)); for (const c of cfgs) tbl.append(rowOf(c));
+      sc.append(el('div', { class: 'tblwrap' }, tbl));
+    }
+    if (varNames.length) { const cn = textInput('', () => {}, { placeholder: 'new size, e.g. Large' }); sc.append(el('div', { class: 'varadd', style: 'grid-template-columns:1fr auto' }, cn, el('button', { class: 'btn', onclick: () => { if (cn.value) apply([{ op: 'config', action: 'add', name: cn.value, vars: Object.assign({}, model.doc.vars) }]); } }, 'Add configuration'))); }
     /* model variables, usable as #name in any dimension */
     const sv = sec('Variables'), vars = model.doc.vars || {};
     for (const [k, v] of Object.entries(vars)) sv.append(field('#' + k, el('span', { class: 'pin' }, textInput(typeof v === 'number' ? fmt(v) : v, val => apply([{ op: 'var', name: k, value: val === '' ? null : val }])), el('button', { class: 'chain', title: 'Remove', onclick: () => apply([{ op: 'var', name: k, value: null }]) }, '×'))));
@@ -2882,6 +3385,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
+  if (o.type === 'hole') { try { s1.append(el('div', { class: 'note' }, holeSpec(o.params).label + (o.params.through ? ', through (follows the part’s thickness)' : ''))); } catch (e) { s1.append(el('div', { class: 'warnline' }, e.message)); } }
   /* placement */
   if (!['edge', 'pattern', 'weld'].includes(o.type)) {
     const s2 = sec('Placement');
@@ -2899,6 +3403,23 @@ function renderProps() {
       s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', numInput(m.offset || 0, v => mate({ offset: v }))), field('angle °', numInput(m.angle || 0, v => mate({ angle: v }))),
         field('slide x', numInput((m.slide || [0, 0])[0], v => mate({ slide: [v, (m.slide || [0, 0])[1]] }))), field('slide y', numInput((m.slide || [0, 0])[1], v => mate({ slide: [(m.slide || [0, 0])[0], v] }))), field('face to face', fl));
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
+      /* joint: how this mate may move */
+      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
+      jt.onchange = () => apply([{ op: 'joint', id: o.id, joint: jt.value }]);
+      sj.append(field('type', jt));
+      if (m.joint === 'slider') { const ax = el('select', null, ...[['n', 'along the mate normal'], ['u', 'across the face (u)'], ['v', 'across the face (v)']].map(([v, n]) => el('option', { value: v, selected: (m.axis || 'n') === v }, n))); ax.onchange = () => apply([{ op: 'joint', id: o.id, joint: 'slider', axis: ax.value }]); sj.append(field('axis', ax)); }
+      const jinfo = jointsOf(model.doc).find(q => q.id === o.id);
+      if (jinfo) for (const dof of jinfo.dofs) {
+        const lim = (m.limits || {})[dof.key], rng = el('input', { type: 'range', min: dof.min, max: dof.max, step: dof.unit === '°' ? 1 : 0.5, value: dof.value });
+        rng.addEventListener('input', () => previewPose({ [o.id]: { [dof.key]: +rng.value } }));
+        rng.addEventListener('change', () => { clearPreview(); apply([{ op: 'drive', id: o.id, key: dof.key, value: +rng.value }], `${o.name} ${dof.key} ${rng.value}${dof.unit}`); });
+        sj.append(field(`${dof.key} ${dof.unit}`, el('span', { class: 'pin' }, rng, el('span', { class: 'mono' }, fmt(dof.value)))));
+        const lo = textInput(lim ? lim[0] : '', () => {}, { type: 'number', step: 'any', placeholder: String(dof.min) }), hi = textInput(lim ? lim[1] : '', () => {}, { type: 'number', step: 'any', placeholder: String(dof.max) });
+        const setLim = () => { const L = Object.assign({}, m.limits || {}); if (lo.value === '' && hi.value === '') delete L[dof.key]; else L[dof.key] = [lo.value === '' ? dof.min : +lo.value, hi.value === '' ? dof.max : +hi.value]; apply([{ op: 'joint', id: o.id, joint: m.joint, limits: Object.keys(L).length ? L : null }]); };
+        lo.addEventListener('change', setLim); hi.addEventListener('change', setLim);
+        sj.append(field('limits', el('span', { class: 'varadd' }, lo, hi, el('span', { class: 'note' }, dof.unit))));
+      }
+      if (m.joint) sj.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => openMotion(o.id) }, 'Animate…')));
     } else {
       const p = o.pose || { at: [0, 0, 0], rot: [0, 0, 0] }, setPose = (at, rot) => apply([{ op: 'set', id: o.id, at, rot }]);
       ['x', 'y', 'z'].forEach((ax, k) => s2.append(field(ax, numInput(+(p.at[k] - R.originPoint[k]).toFixed(3), v => { const at = p.at.slice(); at[k] = v + R.originPoint[k]; setPose(at, p.rot); }))));
@@ -2920,6 +3441,7 @@ function renderProps() {
   if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
   s4.append(el('div', { class: 'btns' },
     !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
+    ['box', 'cylinder', 'cone', 'sphere', 'extrude'].includes(o.type) && !o.into ? el('button', { class: 'btn', onclick: () => shellHint(o) }, 'Shell…') : null,
     el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
     el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
 }
@@ -2980,7 +3502,9 @@ function syncBar() {
   $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
   $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
-  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG);
+  const cs = $('#cfgSel'), cfgs = model.doc.configs || [];
+  cs.hidden = !cfgs.length; if (cfgs.length) { cs.innerHTML = ''; cs.append(el('option', { value: '' }, 'Default'), ...cfgs.map(c => el('option', { value: c.name, selected: model.doc.config === c.name ? true : null }, c.name))); }
+  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG); $('#sectionBtn').classList.toggle('on', !!views.section);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
 document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addShape(b.dataset.add)));
@@ -2996,6 +3520,8 @@ $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
 $('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#sectionBtn').onclick = () => { if (views.section) { views.section = null; hint(null); views.draw(); syncBar(); } else sectionHint(); };
+$('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
 $('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
 $('#addonBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
@@ -3011,6 +3537,7 @@ $('#hiddenBtn').onclick = () => { views.showHidden = !views.showHidden; syncBar(
 $('#dimsBtn').onclick = () => { views.showDims = !views.showDims; syncBar(); views.draw(); };
 $('#theme').onclick = () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); };
 $('#name').addEventListener('change', () => apply([{ op: 'rename', name: $('#name').value }]));
+$('#cfgSel').addEventListener('change', () => apply([{ op: 'config', name: $('#cfgSel').value || null }]));
 $('#name').addEventListener('keydown', e => e.stopPropagation());
 $('#fileBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
@@ -3022,9 +3549,31 @@ $('#fileBtn').onclick = (e) => {
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
   item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
+  item('Import STL / OBJ…', () => $('#meshIn').click());
+  item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
+  item('Versions…', showVersions);
   item('Load the demo model', demo);
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
+function showVersions() {
+  const vs = model.listVersions();
+  if (!vs.length) { toast('No versions yet: File → Save version… keeps a named copy'); return; }
+  const h = $('#hint'); setTool(null); h.hidden = false; h.innerHTML = '';
+  h.append(el('span', null, 'Versions:'));
+  for (const v of vs.slice().reverse()) h.append(el('button', { title: new Date(v.at).toLocaleString() + ` · ${v.objects} features`, onclick: () => { model.restoreVersion(v.id); hint(null); select(null); views.fitAll(); toast(`Restored “${v.name}” (Undo to go back)`); } }, `${v.name} · ${new Date(v.at).toLocaleDateString()} ${new Date(v.at).toLocaleTimeString().slice(0, 5)}`));
+  h.append(el('button', { onclick: () => hint(null) }, 'Close'));
+}
+$('#meshIn').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const parsed = parseMesh(f.name, await f.arrayBuffer());
+    if (parsed.count > 60000) toast(`${parsed.count.toLocaleString()} triangles: booleans on it will be slow`, 3200);
+    const big = Math.max(...parsed.size), scale = big < 2 ? 25.4 : 1;
+    const r = apply([{ op: 'import', name: f.name, triangles: encodeTriangles(parsed.triangles), count: parsed.count, scale }], `Import ${f.name}`)[0];
+    select(r.id); views.fitAll();
+    toast(`${f.name}: ${parsed.count.toLocaleString()} triangles, ${parsed.size.map(v => fmt(v * scale)).join(' × ')} mm${scale !== 1 ? ' (looked like inches — scaled ×25.4; change scale in Properties)' : ''}`, 3600);
+  } catch (err) { toast('Could not import: ' + err.message, 3600); }
+});
 $('#openIn').addEventListener('change', async (e) => { const f = e.target.files[0]; if (!f) return; try { model.load(JSON.parse(await f.text())); select(null); views.fitAll(); toast('Opened ' + f.name); } catch (err) { toast('Could not open: ' + err.message); } e.target.value = ''; });
 const slug = () => (model.doc.name || 'model').replace(/[^\w-]+/g, '-');
 function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000); toast('Saved ' + name); }
@@ -3087,6 +3636,10 @@ function setTool(name, arg) {
   else if (name.startsWith('edge-')) {
     hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
+  }
+  else if (name === 'hole') {
+    hint('Hole: click a face to place it — it is dimensioned from the two nearest edges (click a dimension to change it). Esc when done', [], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
+    document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
   else if (name === 'sketch') { tool.data.points = []; if (!arg) pendingLoft = null; hint(pendingLoft ? 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)' : 'Sketch: click points in FRONT, TOP or RIGHT · click the first point (or Enter) to close · Shift = straight'); }
@@ -3227,6 +3780,16 @@ function clickTool(pane, x, y, hit, e) {
     } catch (err) { /* toast shown */ }
     return;
   }
+  if (t.name === 'hole') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a face of a part'); return; }
+    const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the hole on the original'); return; }
+    const snap = (v) => Math.round(v * 2) / 2, at = V.sub(pk.point, R.originPoint).map(snap), dep = +(prefs.holeDepth || 0);
+    try {
+      const r = apply([{ op: 'hole', target: id, at, normal: pk.normal, size: prefs.holeSize || 'M6', kind: prefs.holeKind || 'simple', fit: prefs.holeFit || 'normal', through: !(dep > 0), depth: dep > 0 ? dep : undefined }], `Hole ${prefs.holeSize || 'M6'}`)[0];
+      toast(`${r.spec}${r.dims && r.dims.length ? ` — ${r.dims.map(d => fmt(d.value) + ' from ' + d.from).join(', ')}` : ''}. Click a blue dimension to change it.`, 3200);
+    } catch (e) { /* toast shown */ }
+    return;
+  }
   if (t.name === 'measure') {
     if (pane.id === '3d') { toast('Measure in FRONT, TOP or RIGHT'); return; }
     if (!hit || hit.kind !== 'conn') { toast('Click a connector dot'); return; }
@@ -3253,6 +3816,26 @@ function seamNear(pk) {
     }
   }
   return best;
+}
+function shellHint(o) {
+  setTool(null);
+  const opens = o.type === 'box' ? ['top', 'bottom', 'front', 'back', 'left', 'right', 'none'] : o.type === 'extrude' ? ['end', 'start', 'none'] : o.type === 'sphere' ? ['none'] : ['top', 'bottom', 'none'];
+  hint(`Shell ${o.name}: hollow it to a wall thickness`, [['Shell', (v) => { try { const r = apply([{ op: 'shell', target: o.id, thickness: v.thickness, open: v.open }])[0]; hint(null); select(r.id); toast('Shelled — change the wall thickness in Properties any time', 2000); } catch (e) { /* toast shown */ } }]],
+    [['thickness', 'wall mm', prefs.shellT || 2], ['open', 'open face', opens[0], opens]]);
+}
+/* section view: cut the model with a plane; the cut faces show hatched */
+function sectionHint() {
+  const h = $('#hint'); setTool(null); h.hidden = false; h.innerHTML = '';
+  const bbAll = (() => { const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const b of model.result.bodies) { if (b.solid.isEmpty()) continue; const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k]); mx[k] = Math.max(mx[k], bb.max[k]); } } return { mn, mx }; })();
+  const st = views.section ? Object.assign({}, views.section) : { axis: 'x', flip: false, at: null };
+  const k = () => ({ x: 0, y: 1, z: 2 })[st.axis];
+  const rng = el('input', { type: 'range', step: 0.5 }), lab = el('span', { class: 'mono' });
+  const apply2 = () => { const i = k(), n = [0, 0, 0]; n[i] = st.flip ? -1 : 1; if (st.at == null || st.at < bbAll.mn[i] || st.at > bbAll.mx[i]) st.at = (bbAll.mn[i] + bbAll.mx[i]) / 2; rng.min = bbAll.mn[i]; rng.max = bbAll.mx[i]; rng.value = st.at; lab.textContent = `${st.axis.toUpperCase()} = ${fmt(st.at - model.result.originPoint[i])}`; views.section = { n, d: st.flip ? -st.at : st.at, axis: st.axis, flip: st.flip, at: st.at }; views.draw(); syncBar(); };
+  rng.addEventListener('input', () => { st.at = +rng.value; apply2(); });
+  const axb = (a) => el('button', { class: 'ax' + (st.axis === a ? ' on' : ''), onclick: () => { st.axis = a; st.at = null; apply2(); h.querySelectorAll('.ax').forEach(b => b.classList.toggle('on', b.textContent === a.toUpperCase())); } }, a.toUpperCase());
+  const bx = axb('x'), by = axb('y'), bz = axb('z');
+  h.append(el('span', null, 'Section'), bx, by, bz, rng, lab, el('button', { onclick: () => { st.flip = !st.flip; apply2(); } }, 'Flip'), el('button', { onclick: () => { views.section = null; hint(null); views.draw(); syncBar(); } }, 'Off'));
+  apply2();
 }
 function patternHint(id) {
   const o = model.get(id); if (!o) return;
@@ -3294,12 +3877,13 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? $('#redo').click() : $('#undo').click(); return; }
   if (mod && k === 'y') { e.preventDefault(); $('#redo').click(); return; }
+  if (mod && k === 'd' && selected) { e.preventDefault(); try { const r = apply([{ op: 'duplicate', id: selected }])[0]; select(r.id); } catch (err) { /* toast shown */ } return; }
   if (mod) return;
   if (k === 'escape') { setTool(null); select(null); return; }
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -3346,11 +3930,15 @@ async function snapshotFor(a) {
     if (a.view && dirs[a.view]) { const d = V.norm(dirs[a.view]); views.cam.yaw = Math.atan2(d[0], -d[1]) * 180 / Math.PI; views.cam.pitch = Math.asin(d[2]) * 180 / Math.PI; }
     if (a.hidden_lines !== undefined) views.showHidden = !!a.hidden_lines;
     if (a.dimensions !== undefined) views.showDims = !!a.dimensions;
+    if (a.section) { const ax = a.section.axis || 'x', i = { x: 0, y: 1, z: 2 }[ax], n = [0, 0, 0]; n[i] = a.section.flip ? -1 : 1; const at = (+a.section.offset || 0) + model.result.originPoint[i]; keep.section = views.section; views.section = { n, d: a.section.flip ? -at : at, axis: ax, at }; }
+    if (a.joints) previewPose(Object.fromEntries(Object.entries(a.joints).map(([id, v]) => [id, typeof v === 'number' ? { [((jointsOf(model.doc).find(j => j.id === id) || { dofs: [{ key: 'angle' }] }).dofs[0].key)]: v } : v])));
     if (a.fit !== false) views.fitAll();
     views.draw(); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
     const c = views.snapshot();
     return { png: await b64(c), width: c.width, height: c.height };
   } finally {
+    if (a.joints && a.keep !== true) clearPreview();
+    if (a.section && a.keep !== true) views.section = keep.section || null;
     if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); views.draw(); }
   }
 }
@@ -3377,6 +3965,12 @@ async function runCmd(cmd, a) {
     case 'model.load': { const doc = typeof a.doc === 'string' ? JSON.parse(a.doc) : a.doc; if (!doc || !Array.isArray(doc.objects)) throw new Error('Not a SketchFlow 3D model (needs objects[])'); model.load(Object.assign(newDoc(doc.name || 'Model'), doc)); select(null); views.fitAll(); return { model: model.describe() }; }
     case 'model.demo': demo(); return { model: model.describe() };
     case 'model.say': toast('🤖 ' + String(a.text || ''), Math.max(1500, (a.seconds || 6) * 1000)); return { ok: true };
+    case 'model.version': return a.restore ? model.restoreVersion(a.restore) : a.name !== undefined || a.save ? model.saveVersion(a.name) : { versions: model.listVersions() };
+    case 'model.import': {
+      let tri = a.triangles, count = a.count, data = a.data;
+      if (a.file_b64) { const bin = atob(a.file_b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const parsed = parseMesh(a.name, u); tri = encodeTriangles(parsed.triangles); count = parsed.count; data = undefined; }
+      const r = model.apply([{ op: 'import', name: a.name, triangles: tri, count, data, scale: a.scale, material: a.material }], `Import ${a.name}`, { relative: true })[0]; views.fitAll(); return { result: r, model: model.describe() };
+    }
     case 'model.mass': return { mass: massReport(model.doc, model.result), parts_list: bom(model.doc, model.result), materials: Object.fromEntries(Object.entries(MATERIALS).map(([k, m]) => [k, `${m.name} ${m.density} g/cm³`])) };
     case 'model.addon': {
       if (!a.addon) return { addons: listAddons() };
