@@ -18,6 +18,10 @@ export const TYPES = {
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
+  /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
+  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0 } },
+  /* hollow a part to a wall thickness, optionally open on one face */
+  shell: { label: 'Shell', params: { thickness: 2, open: 'top' } },
   /* array of other features: linear (1 or 2 directions), circular (about an axis), mirror (across a plane) */
   pattern: { label: 'Pattern', params: { kind: 'linear', count: 3, spacing: 20, direction: [1, 0, 0], count2: 1, spacing2: 20, direction2: [0, 1, 0], angle: 360, axis: [0, 0, 1], center: [0, 0, 0], about: null, plane: 'yz', offset: 0 } },
   /* weld bead joining two separate parts; the parts stay separate components (an assembly), unlike a fillet, which merges */
@@ -41,7 +45,7 @@ export const MATERIALS = {
   glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
 };
 /* object types that are not shapes of their own */
-const META = new Set(['edge', 'pattern', 'weld']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 export const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
@@ -80,6 +84,7 @@ function connectorsOf(o, solid) {
     case 'cylinder': return roundLike(p.diameter / 2, p.height);
     case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
+    case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
       conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
     default: {
@@ -142,6 +147,80 @@ export function listAddons() {
   }));
 }
 
+/* ---------- holes: ISO metric (clearance ISO 273, counterbore for ISO 4762 heads, countersink for ISO 10642, tap drill, heat-set inserts) ---------- */
+export const HOLES = {
+  M2: { close: 2.2, normal: 2.4, loose: 2.6, cb: [4.4, 2.2], cs: 4.4, tap: 1.6, pitch: 0.4, insert: [3.2, 4] },
+  'M2.5': { close: 2.7, normal: 2.9, loose: 3.1, cb: [5.5, 2.7], cs: 5.5, tap: 2.05, pitch: 0.45, insert: [3.6, 5] },
+  M3: { close: 3.2, normal: 3.4, loose: 3.6, cb: [6.5, 3.3], cs: 6.7, tap: 2.5, pitch: 0.5, insert: [4.0, 5.7] },
+  M4: { close: 4.3, normal: 4.5, loose: 4.8, cb: [8, 4.4], cs: 9, tap: 3.3, pitch: 0.7, insert: [5.6, 8.1] },
+  M5: { close: 5.3, normal: 5.5, loose: 5.8, cb: [10, 5.4], cs: 11.2, tap: 4.2, pitch: 0.8, insert: [6.4, 9.5] },
+  M6: { close: 6.4, normal: 6.6, loose: 7, cb: [11, 6.4], cs: 13.4, tap: 5, pitch: 1, insert: [8, 12.7] },
+  M8: { close: 8.4, normal: 9, loose: 10, cb: [15, 8.6], cs: 17.9, tap: 6.8, pitch: 1.25, insert: [9.6, 12.7] },
+  M10: { close: 10.5, normal: 11, loose: 12, cb: [18, 10.8], cs: 22.4, tap: 8.5, pitch: 1.5 },
+  M12: { close: 13, normal: 13.5, loose: 14.5, cb: [20, 13], cs: 26.9, tap: 10.2, pitch: 1.75 },
+  M16: { close: 17, normal: 17.5, loose: 18.5, cb: [26, 17.5], cs: 33.6, tap: 14, pitch: 2 }
+};
+export function holeSpec(p) {
+  const H = HOLES[String(p.size || 'M6').toUpperCase().replace('M2.5', 'M2.5')] || HOLES[p.size]; if (!H && !(+p.diameter > 0)) throw new Error(`size is one of ${Object.keys(HOLES).join(', ')} (or set diameter)`);
+  const kind = p.kind || 'simple', fit = p.fit || 'normal';
+  let d = +p.diameter > 0 ? +p.diameter : kind === 'tapped' ? H.tap : kind === 'insert' ? (H.insert ? H.insert[0] : null) : fit === 'print' ? H.normal + 0.2 : H[fit] || H.normal;
+  if (!d) throw new Error(`no heat-set insert size for ${p.size}`);
+  const out = { d, kind, cb: H && H.cb ? [H.cb[0] + (fit === 'print' ? 0.3 : 0), H.cb[1]] : null, cs: H ? H.cs : null, tap: H ? H.tap : null, pitch: H ? H.pitch : null, insertDepth: H && H.insert ? H.insert[1] : null };
+  if (!H) { out.label = `Ø${d} ${kind}`; return out; }
+  out.label = kind === 'tapped' ? `${p.size}×${H.pitch} tapped (Ø${H.tap} drill)` : kind === 'insert' ? `${p.size} heat-set insert Ø${d} × ${out.insertDepth}` : `${p.size} ${fit} clearance Ø${d}${kind === 'counterbore' ? `, counterbore Ø${out.cb[0]} × ${out.cb[1]}` : kind === 'countersink' ? `, countersink Ø${out.cs} × 90°` : ''}`;
+  return out;
+}
+function buildHole(p) {
+  const h = holeSpec(p), r = h.d / 2, depth = p.kind === 'insert' && !p.through ? (+p.depth || h.insertDepth) : Math.max(0.5, +p.depth || 10);
+  const seg = 48, up = 1, tr = (sol, z) => sol.transform(M4.translate([0, 0, z]));
+  let s = tr(K.cylinder(r, r, depth + up, seg), -depth);
+  if (!p.through) { const tip = r / Math.tan(59 * Math.PI / 180); s = s.union(tr(K.cylinder(0.0001, r, tip, seg), -depth - tip)); }
+  if (h.kind === 'counterbore' && h.cb) s = s.union(tr(K.cylinder(h.cb[0] / 2, h.cb[0] / 2, h.cb[1] + up, seg), -h.cb[1]));
+  if (h.kind === 'countersink' && h.cs) { const rc = h.cs / 2, dz = rc - r; s = s.union(tr(K.cylinder(r, rc, dz, seg), -dz)).union(tr(K.cylinder(rc, rc, up, seg), 0)); }
+  return s;
+}
+/* shell cavity in the part's own frame: the same shape, thinner by t, opened through one face */
+function shellCavity(root, p) {
+  const t = +p.thickness, q = root.params, open = p.open || 'none', E = 1;
+  if (!(t > 0)) throw new Error('thickness must be above 0');
+  const box = (w, d, h, x, y, z) => K.box(w, d, h).transform(M4.translate([x, y, z]));
+  switch (root.type) {
+    case 'box': {
+      const W = q.width - 2 * t, D = q.depth - 2 * t; if (W <= 0 || D <= 0 || q.height - 2 * t <= 0) throw new Error(`walls of ${t} leave nothing inside`);
+      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? q.height + E : q.height - t;
+      let x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2;
+      if (open === 'front') y0 = -q.depth / 2 - E; if (open === 'back') y1 = q.depth / 2 + E; if (open === 'left') x0 = -q.width / 2 - E; if (open === 'right') x1 = q.width / 2 + E;
+      return box(x1 - x0, y1 - y0, z1 - z0, (x0 + x1) / 2, (y0 + y1) / 2, z0);
+    }
+    case 'cylinder': case 'cone': {
+      const R1 = q.diameter / 2, R2 = root.type === 'cone' ? (q.top || 0) / 2 : R1, H = q.height, slope = (R1 - R2) / H, k = Math.sqrt(1 + slope * slope);
+      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? H + E : H - t, rAt = (z) => R1 - slope * z - t * k;
+      if (rAt(Math.max(0, z0)) <= 0) throw new Error(`walls of ${t} leave nothing inside`);
+      return K.cylinder(Math.max(0.01, rAt(z0)), Math.max(0.01, rAt(z1)), z1 - z0, SEG).transform(M4.translate([0, 0, z0]));
+    }
+    case 'sphere': { const R = q.diameter / 2 - t; if (R <= 0) throw new Error('walls too thick'); return K.sphere(R, 32).transform(M4.translate([0, 0, t])); }
+    case 'extrude': {
+      if ((q.twist || 0) !== 0 || (q.scale != null && q.scale !== 1)) throw new Error('shell works on straight extrudes (no twist or taper)');
+      const inner = insetPolygon(q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
+      const z0 = open === 'start' || open === 'bottom' ? -E : t, z1 = open === 'end' || open === 'top' ? q.length + E : q.length - t;
+      return K.extrude(inner, { length: z1 - z0, dir: q.direction }).transform(M4.translate(V.mul(V.norm(q.direction || [0, 0, 1]), z0 / (V.norm(q.direction || [0, 0, 1])[2] || 1))));
+    }
+  }
+  throw new Error('shell works on boxes, cylinders, cones, spheres and straight extrudes');
+}
+/* inward offset of a simple polygon (mitred corners) */
+function insetPolygon(pts, t) {
+  let P = pts.slice(); if (K.area2(P) < 0) P = P.reverse();
+  const n = P.length, lines = [];
+  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L; lines.push([[a[0] + nx * t, a[1] + ny * t], [dx / L, dy / L]]); }
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [p1, d1] = lines[(i + n - 1) % n], [p2, d2] = lines[i], den = d1[0] * d2[1] - d1[1] * d2[0];
+    if (Math.abs(den) < 1e-9) { out.push(p2); continue; }
+    const u = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den; out.push([p1[0] + d1[0] * u, p1[1] + d1[1] * u]);
+  }
+  return K.area2(out) > 1e-6 ? out : null;
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -157,6 +236,7 @@ function buildLocal(o) {
     case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
+    case 'hole': return buildHole(p);
   }
   const T = TYPES[o.type]; if (T && T.def) return T.def.build(p, addonApi);
   throw new Error('Unknown shape ' + o.type);
@@ -363,6 +443,8 @@ export function evaluate(doc, opts) {
   /* local solids + connectors */
   for (const o of doc.objects) {
     if (META.has(o.type)) continue;
+    /* a through hole is as deep as its part is big (so it stays through when the part changes) */
+    if (o.type === 'hole' && o.params.through && o.into && R.local.has(o.into)) { const bb = R.local.get(o.into).bbox(), L = Math.ceil(V.len(V.sub(bb.max, bb.min)) + 2); if (o.params.depth !== L) o.params.depth = L; }
     try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
     catch (e) { R.errors.set(o.id, e.message); let c = []; try { c = connectorsOf(o, null); } catch (e2) { /* an add-on shape with bad parameters has no connectors */ } R.conns.set(o.id, c); }
   }
@@ -457,6 +539,7 @@ export function evaluate(doc, opts) {
       R.consumed.add(t.id);
       try {
         if (t.type === 'edge') { s = applyEdge(s, t, o, R); continue; }
+        if (t.type === 'shell') { s = s.subtract(shellCavity(o, t.params).transform(R.world.get(o.id)).tag(t.id)); continue; }
         if (META.has(t.type)) continue;
         const tool = bodyOf(t.id, chain);
         const op = t.op || 'subtract';
@@ -1059,6 +1142,39 @@ export class Model {
         const vals = o.values || { [o.id]: { [o.key || 'angle']: o.value } };
         for (const [id, kv] of Object.entries(vals)) { const x = need(id); if (!x.mate || !x.mate.joint) throw new Error(`${x.name} is not a joint`); x.mate = Object.assign({}, x.mate); for (const [k, v] of Object.entries(kv)) { const lim = (x.mate.limits || {})[k]; dofSet(x.mate, k, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v); } }
         this.recompute(); return { label: 'Move joints', joints: jointsOf(d) };
+      }
+      case 'hole': {
+        /* {target, at:[x,y,z] on a face (origin-relative), normal?, size, kind, fit, through, depth, dims:true} */
+        const t = need(o.target), body = this.bodyContaining(t.id); if (!body) throw new Error('That part has no geometry');
+        const root = this.get(body.id), at = W(o.at); if (!at) throw new Error('Give at:[x,y,z], a point on the face');
+        let n = o.normal ? V.norm(o.normal) : null;
+        const faces = worldConnectors(this.result, root.id).filter(c => c.kind === 'face');
+        if (!n) { let bd = Infinity; for (const c of faces) { const dd = Math.abs(V.dot(V.sub(at, c.o), c.n)); if (dd < bd) { bd = dd; n = c.n; } } }
+        const face = faces.filter(c => V.dot(c.n, n) > 0.999).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0];
+        /* through unless a depth is given (an insert is blind by default) */
+        const through = o.through !== undefined ? !!o.through : !(+o.depth > 0) && o.kind !== 'insert';
+        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0 };
+        holeSpec(params);
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('hol'), add = { op: 'add', type: 'hole', id, name: o.name || `${params.size} ${params.kind === 'simple' ? 'hole' : params.kind}`, params, into: root.id, mode: 'subtract', stack: false };
+        if (face) { const d0 = V.sub(at, face.o), vv = V.cross(face.n, face.u); add.mate = { to: root.id, a: face.name, b: 'top', flip: false, slide: [+V.dot(d0, face.u).toFixed(4), +V.dot(d0, vv).toFixed(4)] }; }
+        else { const fr = M4.frame(at, Math.abs(n[2]) < 0.9 ? V.cross([0, 0, 1], n) : [1, 0, 0], n); const pose = poseFromMatrix(fr); add.at = this.rel ? V.sub(pose.at, this.result.originPoint) : pose.at; add.rot = pose.rot; add.fixed = true; }
+        const r = this.op(add), out = { label: `${add.name} in ${root.name}`, id: r.id, on: face ? face.name : 'free', spec: holeSpec(params).label };
+        /* dimension it from the two nearest edges (driving), like a hole wizard's placement sketch */
+        if (o.dims !== false && face) {
+          const view = Math.abs(face.n[2]) > 0.9 ? 'top' : Math.abs(face.n[1]) > 0.9 ? 'front' : 'right';
+          const side = faces.filter(c => Math.abs(V.dot(c.n, face.n)) < 0.01), picks = [];
+          for (const ax of [face.u, V.cross(face.n, face.u)]) { const c2 = side.filter(c => Math.abs(V.dot(c.n, ax)) > 0.99).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0]; if (c2) picks.push(c2); }
+          out.dims = [];
+          for (const c2 of picks) { const dr = this.op({ op: 'dim', a: { obj: r.id, conn: 'top' }, b: { obj: root.id, conn: c2.name }, view, axis: 'normal' }); if (dr.value != null) { this.op({ op: 'setdim', id: dr.id, value: Math.round(dr.value * 2) / 2 }); out.dims.push({ id: dr.id, from: c2.name, value: Math.round(dr.value * 2) / 2 }); } }
+        }
+        return out;
+      }
+      case 'shell': {
+        const t = need(o.target), root = this.get((this.bodyContaining(t.id) || {}).id || t.id);
+        shellCavity(root, { thickness: o.thickness, open: o.open });
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('shl');
+        this.insert({ id, name: o.name || `Shell ${o.thickness}`, type: 'shell', params: { thickness: +o.thickness, open: o.open || 'none' }, into: root.id, op: 'shell', pose: null, mate: null });
+        this.recompute(); return { label: `Shell ${root.name} (${o.thickness} mm walls${o.open && o.open !== 'none' ? ', open ' + o.open : ''})`, id };
       }
       case 'suppress': {
         const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;

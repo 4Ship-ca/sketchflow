@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate } from './model.js';
+import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 const { V, M4 } = K;
@@ -8,11 +8,14 @@ const { V, M4 } = K;
 registerAddon(gears);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
-const toast = (t, ms) => { const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); setTimeout(() => d.remove(), ms || 2200); };
+/* toasts sit at the top of the views (the bottom belongs to the tool bar and the motion drawer); at most three at once */
+const placeToasts = () => { const st = document.querySelector('#stage'), T = document.querySelector('#toasts'); if (st && T) T.style.top = (st.getBoundingClientRect().top + 48) + 'px'; };
+const trimToasts = () => { const T = $('#toasts'); while (T.children.length > 3) T.firstChild.remove(); };
+const toast = (t, ms) => { placeToasts(); const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); trimToasts(); setTimeout(() => d.remove(), ms || 2200); };
 /* a toast with buttons (stays until used, dismissed or timed out) */
 const toastAct = (t, actions, ms) => {
   const d = el('div', { class: 'toast act' }, el('span', null, t), ...actions.map(([label, fn]) => el('button', { onclick: () => { d.remove(); fn(); } }, label)), el('button', { class: 'x', onclick: () => d.remove(), 'aria-label': 'Dismiss' }, '×'));
-  $('#toasts').append(d); setTimeout(() => d.remove(), ms || 9000); return d;
+  placeToasts(); $('#toasts').append(d); trimToasts(); setTimeout(() => d.remove(), ms || 9000); return d;
 };
 
 const ICON = {
@@ -25,7 +28,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -69,6 +72,8 @@ function subOf(o) {
     case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
     case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
     case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
+    case 'hole': { try { return holeSpec(p).label + (p.through ? ' · through' : ` · ${fmt(p.depth)} deep`); } catch (e) { return p.size + ' ' + p.kind; } }
+    case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
   }
 }
@@ -260,7 +265,7 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] } };
+const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] } };
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -354,6 +359,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
+  if (o.type === 'hole') { try { s1.append(el('div', { class: 'note' }, holeSpec(o.params).label + (o.params.through ? ', through (follows the part’s thickness)' : ''))); } catch (e) { s1.append(el('div', { class: 'warnline' }, e.message)); } }
   /* placement */
   if (!['edge', 'pattern', 'weld'].includes(o.type)) {
     const s2 = sec('Placement');
@@ -409,6 +415,7 @@ function renderProps() {
   if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
   s4.append(el('div', { class: 'btns' },
     !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
+    ['box', 'cylinder', 'cone', 'sphere', 'extrude'].includes(o.type) && !o.into ? el('button', { class: 'btn', onclick: () => shellHint(o) }, 'Shell…') : null,
     el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
     el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
 }
@@ -469,7 +476,7 @@ function syncBar() {
   $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
   $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
-  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG);
+  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG); $('#sectionBtn').classList.toggle('on', !!views.section);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
 document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addShape(b.dataset.add)));
@@ -485,6 +492,7 @@ $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
 $('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#sectionBtn').onclick = () => { if (views.section) { views.section = null; hint(null); views.draw(); syncBar(); } else sectionHint(); };
 $('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
 $('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
 $('#addonBtn').onclick = (e) => {
@@ -577,6 +585,10 @@ function setTool(name, arg) {
   else if (name.startsWith('edge-')) {
     hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
+  }
+  else if (name === 'hole') {
+    hint('Hole: click a face to place it — it is dimensioned from the two nearest edges (click a dimension to change it). Esc when done', [], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
+    document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
   else if (name === 'sketch') { tool.data.points = []; if (!arg) pendingLoft = null; hint(pendingLoft ? 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)' : 'Sketch: click points in FRONT, TOP or RIGHT · click the first point (or Enter) to close · Shift = straight'); }
@@ -717,6 +729,16 @@ function clickTool(pane, x, y, hit, e) {
     } catch (err) { /* toast shown */ }
     return;
   }
+  if (t.name === 'hole') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a face of a part'); return; }
+    const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the hole on the original'); return; }
+    const snap = (v) => Math.round(v * 2) / 2, at = V.sub(pk.point, R.originPoint).map(snap), dep = +(prefs.holeDepth || 0);
+    try {
+      const r = apply([{ op: 'hole', target: id, at, normal: pk.normal, size: prefs.holeSize || 'M6', kind: prefs.holeKind || 'simple', fit: prefs.holeFit || 'normal', through: !(dep > 0), depth: dep > 0 ? dep : undefined }], `Hole ${prefs.holeSize || 'M6'}`)[0];
+      toast(`${r.spec}${r.dims && r.dims.length ? ` — ${r.dims.map(d => fmt(d.value) + ' from ' + d.from).join(', ')}` : ''}. Click a blue dimension to change it.`, 3200);
+    } catch (e) { /* toast shown */ }
+    return;
+  }
   if (t.name === 'measure') {
     if (pane.id === '3d') { toast('Measure in FRONT, TOP or RIGHT'); return; }
     if (!hit || hit.kind !== 'conn') { toast('Click a connector dot'); return; }
@@ -743,6 +765,26 @@ function seamNear(pk) {
     }
   }
   return best;
+}
+function shellHint(o) {
+  setTool(null);
+  const opens = o.type === 'box' ? ['top', 'bottom', 'front', 'back', 'left', 'right', 'none'] : o.type === 'extrude' ? ['end', 'start', 'none'] : o.type === 'sphere' ? ['none'] : ['top', 'bottom', 'none'];
+  hint(`Shell ${o.name}: hollow it to a wall thickness`, [['Shell', (v) => { try { const r = apply([{ op: 'shell', target: o.id, thickness: v.thickness, open: v.open }])[0]; hint(null); select(r.id); toast('Shelled — change the wall thickness in Properties any time', 2000); } catch (e) { /* toast shown */ } }]],
+    [['thickness', 'wall mm', prefs.shellT || 2], ['open', 'open face', opens[0], opens]]);
+}
+/* section view: cut the model with a plane; the cut faces show hatched */
+function sectionHint() {
+  const h = $('#hint'); setTool(null); h.hidden = false; h.innerHTML = '';
+  const bbAll = (() => { const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const b of model.result.bodies) { if (b.solid.isEmpty()) continue; const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k]); mx[k] = Math.max(mx[k], bb.max[k]); } } return { mn, mx }; })();
+  const st = views.section ? Object.assign({}, views.section) : { axis: 'x', flip: false, at: null };
+  const k = () => ({ x: 0, y: 1, z: 2 })[st.axis];
+  const rng = el('input', { type: 'range', step: 0.5 }), lab = el('span', { class: 'mono' });
+  const apply2 = () => { const i = k(), n = [0, 0, 0]; n[i] = st.flip ? -1 : 1; if (st.at == null || st.at < bbAll.mn[i] || st.at > bbAll.mx[i]) st.at = (bbAll.mn[i] + bbAll.mx[i]) / 2; rng.min = bbAll.mn[i]; rng.max = bbAll.mx[i]; rng.value = st.at; lab.textContent = `${st.axis.toUpperCase()} = ${fmt(st.at - model.result.originPoint[i])}`; views.section = { n, d: st.flip ? -st.at : st.at, axis: st.axis, flip: st.flip, at: st.at }; views.draw(); syncBar(); };
+  rng.addEventListener('input', () => { st.at = +rng.value; apply2(); });
+  const axb = (a) => el('button', { class: 'ax' + (st.axis === a ? ' on' : ''), onclick: () => { st.axis = a; st.at = null; apply2(); h.querySelectorAll('.ax').forEach(b => b.classList.toggle('on', b.textContent === a.toUpperCase())); } }, a.toUpperCase());
+  const bx = axb('x'), by = axb('y'), bz = axb('z');
+  h.append(el('span', null, 'Section'), bx, by, bz, rng, lab, el('button', { onclick: () => { st.flip = !st.flip; apply2(); } }, 'Flip'), el('button', { onclick: () => { views.section = null; hint(null); views.draw(); syncBar(); } }, 'Off'));
+  apply2();
 }
 function patternHint(id) {
   const o = model.get(id); if (!o) return;
@@ -790,7 +832,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -837,6 +879,7 @@ async function snapshotFor(a) {
     if (a.view && dirs[a.view]) { const d = V.norm(dirs[a.view]); views.cam.yaw = Math.atan2(d[0], -d[1]) * 180 / Math.PI; views.cam.pitch = Math.asin(d[2]) * 180 / Math.PI; }
     if (a.hidden_lines !== undefined) views.showHidden = !!a.hidden_lines;
     if (a.dimensions !== undefined) views.showDims = !!a.dimensions;
+    if (a.section) { const ax = a.section.axis || 'x', i = { x: 0, y: 1, z: 2 }[ax], n = [0, 0, 0]; n[i] = a.section.flip ? -1 : 1; const at = (+a.section.offset || 0) + model.result.originPoint[i]; keep.section = views.section; views.section = { n, d: a.section.flip ? -at : at, axis: ax, at }; }
     if (a.joints) previewPose(Object.fromEntries(Object.entries(a.joints).map(([id, v]) => [id, typeof v === 'number' ? { [((jointsOf(model.doc).find(j => j.id === id) || { dofs: [{ key: 'angle' }] }).dofs[0].key)]: v } : v])));
     if (a.fit !== false) views.fitAll();
     views.draw(); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
@@ -844,6 +887,7 @@ async function snapshotFor(a) {
     return { png: await b64(c), width: c.width, height: c.height };
   } finally {
     if (a.joints && a.keep !== true) clearPreview();
+    if (a.section && a.keep !== true) views.section = keep.section || null;
     if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); views.draw(); }
   }
 }

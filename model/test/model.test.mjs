@@ -198,6 +198,21 @@ ok('reordering within the rules works', Hs2.doc.objects.map(o => o.id).join() ==
 const [dup] = Hs2.apply([{ op: 'duplicate', id: 'p' }]);
 const dupBody = Hs2.result.bodies.find(b => b.id === dup.id);
 ok('duplicate copies the part with its holes, beside it', dupBody && near(dupBody.solid.volume(), hv()) && Hs2.doc.objects.filter(o => o.into === dup.id).length === 2, { dup });
+/* hole wizard and shell */
+const Hw = new Model(), hwv = () => Hw.result.bodies.find(b => b.id === 'p').solid.volume();
+Hw.apply([{ op: 'add', type: 'box', id: 'p', params: { width: 100, depth: 60, height: 12 } }]);
+const [hw] = Hw.apply([{ op: 'hole', target: 'p', at: [30, 15, 12], size: 'M6', kind: 'counterbore' }]);
+ok('counterbore hole: ISO sizes, through, cut volume', /Ø6.6, counterbore Ø11 × 6.4/.test(hw.spec) && near(100 * 60 * 12 - hwv(), Math.PI * 3.3 * 3.3 * (12 - 6.4) + Math.PI * 5.5 * 5.5 * 6.4, 0.01), hw.spec);
+ok('a placed hole is dimensioned from the two nearest edges (driving)', hw.dims.length === 2 && Hw.doc.dims.every(d => d.drive != null), hw.dims);
+Hw.apply([{ op: 'set', id: 'p', params: { height: 20, width: 140 } }]);
+ok('the hole stays through and stays put as the part grows', Hw.get(hw.id).params.depth > 20 && near(measureDim(Hw.result, Hw.doc.dims[0]).value, hw.dims[0].value));
+const [ht] = Hw.apply([{ op: 'hole', target: 'p', at: [-30, 0, 20], size: 'M4', kind: 'tapped', depth: 10, dims: false }]);
+ok('tapped blind hole uses the tap drill', /Ø3.3 drill/.test(ht.spec) && !Hw.get(ht.id).params.through);
+const Sh = new Model();
+Sh.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 30 } }, { op: 'shell', target: 'b', thickness: 2, open: 'top' }]);
+ok('shell hollows a box to its walls, open on top', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 30 - 76 * 46 * 28, 1e-6));
+Sh.apply([{ op: 'set', id: 'b', params: { height: 40 } }]);
+ok('shell walls stay the same when the part changes', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 40 - 76 * 46 * 38, 1e-6));
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);
