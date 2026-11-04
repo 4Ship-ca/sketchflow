@@ -184,12 +184,131 @@ export function dimsOf(o) {
 }
 
 /* ---------- document ---------- */
-export function newDoc(name) { return { v: 2, name: name || 'Model', units: 'mm', objects: [], origin: null, ground: null, dims: [], created: Date.now(), updated: Date.now() }; }
+export function newDoc(name) { return { v: 2, name: name || 'Model', units: 'mm', objects: [], origin: null, ground: null, dims: [], vars: {}, created: Date.now(), updated: Date.now() }; }
 function defaultParams(type, given) {
   const base = JSON.parse(JSON.stringify(TYPES[type].params)), out = Object.assign(base, given || {});
   for (const k of Object.keys(out)) if (typeof base[k] === 'number' && typeof out[k] === 'string' && out[k] !== '' && isFinite(+out[k])) out[k] = +out[k];
   if (type === 'loft' && !out.profile2) out.profile2 = out.profile;
   return out;
+}
+
+/* ---------- links & formulas ----------
+   Any numeric parameter can follow another: o.expr[param] = '=plate.depth' or '=plate.depth - 2 * #wall'.
+   References: objectId.param (or Object_Name.param, spaces as _), model variables #name (doc.vars), pi.
+   Functions: min max round floor ceil abs sqrt sin cos tan (degrees). Resolved before every evaluation, leaders first. */
+const FUNCS = { min: Math.min, max: Math.max, round: Math.round, floor: Math.floor, ceil: Math.ceil, abs: Math.abs, sqrt: Math.sqrt, sin: (d) => Math.sin(d * Math.PI / 180), cos: (d) => Math.cos(d * Math.PI / 180), tan: (d) => Math.tan(d * Math.PI / 180) };
+export function parseExpr(src) {
+  const s = String(src).replace(/^\s*=/, ''), toks = []; let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    const num = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i.exec(s.slice(i)); if (num) { toks.push({ t: 'n', v: +num[0] }); i += num[0].length; continue; }
+    const ref = /^#?[A-Za-z_][\w-]*(\.[A-Za-z_]\w*)?/.exec(s.slice(i)); if (ref) { toks.push({ t: 'id', v: ref[0] }); i += ref[0].length; continue; }
+    if ('+-*/%^(),'.includes(ch)) { toks.push({ t: ch }); i++; continue; }
+    throw new Error(`can't read “${ch}” in “${s}”`);
+  }
+  let k = 0; const peek = () => toks[k], eat = (t) => { if (!toks[k] || toks[k].t !== t) throw new Error(`expected “${t}” in “${s}”`); return toks[k++]; };
+  const expr = () => { let n = term(); while (peek() && (peek().t === '+' || peek().t === '-')) { const op = toks[k++].t, r = term(); n = { op, a: n, b: r }; } return n; };
+  const term = () => { let n = unary(); while (peek() && '*/%'.includes(peek().t)) { const op = toks[k++].t, r = unary(); n = { op, a: n, b: r }; } return n; };
+  const unary = () => { if (peek() && (peek().t === '-' || peek().t === '+')) { const op = toks[k++].t, a = unary(); return op === '-' ? { op: 'neg', a } : a; } return power(); };
+  const power = () => { const a = atom(); if (peek() && peek().t === '^') { k++; return { op: '^', a, b: unary() }; } return a; };
+  const atom = () => {
+    const t = peek(); if (!t) throw new Error(`“${s}” ends too early`);
+    if (t.t === 'n') { k++; return { op: 'n', v: t.v }; }
+    if (t.t === '(') { k++; const e = expr(); eat(')'); return e; }
+    if (t.t === 'id') {
+      k++;
+      if (peek() && peek().t === '(') { k++; const args = []; if (peek() && peek().t !== ')') { args.push(expr()); while (peek() && peek().t === ',') { k++; args.push(expr()); } } eat(')'); if (!FUNCS[t.v]) throw new Error(`unknown function ${t.v}()`); return { op: 'f', f: t.v, args }; }
+      return { op: 'ref', v: t.v };
+    }
+    throw new Error(`unexpected “${t.t}” in “${s}”`);
+  };
+  const tree = expr(); if (k < toks.length) throw new Error(`unexpected “${toks[k].v || toks[k].t}” in “${s}”`);
+  return tree;
+}
+function refsOf(tree, out = []) { if (!tree) return out; if (tree.op === 'ref') out.push(tree.v); for (const c of [tree.a, tree.b, ...(tree.args || [])]) if (c) refsOf(c, out); return out; }
+function evalTree(tree, look) {
+  switch (tree.op) {
+    case 'n': return tree.v; case 'ref': return look(tree.v); case 'neg': return -evalTree(tree.a, look);
+    case 'f': return FUNCS[tree.f](...tree.args.map(a => evalTree(a, look)));
+    case '+': return evalTree(tree.a, look) + evalTree(tree.b, look); case '-': return evalTree(tree.a, look) - evalTree(tree.b, look);
+    case '*': return evalTree(tree.a, look) * evalTree(tree.b, look); case '/': { const b = evalTree(tree.b, look); if (b === 0) throw new Error('division by zero'); return evalTree(tree.a, look) / b; }
+    case '%': return evalTree(tree.a, look) % evalTree(tree.b, look); case '^': return Math.pow(evalTree(tree.a, look), evalTree(tree.b, look));
+  }
+  throw new Error('bad formula');
+}
+/* resolve every linked parameter (leaders before followers); writes the numbers into params, returns warnings */
+export function resolveLinks(doc) {
+  const warn = [], byId = new Map(doc.objects.map(o => [o.id, o])), byName = new Map(doc.objects.map(o => [String(o.name || '').replace(/\s+/g, '_'), o]));
+  const vars = doc.vars || {}, state = new Map(), varState = new Map(), varVal = new Map();
+  const varOf = (name, chain) => {
+    if (varVal.has(name)) return varVal.get(name);
+    if (!(name in vars)) throw new Error(`no variable #${name}`);
+    if (varState.get(name) === 'busy') throw new Error(`#${name} refers to itself`);
+    varState.set(name, 'busy');
+    const v = typeof vars[name] === 'number' ? vars[name] : evalTree(parseExpr(vars[name]), (r) => look(r, chain));
+    varState.set(name, 'done'); varVal.set(name, v); return v;
+  };
+  const look = (ref, chain) => {
+    if (ref === 'pi') return Math.PI;
+    if (ref[0] === '#') return varOf(ref.slice(1), chain);
+    const dot = ref.indexOf('.'); if (dot < 0) { if (ref in vars) return varOf(ref, chain); throw new Error(`“${ref}” needs a parameter, e.g. ${ref}.width`); }
+    const oid = ref.slice(0, dot), prm = ref.slice(dot + 1), x = byId.get(oid) || byName.get(oid); if (!x) throw new Error(`no object “${oid}”`);
+    if (!(prm in (x.params || {}))) throw new Error(`${x.name} has no “${prm}” (it has ${Object.keys(x.params || {}).filter(q => typeof x.params[q] === 'number').join(', ')})`);
+    resolveParam(x, prm, chain);
+    const v = x.params[prm]; if (typeof v !== 'number') throw new Error(`${x.name}.${prm} is not a number`); return v;
+  };
+  const resolveParam = (x, prm, chain = []) => {
+    const e = x.expr && x.expr[prm]; if (!e) return;
+    const key = x.id + '.' + prm; if (state.get(key) === 'done') return;
+    if (state.get(key) === 'busy' || chain.includes(key)) throw new Error(`links go round in a circle: ${[...chain, key].join(' → ')}`);
+    state.set(key, 'busy');
+    const v = evalTree(parseExpr(e), (r) => look(r, [...chain, key]));
+    if (!isFinite(v)) throw new Error(`${e} is not a finite number`);
+    x.params[prm] = Math.round(v * 1e9) / 1e9; state.set(key, 'done');
+  };
+  for (const o of doc.objects) for (const prm of Object.keys(o.expr || {})) {
+    try { resolveParam(o, prm); } catch (e) { state.set(o.id + '.' + prm, 'done'); warn.push({ kind: 'link', id: o.id, text: `${o.name}.${prm} ${o.expr[prm]}: ${e.message}` }); }
+  }
+  return warn;
+}
+/* split given params into plain values and links ('=…' strings on numeric params) */
+function splitParams(type, given) {
+  const vals = {}, links = {}, base = (TYPES[type] || {}).params || {};
+  for (const [k, v] of Object.entries(given || {})) {
+    if (typeof v === 'string' && /^\s*=/.test(v)) { if (base[k] !== undefined && typeof base[k] !== 'number') throw new Error(`${k} can't be a formula`); parseExpr(v); links[k] = v.trim(); }
+    else vals[k] = v;
+  }
+  return { vals, links };
+}
+
+/* ---------- measured (driven / driving) dimensions ----------
+   md = { a: {obj, conn}, b: {obj, conn}, view, axis: 'h' | 'v' | 'aligned' | 'normal' }.
+   normal = perpendicular distance to a face (or an edge line) — the usual "hole from the edge" dimension. */
+const VIEW_AXES = { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } };
+export function measureDim(R, md) {
+  const ca = worldConnectors(R, md.a.obj).find(c => c.name === md.a.conn), cb = worldConnectors(R, md.b.obj).find(c => c.name === md.b.conn);
+  if (!ca || !cb) return null;
+  const B = VIEW_AXES[md.view] || VIEW_AXES.front, inPlane = (v) => V.sub(v, V.mul(B.f, V.dot(v, B.f)));
+  let axis = md.axis || 'aligned', from = ca.o, to = cb.o, dir;
+  if (axis === 'normal') {
+    /* the reference is a face or edge seen edge-on in this view (its normal / direction lies in the view plane) */
+    const edgeOn = (c) => (c.kind === 'face' || c.kind === 'edge') && Math.abs(V.dot(c.n, B.f)) < 0.2;
+    const ref = edgeOn(cb) ? cb : edgeOn(ca) ? ca : null;
+    if (!ref) return measureDim(R, Object.assign({}, md, { axis: 'aligned' }));
+    const pt = ref === ca ? cb.o : ca.o;
+    let d = V.sub(pt, ref.o);
+    if (ref.kind === 'edge') { d = V.sub(d, V.mul(ref.n, V.dot(d, ref.n))); }
+    else { d = V.mul(ref.n, V.dot(d, ref.n)); }
+    d = inPlane(d); from = V.sub(pt, d); to = pt; dir = V.len(d) > 1e-9 ? V.norm(d) : B.r;
+    /* endA / endB: where each end of the dimension sits (the face end is the foot on that face) */
+    return { value: V.len(d), from, to, dir, ref: ref === ca ? 'a' : 'b', endA: ref === ca ? from : to, endB: ref === ca ? to : from };
+  }
+  const delta = inPlane(V.sub(to, from));
+  if (axis === 'h') dir = B.r; else if (axis === 'v') dir = B.u; else dir = V.len(delta) > 1e-9 ? V.norm(delta) : B.r;
+  const t = V.dot(delta, dir);
+  if (t < 0) dir = V.neg(dir);
+  return { value: Math.abs(t), from, to, dir, endA: from, endB: to };
 }
 
 /* ---------- evaluation ---------- */
@@ -201,6 +320,7 @@ function cachedLocal(o) {
 }
 export function evaluate(doc) {
   const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map() };
+  R.warnings.push(...resolveLinks(doc));
   const byId = new Map(doc.objects.map(o => [o.id, o]));
   const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
   R.ground = ground;
@@ -658,7 +778,36 @@ export class Model {
   constructor(doc) { this.doc = doc || newDoc(); this.undoStack = []; this.redoStack = []; this.listeners = new Set(); this.result = null; this.recompute(); }
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
-  recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.result.ms = performance.now() - t0; return this.result; }
+  recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
+  dimMover(md) {
+    const A = this.get(md.a.obj), B = this.get(md.b.obj); if (!A || !B) return null;
+    const hangs = (x, y) => { let c = x; const seen = new Set(); while (c && c.mate && !seen.has(c.id)) { if (c.mate.to === y.id) return true; seen.add(c.id); c = this.get(c.mate.to); } return false; };
+    const free = (x) => x.id !== this.result.ground && !x.fixed;
+    return hangs(B, A) ? B : hangs(A, B) ? A : free(B) ? B : free(A) ? A : null;
+  }
+  /* driving dimensions are kept true after every change (a part grows → the hole stays 12 from its edge) */
+  solveDims() {
+    const dims = (this.doc.dims || []).filter(md => md.drive != null);
+    for (let pass = 0; pass < 4 && dims.length; pass++) {
+      let moved = false;
+      for (const md of dims) {
+        const cur = measureDim(this.result, md); if (!cur || Math.abs(cur.value - md.drive) < 1e-6) continue;
+        const mover = this.dimMover(md); if (!mover || (mover.mate && mover.mate.kind)) continue;
+        const pm = mover.id === md.b.obj ? cur.endB : cur.endA, other = mover.id === md.b.obj ? cur.endA : cur.endB;
+        const sign = Math.sign(V.dot(V.sub(pm, other), cur.dir)) || 1, move = V.mul(cur.dir, sign * (md.drive - cur.value));
+        if (mover.mate) {
+          const tc = worldConnectors(this.result, mover.mate.to).find(c => c.name === mover.mate.a); if (!tc) continue;
+          const vv = V.cross(tc.n, tc.u), sl = mover.mate.slide || [0, 0];
+          mover.mate = Object.assign({}, mover.mate, { slide: [Math.round((sl[0] + V.dot(move, tc.u)) * 1e9) / 1e9, Math.round((sl[1] + V.dot(move, vv)) * 1e9) / 1e9], offset: Math.round(((mover.mate.offset || 0) + V.dot(move, tc.n)) * 1e9) / 1e9 });
+        } else { const p0 = mover.pose || { at: [0, 0, 0], rot: [0, 0, 0] }; mover.pose = { at: V.add(p0.at, move), rot: p0.rot }; }
+        moved = true;
+      }
+      if (!moved) break;
+      this.result = evaluate(this.doc);
+    }
+    for (const md of dims) { const cur = measureDim(this.result, md); if (cur && Math.abs(cur.value - md.drive) > 1e-3) this.result.warnings.push({ kind: 'dim', id: md.a.obj, text: `A ${md.drive} dimension can't be held (now ${cur.value.toFixed(2)}) — another dimension or mate fights it` }); }
+  }
   get(id) { return this.doc.objects.find(o => o.id === id); }
   snapshot() { return JSON.stringify(this.doc); }
   commit(label, before, t0) { this.undoStack.push({ label, json: before }); if (this.undoStack.length > 150) this.undoStack.shift(); this.redoStack = []; this.doc.updated = Date.now(); this.recompute(); if (t0 != null) this.result.ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0; this.emit(); }
@@ -683,7 +832,8 @@ export class Model {
       case 'add': {
         const type = o.type || o.shape; if (!TYPES[type] || META.has(type)) throw new Error('Unknown shape “' + type + '”. Use ' + Object.keys(TYPES).filter(t => !META.has(t)).join(', ') + (type === 'pattern' || type === 'weld' ? ` (for a ${type} use op “${type}”)` : ''));
         const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
-        const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, o.params), pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
+        const sp = splitParams(type, o.params);
+        const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
         d.objects.push(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
@@ -696,7 +846,13 @@ export class Model {
       }
       case 'set': {
         const x = need(o.id);
-        if (o.params) { x.params = Object.assign({}, x.params, o.params); for (const k of Object.keys(o.params)) if (typeof TYPES[x.type].params[k] === 'number') x.params[k] = num(+x.params[k], TYPES[x.type].params[k]); }
+        if (o.params) {
+          const sp = splitParams(x.type, o.params);
+          x.params = Object.assign({}, x.params, sp.vals);
+          for (const k of Object.keys(sp.vals)) { if (typeof TYPES[x.type].params[k] === 'number') x.params[k] = num(+x.params[k], TYPES[x.type].params[k]); if (x.expr) delete x.expr[k]; }   /* a typed number replaces a link */
+          if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
+          if (x.expr && !Object.keys(x.expr).length) delete x.expr;
+        }
         if (o.name) x.name = String(o.name); if (o.color !== undefined) x.color = o.color; if (o.hidden !== undefined) x.hidden = !!o.hidden;
         if (o.meta || o.material !== undefined) { const mm = Object.assign({}, x.meta || {}, o.meta || {}, o.material !== undefined ? { material: o.material } : {}); for (const k of Object.keys(mm)) if (mm[k] === null || mm[k] === '') delete mm[k]; x.meta = cleanMeta(mm); }
         if (o.at || o.rot) { x.pose = { at: W(o.at) || (x.pose || {}).at || [0, 0, 0], rot: o.rot || (x.pose || {}).rot || [0, 0, 0] }; }
@@ -808,11 +964,51 @@ export class Model {
           if (y.into && !ids.has(y.into)) { y.into = null; y.op = null; n++; }
           if (y.mate && y.mate.to !== 'origin' && !ids.has(y.mate.to)) { const M = this.result.world.get(y.id); y.mate = null; if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; }
         }
+        const dimsBefore = (d.dims || []).length; d.dims = (d.dims || []).filter(md => ids.has(md.a.obj) && ids.has(md.b.obj)); n += dimsBefore - d.dims.length;
         d.objects = d.objects.filter(y => { if (y.type === 'pattern') { y.of = (y.of || []).filter(i => ids.has(i)); if (!y.of.length) { n++; return false; } } if (y.type === 'weld' && !(y.joins || []).every(i => ids.has(i))) { n++; return false; } return true; });
         for (const w of this.result.warnings) if (w.kind === 'floating') { const y = this.get(w.id); if (y && o.fixFloating) { const M = this.result.world.get(y.id); if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; } }
         this.recompute(); return { label: 'Clean up (' + n + ' fixes)', fixes: n };
       }
-      case 'dim': { const id = uid('dim'); d.dims.push({ id, a: o.a, b: o.b, view: o.view || 'front' }); return { label: 'Add dimension', id }; }
+      case 'dim': {
+        const id = uid('dim'), md = { id, a: o.a, b: o.b, view: o.view || 'front', axis: o.axis || null };
+        if (!md.a || !md.b || !md.a.obj || !md.b.obj) throw new Error('A dimension needs a:{obj, conn} and b:{obj, conn}');
+        for (const r of [md.a, md.b]) if (!worldConnectors(this.result, r.obj).some(c => c.name === r.conn)) throw new Error(`No connector “${r.conn}” on ${r.obj}`);
+        if (!md.axis) { const ca = worldConnectors(this.result, md.a.obj).find(c => c.name === md.a.conn), cb = worldConnectors(this.result, md.b.obj).find(c => c.name === md.b.conn), Bv = VIEW_AXES[md.view] || VIEW_AXES.front;
+          const faceIn = (c) => (c.kind === 'face' && Math.abs(V.dot(c.n, Bv.f)) < 0.2) || (c.kind === 'edge' && Math.abs(V.dot(c.n, Bv.f)) < 0.2);
+          if (faceIn(ca) !== faceIn(cb)) md.axis = 'normal';
+          else { const dl = V.sub(cb.o, ca.o); md.axis = Math.abs(V.dot(dl, Bv.r)) >= Math.abs(V.dot(dl, Bv.u)) ? 'h' : 'v'; } }
+        (d.dims = d.dims || []).push(md);
+        const m = measureDim(this.result, md);
+        return { label: 'Add dimension', id, axis: md.axis, value: m ? +m.value.toFixed(4) : null };
+      }
+      case 'dimaxis': { const md = (d.dims || []).find(x => x.id === o.id); if (!md) throw new Error('No dimension ' + o.id); md.axis = o.axis; return { label: 'Dimension ' + o.axis, id: o.id }; }
+      case 'setdim': {
+        /* a driving dimension: it keeps the part that hangs off the other at this distance, from now on */
+        const md = (d.dims || []).find(x => x.id === o.id); if (!md) throw new Error('No dimension ' + o.id);
+        if (o.value === null) { delete md.drive; return { label: 'Dimension is a reference again', id: o.id }; }
+        const value = +o.value; if (!(value >= 0)) throw new Error('A distance must be 0 or more');
+        const mover = this.dimMover(md); if (!mover) throw new Error('Neither end can move (both are fixed, the ground, or pattern copies)');
+        if (mover.mate && mover.mate.kind) throw new Error(`${mover.name} is placed by a ${mover.mate.kind} mate — change that instead`);
+        md.drive = value; this.recompute();
+        const after = measureDim(this.result, md), other = this.get(mover.id === md.b.obj ? md.a.obj : md.b.obj);
+        return { label: `${mover.name}: ${+value.toFixed(3)} from ${other ? other.name : 'it'}`, id: o.id, moved: mover.id, value: after ? +after.value.toFixed(4) : null };
+      }
+      case 'var': {
+        const name = String(o.name || '').replace(/^#/, ''); if (!/^[A-Za-z_]\w*$/.test(name)) throw new Error('A variable name is letters, digits and _ (e.g. wall)');
+        d.vars = Object.assign({}, d.vars || {});
+        if (o.value === null || o.value === undefined || o.value === '') delete d.vars[name];
+        else { if (typeof o.value === 'string' && !/^\s*=/.test(o.value) && isFinite(+o.value)) d.vars[name] = +o.value; else if (typeof o.value === 'string') { parseExpr(o.value); d.vars[name] = o.value.trim().startsWith('=') ? o.value.trim() : '=' + o.value.trim(); } else d.vars[name] = +o.value; }
+        this.recompute(); return { label: `#${name} = ${d.vars[name] ?? '(removed)'}`, name, value: d.vars[name] };
+      }
+      case 'link': {
+        /* follower.param = leader.param (× factor + offset) */
+        const x = need(o.id); if (!o.param) throw new Error('Give param');
+        const src = o.to && o.to.obj ? `=${o.to.obj}.${o.to.param || o.param}` : o.expr; if (!src) throw new Error('Give to:{obj, param} or expr');
+        let ex = src.trim().startsWith('=') ? src.trim() : '=' + src.trim();
+        if (o.factor != null && +o.factor !== 1) ex += ` * ${+o.factor}`; if (o.offset) ex += ` ${+o.offset < 0 ? '-' : '+'} ${Math.abs(+o.offset)}`;
+        return this.op({ op: 'set', id: x.id, params: { [o.param]: ex } }) && { label: `${x.name}.${o.param} follows ${ex.slice(1)}`, id: x.id, expr: ex };
+      }
+      case 'unlink': { const x = need(o.id); if (x.expr) { delete x.expr[o.param]; if (!Object.keys(x.expr).length) delete x.expr; } this.recompute(); return { label: `${x.name}.${o.param} unlinked`, id: x.id }; }
       case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); return { label: 'Remove dimension', id: o.id }; }
       case 'rename': { d.name = String(o.name || d.name); return { label: 'Rename model', name: d.name }; }
       case 'material': {   /* the model's default material, used by parts that have none of their own */
@@ -844,13 +1040,15 @@ export class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
-          of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined,
+          of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
       bodies: R.bodies.map(b => ({ id: b.id, name: b.name, weld: b.weld || undefined, copy_of: b.virtual || undefined, volume: +b.solid.volume().toFixed(3), bbox: (() => { const bb = b.solid.bbox(); return b.solid.isEmpty() ? null : { min: bb.min.map((v, k) => +(v - R.originPoint[k]).toFixed(3)), max: bb.max.map((v, k) => +(v - R.originPoint[k]).toFixed(3)) }; })() })),
       assembly: R.bodies.length > 1 ? { parts: R.bodies.filter(b => !b.weld).length, welds: R.bodies.filter(b => b.weld).length } : undefined,
       material: this.doc.material || null,
+      vars: this.doc.vars && Object.keys(this.doc.vars).length ? this.doc.vars : undefined,
+      dimensions: (this.doc.dims || []).length ? this.doc.dims.map(md => { const m = measureDim(R, md); return { id: md.id, a: md.a, b: md.b, view: md.view, axis: md.axis, value: m ? +m.value.toFixed(3) : null, driving: md.drive != null ? md.drive : undefined }; }) : undefined,
       mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),
       addons: [...ADDONS.keys()],
       warnings: R.warnings.map(w => w.text), eval_ms: +R.ms.toFixed(1)

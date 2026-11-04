@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams } from './model.js';
+import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 const { V, M4 } = K;
@@ -9,6 +9,11 @@ registerAddon(gears);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
 const toast = (t, ms) => { const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); setTimeout(() => d.remove(), ms || 2200); };
+/* a toast with buttons (stays until used, dismissed or timed out) */
+const toastAct = (t, actions, ms) => {
+  const d = el('div', { class: 'toast act' }, el('span', null, t), ...actions.map(([label, fn]) => el('button', { onclick: () => { d.remove(); fn(); } }, label)), el('button', { class: 'x', onclick: () => d.remove(), 'aria-label': 'Dismiss' }, '×'));
+  $('#toasts').append(d); setTimeout(() => d.remove(), ms || 9000); return d;
+};
 
 const ICON = {
   box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5', wedge: 'M4 18h16L4 6zM4 6l4-2 12 12', cylinder: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6',
@@ -21,7 +26,7 @@ const ICON = {
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
   explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
-  addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
+  addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
 document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon)));
@@ -68,13 +73,31 @@ function subOf(o) {
   }
 }
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
+/* "By part": each part with what shapes it (its tools, edges, patterns, welds); "History": the order things were made */
+function treeOrder() {
+  const objs = model.doc.objects;
+  if ((prefs.treeMode || 'part') === 'history') return objs.map(o => ({ o, depth: o.into ? 1 : 0 }));
+  const byId = new Map(objs.map(o => [o.id, o])), placed = new Set(), out = [];
+  const rootOf = (o) => { let c = o; const seen = new Set(); while (c && c.into && byId.has(c.into) && !seen.has(c.id)) { seen.add(c.id); c = byId.get(c.into); } return c; };
+  const ownerOf = (o) => (o.type === 'pattern' ? rootOf(byId.get((o.of || [])[0]) || o) : o.type === 'weld' ? byId.get((o.joins || [])[0]) : o.into ? rootOf(o) : null);
+  const kids = (root) => objs.filter(o => o !== root && !placed.has(o.id) && ownerOf(o) && ownerOf(o).id === root.id);
+  for (const o of objs) {
+    if (placed.has(o.id) || ownerOf(o)) continue;
+    out.push({ o, depth: 0 }); placed.add(o.id);
+    for (const k of kids(o)) { out.push({ o: k, depth: 1 }); placed.add(k.id); }
+  }
+  for (const o of objs) if (!placed.has(o.id)) out.push({ o, depth: 1 });
+  return out;
+}
 function renderTree() {
   const list = $('#list'); list.innerHTML = '';
   const objs = model.doc.objects; $('#count').textContent = objs.length;
+  const mode = prefs.treeMode || 'part';
+  list.append(el('div', { class: 'seg' }, ...[['part', 'By part'], ['history', 'History']].map(([k, t]) => el('button', { class: mode === k ? 'on' : '', onclick: () => { prefs.treeMode = k; savePrefs(); renderTree(); } }, t))));
   if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
-  for (const o of objs) {
-    const sub = subOf(o);
-    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (o.into ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
+  for (const { o, depth } of treeOrder()) {
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '');
+    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, sub)),
       el('div', { style: 'display:flex;gap:3px' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t))));
@@ -90,6 +113,55 @@ function renderTree() {
 }
 /* ---------- properties ---------- */
 function field(label, input) { return el('label', { class: 'f' }, label, input); }
+/* where a parameter's carried dimension points in the world (to find "the same" dimension on other parts) */
+function dimDir(o, prm) { const d = dimsOf(o).find(x => x.param === prm), M = model.result.world.get(o.id); if (!d || !M) return null; const v = M4.dir(M, V.sub(d.b, d.a)); return V.len(v) > 1e-9 ? V.norm(v) : null; }
+/* other parts' parameters that equal `oldVal` and run the same way: likely meant to stay equal */
+function followerCandidates(ob, prm, oldVal) {
+  const d0 = dimDir(ob, prm), out = [];
+  for (const o of model.doc.objects) {
+    if (o.id === ob.id || ['edge', 'pattern'].includes(o.type) || o.into === ob.id) continue;
+    for (const [k, v] of Object.entries(o.params || {})) {
+      if (typeof v !== 'number' || Math.abs(v - oldVal) > 1e-9 || (o.expr && o.expr[k])) continue;
+      const d1 = dimDir(o, k);
+      if ((d0 && d1 && Math.abs(V.dot(d0, d1)) > 0.99) || ((!d0 || !d1) && k === prm)) out.push({ o, k });
+    }
+  }
+  return out;
+}
+/* set a parameter from typed text: a number, or =formula; after a plain change, offer to make matching parts follow */
+function setParam(ob, prm, raw) {
+  const txt = String(raw).trim(); if (!txt) return;
+  if (txt.startsWith('=')) { try { parseExpr(txt); } catch (e) { toast('Formula: ' + e.message, 3600); return; } apply([{ op: 'set', id: ob.id, params: { [prm]: txt } }], `${ob.name}.${prm} ${txt}`); toast(`${ob.name} · ${prm} now follows ${txt.slice(1)}`, 2200); return; }
+  const v = parseFloat(txt.replace(',', '.')); if (!isFinite(v)) { toast('Type a number, or = and a formula (e.g. =plate.depth - 10)', 3200); return; }
+  const oldVal = ob.params[prm], wasLinked = ob.expr && ob.expr[prm];
+  if (v === oldVal && !wasLinked) return;
+  const cands = followerCandidates(ob, prm, oldVal);
+  apply([{ op: 'set', id: ob.id, params: { [prm]: v } }], `${ob.name} ${prm} = ${fmt(v)}`);
+  if (wasLinked) toast(`${ob.name} · ${prm} unlinked (was ${wasLinked}) — Undo to keep the link`, 3200);
+  if (cands.length) {
+    const ref = `=${ob.id}.${prm}`, names = cands.map(c => `${c.o.name} ${c.k}`).slice(0, 3).join(', ') + (cands.length > 3 ? '…' : '');
+    toastAct(`${names} ${cands.length > 1 ? 'were' : 'was'} also ${fmt(oldVal)}.`, [[cands.length > 1 ? `Make all ${cands.length} follow` : 'Make it follow', () => apply(cands.map(c => ({ op: 'set', id: c.o.id, params: { [c.k]: ref } })), `Follow ${ob.name} ${prm}`)]], 12000);
+  }
+}
+/* number field that also takes =formulas, with a link button */
+function paramInput(ob, prm) {
+  const linked = ob.expr && ob.expr[prm], wrap = el('span', { class: 'pin' });
+  const i = el('input', { value: linked ? linked : fmt(ob.params[prm]), inputmode: 'decimal', class: linked ? 'linked' : '', title: linked ? `follows ${linked.slice(1)} = ${fmt(ob.params[prm])} · type a number to unlink` : 'a number, or =formula e.g. =plate.depth - 10' });
+  i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); });
+  i.addEventListener('change', () => setParam(ob, prm, i.value));
+  const b = el('button', { class: 'chain' + (linked ? ' on' : ''), title: linked ? 'Unlink (keep the value)' : 'Follow another part’s dimension…', onclick: (e) => { e.preventDefault(); if (linked) apply([{ op: 'unlink', id: ob.id, param: prm }]); else leaderMenu(ob, prm, b); } }, icon('link'));
+  wrap.append(i, b); if (linked) wrap.append(el('span', { class: 'val' }, '= ' + fmt(ob.params[prm]))); return wrap;
+}
+function leaderMenu(ob, prm, anchor) {
+  const r = anchor.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${Math.max(8, r.right - 260)}px;top:${r.bottom + 4}px;max-height:60vh;overflow:auto;width:260px` });
+  m.append(el('div', { class: 'mh' }, `${ob.name} · ${prm} follows…`));
+  const rows = [];
+  for (const o of model.doc.objects) { if (o.id === ob.id || ['edge', 'pattern'].includes(o.type)) continue; for (const [k, v] of Object.entries(o.params || {})) if (typeof v === 'number') rows.push({ o, k, v, score: (Math.abs(v - ob.params[prm]) < 1e-9 ? 0 : 2) + (k === prm ? 0 : 1) }); }
+  rows.sort((a, b) => a.score - b.score);
+  for (const x of rows.slice(0, 40)) m.append(el('button', { onclick: () => { m.remove(); apply([{ op: 'set', id: ob.id, params: { [prm]: `=${x.o.id}.${x.k}` } }], `${ob.name}.${prm} follows ${x.o.name}.${x.k}`); } }, `${x.o.name} · ${x.k} = ${fmt(x.v)}`));
+  for (const [k, v] of Object.entries(model.doc.vars || {})) m.append(el('button', { onclick: () => { m.remove(); apply([{ op: 'set', id: ob.id, params: { [prm]: `=#${k}` } }]); } }, `#${k} = ${typeof v === 'number' ? fmt(v) : v}`));
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+}
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
 const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] } };
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
@@ -98,7 +170,7 @@ function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: 
 function paramField(o, k, v) {
   const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = optionsFor(o.type, k);
   if (opts) { const sl = el('select', null, ...opts.map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => set(sl.value); return field(label(k), sl); }
-  if (typeof v === 'number') return field(label(k), numInput(v, set));
+  if (typeof v === 'number') return field(label(k), paramInput(o, k));
   if (typeof v === 'boolean') { const c = el('input', { type: 'checkbox' }); c.checked = v; c.onchange = () => set(c.checked); return field(label(k), c); }
   if (typeof v === 'string') return field(label(k), textInput(v, set));
   const ta = el('textarea', null, JSON.stringify(v)); ta.addEventListener('keydown', e => e.stopPropagation()); ta.addEventListener('change', () => { try { set(JSON.parse(ta.value)); } catch (e) { toast('Not valid JSON: ' + e.message); } });
@@ -146,7 +218,16 @@ function renderProps() {
     s.append(field('Name', textInput(model.doc.name, v => apply([{ op: 'rename', name: v }]))));
     s.append(el('div', { class: 'f' }, 'Bodies', el('span', null, `${R.bodies.filter(b => !b.weld).length} parts${R.bodies.some(b => b.weld) ? ' · ' + R.bodies.filter(b => b.weld).length + ' welds' : ''} · ${model.doc.objects.length} features · ${R.ms.toFixed(0)} ms`)));
     const og = R.originRef; s.append(el('div', { class: 'f' }, 'World origin', el('span', null, og ? (model.get(og.obj) || {}).name + ' · ' + og.conn : 'board 0,0,0')));
-    s.append(field('default material', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
+    const partsAll = model.doc.objects.filter(o => !['edge', 'pattern', 'weld'].includes(o.type) && !o.into), own = partsAll.filter(o => o.meta && (o.meta.material || o.meta.density));   /* welds take their part's material */
+    s.append(field('material for parts without one', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
+    s.append(el('div', { class: 'note' }, own.length === partsAll.length ? `All ${partsAll.length} parts have their own material, so this default changes nothing.` : `${partsAll.length - own.length} of ${partsAll.length} parts use this default; ${own.length} have their own.`));
+    if (model.doc.material && own.length) s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply(own.map(o => ({ op: 'set', id: o.id, meta: { material: model.doc.material, density: null } })), `All parts ${MATERIALS[model.doc.material].name}`) }, `Use ${MATERIALS[model.doc.material].name} for all ${partsAll.length} parts`)));
+    /* model variables, usable as #name in any dimension */
+    const sv = sec('Variables'), vars = model.doc.vars || {};
+    for (const [k, v] of Object.entries(vars)) sv.append(field('#' + k, el('span', { class: 'pin' }, textInput(typeof v === 'number' ? fmt(v) : v, val => apply([{ op: 'var', name: k, value: val === '' ? null : val }])), el('button', { class: 'chain', title: 'Remove', onclick: () => apply([{ op: 'var', name: k, value: null }]) }, '×'))));
+    const vn = textInput('', () => {}, { placeholder: 'name e.g. wall' }), vv = textInput('', () => {}, { placeholder: 'value or =formula' });
+    sv.append(el('div', { class: 'varadd' }, vn, vv, el('button', { class: 'btn', onclick: () => { if (vn.value && vv.value) apply([{ op: 'var', name: vn.value, value: vv.value }]); } }, 'Add')));
+    sv.append(el('div', { class: 'note' }, 'Use them in any size: type =#wall * 2. Or make one part follow another: =plate.depth, or the link button beside a size.'));
     const rep = massReport(model.doc, R), sm = sec('Mass & balance');
     sm.append(el('div', { class: 'f' }, 'total mass', el('b', null, rep.total_mass_g ? (rep.total_mass_g >= 1000 ? fmt(rep.total_mass_g / 1000) + ' kg' : fmt(rep.total_mass_g) + ' g') : '—')));
     sm.append(el('div', { class: 'f' }, 'centre of gravity', el('span', { class: 'mono' }, xyz(rep.cog))));
@@ -382,7 +463,7 @@ function setTool(name, arg) {
     hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
   }
-  else if (name === 'measure') { views.connectorsFor = 'all'; hint('Measure: click two connectors in a FRONT / TOP / RIGHT view'); }
+  else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
   else if (name === 'sketch') { tool.data.points = []; if (!arg) pendingLoft = null; hint(pendingLoft ? 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)' : 'Sketch: click points in FRONT, TOP or RIGHT · click the first point (or Enter) to close · Shift = straight'); }
   syncBar(); views.draw();
 }
@@ -448,7 +529,7 @@ stage.addEventListener('pointerup', (e) => {
   const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, pane = d.pane;
   const hit = views.hitOverlay(x, y);
   if (hit && hit.kind === 'dim' && !tool) { editDim(hit, x, y); return; }
-  if (hit && hit.kind === 'measure' && !tool) { if (confirmRemove(hit)) return; }
+  if (hit && hit.kind === 'measure' && !tool) { dimOptions(hit, x, y); return; }
   if (!tool) { const pk = views.pick(pane, x, y); select(pk ? pk.id : null); return; }
   clickTool(pane, x, y, hit, e);
 });
@@ -459,6 +540,16 @@ stage.addEventListener('wheel', (e) => {
 }, { passive: false });
 stage.addEventListener('dblclick', (e) => { const r = stage.getBoundingClientRect(), pane = views.paneAt(e.clientX - r.left, e.clientY - r.top); if (!pane || tool) return; views.layout = views.layout === '4' ? pane.id : '4'; views.draw(); });
 function confirmRemove(hit) { if (!hit.measure) return false; apply([{ op: 'undim', id: hit.measure.id }]); toast('Measurement removed (Undo to restore)'); return true; }
+/* a measured dimension: type a value to drive it, or change how it measures */
+function dimOptions(hit, x, y) {
+  const md = hit.measure, axis = (a) => () => { apply([{ op: 'dimaxis', id: md.id, axis: a }]); hint(null); };
+  hint(`Dimension ${fmt(hit.value)} · ${md.drive != null ? 'driving: it holds ' + model.get(md.b.obj).name + ' / ' + model.get(md.a.obj).name + ' at this distance' : 'reference — type a value to make it drive'}`, [
+    ['Set', (v) => { if (v.value >= 0) { try { apply([{ op: 'setdim', id: md.id, value: v.value }]); } catch (e) { /* toast */ } hint(null); } }],
+    ['Off edge ⊥', axis('normal')], ['Horizontal', axis('h')], ['Vertical', axis('v')], ['Aligned', axis('aligned')],
+    md.drive != null ? ['Reference', () => { apply([{ op: 'setdim', id: md.id, value: null }]); hint(null); }] : null,
+    ['Delete', () => { confirmRemove(hit); hint(null); }]
+  ].filter(Boolean), [['value', 'mm', +fmt(hit.value)]]);
+}
 function snapSketch(pane, pp, straight) {
   const B = BASISof(pane.id), pts = tool.data.points; let x = pp.x, y = pp.y;
   const grid = prefs.grid || 5; x = Math.round(x / grid) * grid; y = Math.round(y / grid) * grid;
@@ -515,7 +606,10 @@ function clickTool(pane, x, y, hit, e) {
     if (pane.id === '3d') { toast('Measure in FRONT, TOP or RIGHT'); return; }
     if (!hit || hit.kind !== 'conn') { toast('Click a connector dot'); return; }
     if (!t.data.a) { t.data.a = hit.conn; views.preview = { pane: pane.id, measureA: worldConnectors(R, hit.conn.id).find(c => c.name === hit.conn.name).o }; hint('Measure: now the second connector'); views.draw(); return; }
-    apply([{ op: 'dim', a: { obj: t.data.a.id, conn: t.data.a.name }, b: { obj: hit.conn.id, conn: hit.conn.name }, view: pane.id }]); setTool(null);
+    const r = apply([{ op: 'dim', a: { obj: t.data.a.id, conn: t.data.a.name }, b: { obj: hit.conn.id, conn: hit.conn.name }, view: pane.id }])[0]; setTool(null);
+    const md = model.doc.dims.find(q => q.id === r.id);
+    dimOptions({ measure: md, value: r.value }, x, y);
+    toast(r.axis === 'normal' ? 'Off-edge dimension (square to the face). Type a value to move the part and hold it there.' : 'Measured. Tip: pick a face dot (middle of an edge in this view) for an off-edge dimension.', 3200);
   }
 }
 const rootOrSelf = (id) => id;
@@ -560,8 +654,13 @@ function nearestEdgePoint(pk) {
   return best;
 }
 function editDim(hit, x, y) {
-  const ed = $('#dimEd'); ed.hidden = false; ed.value = fmt(hit.value); ed.style.left = (x - 45) + 'px'; ed.style.top = (y - 14) + 'px'; ed.focus(); ed.select();
-  const done = (ok) => { ed.hidden = true; ed.onkeydown = null; ed.onblur = null; if (ok) { const v = parseFloat(ed.value.replace(',', '.')); if (v > 0 && v !== hit.value) apply([{ op: 'set', id: hit.ob.id, params: { [hit.param]: v } }], `${hit.ob.name} ${hit.param} = ${fmt(v)}`); } };
+  const ed = $('#dimEd'), linked = hit.ob && hit.ob.expr && hit.ob.expr[hit.param];
+  ed.hidden = false; ed.value = linked || fmt(hit.value); ed.style.left = (x - 45) + 'px'; ed.style.top = (y - 14) + 'px'; ed.focus(); ed.select();
+  const done = (ok) => {
+    ed.hidden = true; ed.onkeydown = null; ed.onblur = null; if (!ok) return;
+    if (hit.measure) { const v = parseFloat(ed.value.replace(',', '.')); if (v >= 0) { try { const r = apply([{ op: 'setdim', id: hit.measure.id, value: v }])[0]; toast(`${model.get(r.moved).name} moved: now held at ${fmt(v)} (driving)`, 2200); } catch (e) { /* toast shown */ } } return; }
+    if (ed.value.trim() !== (linked || fmt(hit.value))) setParam(hit.ob, hit.param, ed.value);
+  };
   ed.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
   ed.onblur = () => done(true);
 }

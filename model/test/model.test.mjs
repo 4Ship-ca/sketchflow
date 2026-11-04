@@ -1,5 +1,5 @@
 /* SketchFlow v2 model tests: node model/test/model.test.mjs */
-import { Model, worldConnectors, massReport, bom, weldAdvice } from '../js/model.js';
+import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim } from '../js/model.js';
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { cond ? pass++ : fail++; console.log((cond ? 'ok  ' : 'FAIL') + ' ' + name + (info !== undefined ? ' → ' + JSON.stringify(info) : '')); };
 const near = (a, b, t = 1e-3) => Math.abs(a - b) <= t * Math.max(1, Math.abs(b));
@@ -151,6 +151,34 @@ Ms.apply([{ op: 'add', type: 'cylinder', id: 'pin', params: { diameter: 8, heigh
 const bl = bom(Ms.doc, Ms.result).lines.find(l => l.part === Ms.get('pin').name);
 ok('parts list counts pattern copies as quantity', bl && bl.quantity === 3 && near(bl.mass_total_g, 3 * bl.mass_each_g, 1e-3), bl);
 ok('weld advice: aluminium to steel is not fusion-weldable', /cannot be fusion-welded/.test(weldAdvice('aluminium', 'steel')) && weldAdvice('steel', 'steel') === null && /do not weld/.test(weldAdvice('pla', 'petg')));
+/* links & formulas: a follower keeps step with its leader */
+const Lk = new Model();
+Lk.apply([{ op: 'add', type: 'box', id: 'plate', name: 'Base plate', params: { width: 120, depth: 70, height: 10 } }, { op: 'add', type: 'box', id: 'web', params: { width: 12, depth: '=plate.depth', height: 60 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-54, 0] } }]);
+Lk.apply([{ op: 'set', id: 'plate', params: { depth: 100 } }]);
+ok('a linked size follows its leader', Lk.get('web').params.depth === 100 && Lk.get('web').expr.depth === '=plate.depth');
+Lk.apply([{ op: 'var', name: 'wall', value: 3 }, { op: 'set', id: 'web', params: { width: '=#wall * 4', height: '=Base_plate.width / 2' } }]);
+Lk.apply([{ op: 'var', name: 'wall', value: 5 }]);
+ok('variables and formulas (by id or by name) resolve', Lk.get('web').params.width === 20 && Lk.get('web').params.height === 60, Lk.get('web').params);
+Lk.apply([{ op: 'set', id: 'plate', params: { depth: '=web.depth' } }]);
+ok('a circle of links is reported, not looped', Lk.result.warnings.some(w => /round in a circle/.test(w.text)));
+Lk.apply([{ op: 'set', id: 'plate', params: { depth: 100 } }, { op: 'set', id: 'web', params: { depth: 80 } }]);
+ok('typing a number on a follower unlinks it', !('depth' in (Lk.get('web').expr || {})) && Lk.get('web').params.depth === 80);
+let ferr = ''; try { Lk.apply([{ op: 'set', id: 'web', params: { depth: '=plate.depth +' } }]); } catch (e) { ferr = e.message; }
+ok('a broken formula is refused with the reason', /ends too early/.test(ferr), ferr);
+/* driving dimensions: the hole is held 15 from the plate edge, even when the plate grows */
+Lk.apply([{ op: 'add', type: 'cylinder', id: 'h', params: { diameter: 8, height: 12 }, mate: { to: 'plate', a: 'top', b: 'top', flip: false, offset: 1, slide: [40, 22] }, into: 'plate', mode: 'subtract' }]);
+const [dm] = Lk.apply([{ op: 'dim', a: { obj: 'h', conn: 'top' }, b: { obj: 'plate', conn: 'right' }, view: 'top' }]);
+ok('hole → face dimension measures square to the face (off-edge)', dm.axis === 'normal' && near(dm.value, 20), dm);
+Lk.apply([{ op: 'setdim', id: dm.id, value: 15 }]);
+ok('setting the dimension moves the hole', near(measureDim(Lk.result, Lk.doc.dims[0]).value, 15) && near(Lk.get('h').mate.slide[0], 45));
+Lk.apply([{ op: 'set', id: 'plate', params: { width: 160 } }]);
+ok('a driving dimension holds when the part grows', near(measureDim(Lk.result, Lk.doc.dims[0]).value, 15) && near(Lk.get('h').mate.slide[0], 65));
+const [dv2] = Lk.apply([{ op: 'dim', a: { obj: 'h', conn: 'top' }, b: { obj: 'plate', conn: 'back' }, view: 'top' }]);
+Lk.apply([{ op: 'setdim', id: dv2.id, value: 12 }, { op: 'set', id: 'plate', params: { depth: 120 } }]);
+ok('two driving dimensions hold together (x and y)', near(measureDim(Lk.result, Lk.doc.dims[0]).value, 15) && near(measureDim(Lk.result, Lk.doc.dims[1]).value, 12) && !Lk.result.warnings.some(w => w.kind === 'dim'));
+const [dpp] = Lk.apply([{ op: 'dim', a: { obj: 'h', conn: 'top' }, b: { obj: 'plate', conn: 'corner+x+y+z' }, view: 'top' }]);
+Lk.apply([{ op: 'dimaxis', id: dpp.id, axis: 'h' }]);
+ok('point-to-point dimensions can be horizontal / vertical', near(measureDim(Lk.result, Lk.doc.dims[2]).value, 15), measureDim(Lk.result, Lk.doc.dims[2]).value);
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

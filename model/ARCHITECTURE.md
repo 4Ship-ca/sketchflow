@@ -44,7 +44,8 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Part properties, mass properties | `meta {material, density, fill, part_no, supplier, notes, quantity}` | Mass, centre of gravity and inertia per part and for the assembly, a "does it stand" balance check, and a parts list (CSV) |
 | Custom features (FeatureScript) | Add-ons: plain JS objects with shapes, mate kinds and actions | No imports; the same add-on serves the UI form and the AI tool (`model_addon`). See ADDONS.md |
 | Topological naming | An edge is stored as **the two surface ids it lies between** (e.g. `plate:front | plate:right`) plus a point | It survives size changes. If the faces disappear it falls back to the nearest edge, then warns |
-| Variables / expressions | — | (gap) |
+| Variables / expressions | `#name` model variables; any numeric parameter can be `=formula` (`=plate.depth - 2*#wall`) | Editing a size offers to make same-size, same-direction sizes follow it (leader/follower), so links happen as a by-product of normal editing |
+| Driving dimensions (sketch / mate dims) | Measured dimensions between connectors: off-edge (square to a face), horizontal, vertical, aligned. A value makes them driving, held after every change | The mover is chosen from the mate graph (the part that hangs off the other), so no solver setup is needed |
 | Drawings | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
@@ -98,12 +99,12 @@ Example: a flange with a bore and a 4-hole bolt circle in one call.
 
 ## What is not there yet
 
-Done since the first version: patterns and mirror, welds as assembly joints, per-part metadata with mass and balance, a parts list, add-ons (gears).
+Done since the first version: patterns and mirror, welds as assembly joints, per-part metadata with mass and balance, a parts list, add-ons (gears), variables and formulas with leader/follower links, and driving dimensions.
 
 Still to come, roughly in order of how much each unlocks:
 
 1. **Sketch constraints**: coincident, parallel, perpendicular, tangent, equal, driving dimensions. They need a small Newton/LM solver; the 2D board's joints are a start.
-2. **Variables and expressions**: `#wall = 3`, `depth = width / 2`, used in any parameter (gear module, pattern spacing…).
+2. **Formulas on mates**: links work on sizes today; offsets and slides of mates could take formulas too (today a driving dimension covers most of it).
 3. **Moving mates**: revolute, slider, cylindrical, planar, ball (today mates are fastened, and the gear mate is a fixed mesh). With limits and a drive, these feed the v1 motion simulator, so gears turn together and "make it move like this" works in 3D.
 4. **Shell, draft, hole wizard (counterbore / tapped), rib.**
 5. **Part Studio vs Assembly**: separate a part's definition from its instances, so a bolt is defined once and placed many times (patterns already count copies).

@@ -2,7 +2,7 @@
    Ortho panes share one scale + centre, so projections line up (third-angle layout). Visible edges solid,
    hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
 import * as K from './kernel.js';
-import { dimsOf, worldConnectors, massReport } from './model.js';
+import { dimsOf, worldConnectors, massReport, measureDim } from './model.js';
 const { V } = K;
 
 const PANES = ['top', '3d', 'front', 'right'];
@@ -238,25 +238,33 @@ export class Views {
     }
     for (const md of doc.dims || []) {
       if ((md.view || 'front') !== pane.id) continue;
-      const pa = this.resolveRef(md.a), pb = this.resolveRef(md.b); if (!pa || !pb) continue;
-      const B = BASIS[pane.id], a = V.sub(pa, O), b = V.sub(pb, O), delta = V.sub(b, a), inPlane = Math.hypot(V.dot(delta, B.r), V.dot(delta, B.u));
-      list.push({ measure: md, a, b, value: inPlane });
+      const m = measureDim(R, md); if (!m) continue;
+      list.push({ measure: md, a: V.sub(m.from, O), b: V.sub(m.to, O), dir: m.dir, value: m.value });
     }
     const counts = new Map();
     for (const it of list) {
-      const A = this.project(pane, it.a, cam), Bp = this.project(pane, it.b, cam), L = Math.hypot(Bp.x - A.x, Bp.y - A.y); if (L < 6) continue;
-      const ux = (Bp.x - A.x) / L, uy = (Bp.y - A.y) / L; let nx = -uy, ny = ux;
+      const A = this.project(pane, it.a, cam), Bp = this.project(pane, it.b, cam);
+      /* measuring direction on screen: the dimension's own axis (horizontal / vertical / square to a face) or the line between the points */
+      let ux, uy;
+      if (it.dir) { const o0 = this.project(pane, [0, 0, 0], cam), o1 = this.project(pane, it.dir, cam), l = Math.hypot(o1.x - o0.x, o1.y - o0.y); if (l < 1e-9) continue; ux = (o1.x - o0.x) / l; uy = (o1.y - o0.y) / l; }
+      else { const L0 = Math.hypot(Bp.x - A.x, Bp.y - A.y); if (L0 < 6) continue; ux = (Bp.x - A.x) / L0; uy = (Bp.y - A.y) / L0; }
+      let nx = -uy, ny = ux;
       const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), [0, 0, 0]), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
-      const mid = { x: (A.x + Bp.x) / 2, y: (A.y + Bp.y) / 2 }; if ((mid.x - bc.x) * nx + (mid.y - bc.y) * ny < 0) { nx = -nx; ny = -ny; }
+      const mid = { x: (A.x + Bp.x) / 2, y: (A.y + Bp.y) / 2 }; if (!it.measure && (mid.x - bc.x) * nx + (mid.y - bc.y) * ny < 0) { nx = -nx; ny = -ny; }
+      /* both extension lines reach a common dimension line, beyond the further point */
+      const da = A.x * nx + A.y * ny, db = Bp.x * nx + Bp.y * ny, far = Math.max(da, db);
       const key = (it.ob ? it.ob.id : 'm') + ':' + Math.round(nx * 2) + Math.round(ny * 2), k = counts.get(key) || 0; counts.set(key, k + 1);
-      const off = 18 + k * 16, a2 = { x: A.x + nx * off, y: A.y + ny * off }, b2 = { x: Bp.x + nx * off, y: Bp.y + ny * off };
-      const col = it.measure ? '#3e9bfa' : C.dim;
+      const off = 18 + k * 16, a2 = { x: A.x + nx * (far - da + off), y: A.y + ny * (far - da + off) }, b2 = { x: Bp.x + nx * (far - db + off), y: Bp.y + ny * (far - db + off) };
+      if (Math.hypot(b2.x - a2.x, b2.y - a2.y) < 4) continue;
+      const linked = it.ob && it.ob.expr && it.d && it.ob.expr[it.d.param], driving = it.measure && it.measure.drive != null;
+      const col = it.measure ? (driving ? '#2f7cf6' : '#7aa7e8') : linked ? '#16a394' : C.dim;
       c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1;
       c.globalAlpha = 0.6; c.beginPath(); c.moveTo(A.x + nx * 3, A.y + ny * 3); c.lineTo(a2.x + nx * 4, a2.y + ny * 4); c.moveTo(Bp.x + nx * 3, Bp.y + ny * 3); c.lineTo(b2.x + nx * 4, b2.y + ny * 4); c.stroke(); c.globalAlpha = 1;
+      ux = (b2.x - a2.x) / Math.hypot(b2.x - a2.x, b2.y - a2.y); uy = (b2.y - a2.y) / Math.hypot(b2.x - a2.x, b2.y - a2.y);
       c.beginPath(); c.moveTo(a2.x, a2.y); c.lineTo(b2.x, b2.y); c.stroke();
       const head = (p, s) => { c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + s * ux * 7 - uy * 2.6, p.y + s * uy * 7 + ux * 2.6); c.lineTo(p.x + s * ux * 7 + uy * 2.6, p.y + s * uy * 7 - ux * 2.6); c.closePath(); c.fill(); };
       head(a2, 1); head(b2, -1);
-      const txt = (it.d && it.d.kind === 'diameter' ? 'Ø' : '') + fmt(it.value), lx = (a2.x + b2.x) / 2 + nx * 9, ly = (a2.y + b2.y) / 2 + ny * 9;
+      const txt = (linked ? '=' : '') + (it.d && it.d.kind === 'diameter' ? 'Ø' : '') + (it.measure && !driving ? '(' + fmt(it.value) + ')' : fmt(it.value)), lx = (a2.x + b2.x) / 2 + nx * 9, ly = (a2.y + b2.y) / 2 + ny * 9;
       c.font = '600 11.5px "JetBrains Mono", ui-monospace, monospace'; const tw = c.measureText(txt).width;
       c.fillStyle = this.dark ? 'rgba(20,21,25,0.85)' : 'rgba(255,255,255,0.88)'; c.fillRect(lx - tw / 2 - 4, ly - 8, tw + 8, 16);
       c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, lx, ly); c.textAlign = 'left'; c.textBaseline = 'alphabetic';

@@ -67,6 +67,16 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 #dimEd{position:absolute;z-index:8;width:90px;font:600 13px var(--f-mono);border:2px solid var(--accent);border-radius:8px;padding:4px 7px;background:var(--panel);color:var(--ink)}
 #toasts{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
 .toast{background:var(--ink);color:var(--bg);padding:8px 13px;border-radius:10px;font:600 12.5px var(--f-ui);box-shadow:0 6px 20px #0000003a}
+.toast.act{pointer-events:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:min(560px,92vw)}
+.toast.act button{border:0;border-radius:7px;padding:5px 10px;font:700 12px var(--f-ui);background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.toast.act button.x{background:transparent;color:var(--bg);opacity:.7;padding:4px 6px}
+.pin{display:flex;align-items:center;gap:4px;min-width:0;flex-wrap:wrap} .pin input{flex:1;min-width:0}
+.pin input.linked{color:var(--ai);border-color:color-mix(in srgb, var(--ai) 55%, var(--line))} .pin .val{font:500 11px var(--f-mono);color:var(--ai);width:100%}
+.chain{border:1px solid var(--line);background:var(--panel-2);border-radius:7px;width:26px;height:26px;display:grid;place-items:center;cursor:pointer;color:var(--ink-2);flex:none;padding:0}
+.chain svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round} .chain.on{color:var(--ai);border-color:var(--ai)}
+.note{font-size:11.5px;line-height:1.45;color:var(--ink-3)}
+.varadd{display:grid;grid-template-columns:1fr 1fr auto;gap:6px} .varadd input{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font:500 12px var(--f-mono);min-width:0}
+.seg{display:flex;gap:2px;margin:0 10px 6px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)} .seg button{flex:1;border:0;background:transparent;border-radius:6px;padding:5px;font:600 11.5px var(--f-ui);color:var(--ink-2);cursor:pointer} .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px #0000002a}
 .menu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px #0000004a;padding:5px;display:flex;flex-direction:column;min-width:170px}
 .menu button{text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)}
 .menu button:hover{background:var(--hover)}

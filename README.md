@@ -103,7 +103,10 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - *Pattern* (**P**, or Properties → Pattern…): a row, grid, circle or mirror of the selected part or feature. Copies follow the original.
 - *Material & mass* in Properties: pick a material, or set density, fill %, part no., supplier and notes. With nothing selected you see the total mass, the centre of gravity (the toolbar button marks it in the views), whether the model stands, and a parts list button.
 - *Add-ons* menu: gears (single, pair, train, planetary, and an advisor that picks the right gear for the job and the process). Drop your own into `model/addons/`: see [model/ADDONS.md](model/ADDONS.md).
-- Click any orange dimension in the 2D views to change it.
+- Click any orange dimension in the 2D views to change it. If another part had the same size running the same way, you're offered **Make it follow**: from then on it keeps step with the leader (shown teal, as =90).
+- Any size can be a formula: type `=plate.depth`, `=plate.depth - 10` or `=#wall * 2` in Properties (the link button beside each size picks a leader from a list). Model variables (#wall…) are in Properties with nothing selected.
+- *Measure* (**G**): click two dots in a 2D view. A hole centre then a face dot (the middle of an edge in that view) gives the off-edge distance, measured square to the edge; two points offer horizontal / vertical / aligned. Type a value to make it **driving**: the hole moves and stays at that distance from the edge when the part changes size.
+- The feature list shows **By part** (each part with its holes, edges, welds and arrays) or **History** (the order you made things).
 - View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart.
 
 ## 2 · Or just draw
