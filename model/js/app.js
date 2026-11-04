@@ -5,6 +5,7 @@ import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 import { drawingSVG, drawingDXF } from './drawing.js';
 import { autoConstraints, KINDS as SKETCH_KINDS } from './sketch.js';
+import { interference, collisions, restBaseline } from './collide.js';
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -31,7 +32,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', clash: 'M8 8a5 5 0 1 0 0 0.01M16 8a5 5 0 1 0 0 0.01M12 13v4M12 20v.5', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -48,7 +49,7 @@ const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify
 if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
 const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 views.setTheme(isDark());
-model.on(() => { if (views.motion && !anim) { motionPose = null; views.motion = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
+model.on(() => { collisionBase = null; if (views.motion && !anim) { motionPose = null; views.motion = null; views.collide = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
 function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
 
 /* ---------- tree ---------- */
@@ -87,22 +88,37 @@ function subOf(o) {
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
 /* ---------- motion: preview joint poses by moving the existing meshes (the model is untouched until you keep a pose) ---------- */
 let motionPose = null;
+let collisionBase = null, lastHit = null;
 function previewPose(pose) {
   motionPose = Object.assign({}, motionPose || {}); for (const [id, kv] of Object.entries(pose)) motionPose[id] = Object.assign({}, motionPose[id] || {}, kv);
-  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map();
+  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map(), moving = new Map();
   for (const b of R.bodies) {
     const w = b.weld ? model.get(b.id) : null, root = w ? (model.bodyContaining((w.joins || [])[0]) || {}).id : b.id;
     const Wo = R.world.get(root), Wn = R2.world.get(root); if (!Wo || !Wn) continue;
-    deltas.set(b.id, Float32Array.from(M4.mul(Wn, M4.inv(Wo))));
+    const D = M4.mul(Wn, M4.inv(Wo)); deltas.set(b.id, Float32Array.from(D));
+    if (D.some((v, k) => Math.abs(v - (k % 5 === 0 ? 1 : 0)) > 1e-9)) moving.set(b.id, D);
   }
-  views.motion = deltas; views.draw();
+  views.motion = deltas;
+  /* collisions: moving parts against everything, ignoring pairs that already overlap at rest */
+  lastHit = null; views.collide = null;
+  if (prefs.collide !== false && moving.size) {
+    if (!collisionBase) collisionBase = restBaseline(model);
+    const hits = collisions(model, moving, { baseline: collisionBase });
+    if (hits.length) { lastHit = hits; views.collide = new Set(hits.flatMap(h => [h.a, h.b])); }
+  }
+  const msg = document.querySelector('#motion .clashmsg'); if (msg) { msg.textContent = lastHit ? `⚠ ${lastHit.map(h => h.names.join(' ↔ ')).join(', ')}` : ''; }
+  views.draw();
+  return lastHit;
 }
-function clearPreview() { motionPose = null; views.motion = null; views.draw(); }
+function clearPreview() { motionPose = null; views.motion = null; views.collide = null; lastHit = null; views.draw(); }
 let anim = null;
 function openMotion(focusId) {
   const box = $('#motion'); box.hidden = false; box.innerHTML = '';
   const joints = jointsOf(model.doc);
   const head = el('div', { class: 'mhead' }, el('b', null, 'Motion'), el('span', { class: 'note' }, joints.length ? 'Drag a slider or press play. Meshed gears and mated parts follow.' : 'No joints yet.'),
+    el('label', { class: 'hf', title: 'Turn parts red where moving parts run into others' }, (() => { const c = el('input', { type: 'checkbox' }); c.checked = prefs.collide !== false; c.onchange = () => { prefs.collide = c.checked; savePrefs(); }; return c; })(), 'collisions'),
+    el('label', { class: 'hf', title: 'Stop playing at the first collision' }, (() => { const c = el('input', { type: 'checkbox' }); c.checked = prefs.stopOnHit !== false; c.onchange = () => { prefs.stopOnHit = c.checked; savePrefs(); }; return c; })(), 'stop at contact'),
+    el('span', { class: 'warnline clashmsg' }, ''),
     el('span', { style: 'flex:1' }), el('button', { class: 'btn pri keep', hidden: !motionPose, onclick: keepPose, title: 'Make this pose the model’s position (undoable)' }, 'Keep this pose'), el('button', { class: 'btn', onclick: () => { stopAnim(); clearPreview(); openMotion(); } }, 'Reset'), el('button', { class: 'btn', onclick: closeMotion }, 'Close'));
   box.append(head);
   if (!joints.length) {
@@ -130,7 +146,9 @@ function startAnim(j, dof, rng, val, btn) {
     if (!anim) return;
     const dt = (now - t0) / 1000; t0 = now;
     if (spin) v0 += speed * dt; else { v0 += dir * speed * dt; if (v0 > dof.max) { v0 = dof.max; dir = -1; } if (v0 < dof.min) { v0 = dof.min; dir = 1; } }
-    previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false; rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
+    const hit = previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false;
+    if (hit && prefs.stopOnHit !== false && prefs.collide !== false) { stopAnim(); rng.value = Math.max(dof.min, Math.min(dof.max, v0)); toast(`Stopped: ${hit[0].names.join(' and ')} touch at ${fmt(Math.round(v0 * 10) / 10)}${dof.unit}`, 3000); const m2 = document.querySelector('#motion .clashmsg'); if (m2) m2.textContent = `⚠ contact at ${fmt(Math.round(v0 * 10) / 10)}${dof.unit}: ${hit.map(h => h.names.join(' ↔ ')).join(', ')}`; return; }
+    rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
     anim.raf = requestAnimationFrame(step);
   };
   anim = { btn, raf: requestAnimationFrame(step) };
@@ -142,6 +160,17 @@ function keepPose() {
   apply([{ op: 'drive', values: pose }], 'Keep pose'); openMotion();
 }
 function closeMotion() { stopAnim(); clearPreview(); $('#motion').hidden = true; }
+/* ---------- interference check ---------- */
+function runInterference() {
+  const t0 = performance.now(); let res; try { res = interference(model); } catch (e) { toast('Check failed: ' + e.message, 3000); return; }
+  const ms = performance.now() - t0, box = $('#check'); box.hidden = false; box.innerHTML = '';
+  views.setHighlights(res.map(r => r.region));
+  box.append(el('div', { class: 'mhead' }, el('b', null, 'Interference'), el('span', { class: res.length ? 'warnline' : 'ok' }, res.length ? `${res.length} overlap${res.length > 1 ? 's' : ''}` : 'No parts overlap'), el('span', { style: 'flex:1' }), el('button', { class: 'btn', onclick: runInterference }, 'Re-check'), el('button', { class: 'btn', onclick: closeCheck }, 'Close')));
+  for (const r of res) box.append(el('button', { class: 'clash', onclick: () => { select(r.a); views.setHighlights([r.region]); } }, el('span', null, `${r.names[0]} ↔ ${r.names[1]}`), el('span', { class: 'mono' }, `${fmt(r.volume)} mm³${r.exact ? '' : ' ≈'}`)));
+  if (res.length) box.append(el('div', { class: 'note' }, 'Red = where they overlap. Click one to select the first part; mate it away, resize it, or subtract one from the other.'));
+  box.append(el('div', { class: 'note' }, `${model.result.bodies.length} parts checked in ${Math.round(ms)} ms`));
+}
+function closeCheck() { $('#check').hidden = true; views.setHighlights([]); }
 /* the ⋯ / right-click menu of a feature-list row */
 const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 function rowMenu(o, r) {
@@ -556,6 +585,7 @@ $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
 $('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#checkBtn').onclick = () => { if (!$('#check').hidden) closeCheck(); else runInterference(); };
 $('#sectionBtn').onclick = () => { if (views.section) { views.section = null; hint(null); views.draw(); syncBar(); } else sectionHint(); };
 $('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
 $('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
@@ -977,7 +1007,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -1064,6 +1094,20 @@ async function runCmd(cmd, a) {
       let tri = a.triangles, count = a.count, data = a.data;
       if (a.file_b64) { const bin = atob(a.file_b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const parsed = parseMesh(a.name, u); tri = encodeTriangles(parsed.triangles); count = parsed.count; data = undefined; }
       const r = model.apply([{ op: 'import', name: a.name, triangles: tri, count, data, scale: a.scale, material: a.material }], `Import ${a.name}`, { relative: true })[0]; views.fitAll(); return { result: r, model: model.describe() };
+    }
+    case 'model.check': {
+      const res = interference(model); if (a.look) views.setHighlights(res.map(r => r.region));
+      const out = { overlaps: res.map(r => ({ a: r.a, b: r.b, parts: r.names, volume_mm3: r.volume, exact: r.exact, bbox: r.bbox && { min: V.sub(r.bbox.min, model.result.originPoint).map(v => +v.toFixed(2)), max: V.sub(r.bbox.max, model.result.originPoint).map(v => +v.toFixed(2)) } })) };
+      if (a.motion && a.motion.id) {
+        /* sweep a joint and report the first contact */
+        const j = jointsOf(model.doc).find(q => q.id === a.motion.id); if (!j) throw new Error(`${a.motion.id} is not a joint`);
+        const dof = j.dofs.find(d => d.key === (a.motion.key || j.dofs[0].key)), from = a.motion.from != null ? a.motion.from : dof.min, to = a.motion.to != null ? a.motion.to : dof.max, steps = Math.max(2, Math.min(720, a.motion.steps || 120));
+        collisionBase = null; let first = null;
+        for (let k = 0; k <= steps && !first; k++) { const v = from + (to - from) * k / steps, hit = previewPose({ [j.id]: { [dof.key]: v } }); if (hit) first = { value: +v.toFixed(3), parts: hit.map(h => h.names) }; }
+        clearPreview(); out.motion = { joint: j.id, key: dof.key, from, to, steps, first_contact: first || null, clear: !first };
+      }
+      if (a.look) { Object.assign(out, await snapshotFor(a)); views.setHighlights([]); }
+      return out;
     }
     case 'model.mass': return { mass: massReport(model.doc, model.result), parts_list: bom(model.doc, model.result), materials: Object.fromEntries(Object.entries(MATERIALS).map(([k, m]) => [k, `${m.name} ${m.density} g/cm³`])) };
     case 'model.addon': {

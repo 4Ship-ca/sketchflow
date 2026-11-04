@@ -48,7 +48,7 @@ export class Views {
     this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
     this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
-    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null;
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null; this.highlights = []; this.collide = null;
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
@@ -190,7 +190,7 @@ export class Views {
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
-        const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
+        const col = this.collide && this.collide.has(id) ? [0.95, 0.25, 0.22] : selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
         gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniformMatrix4fv(mp.loc.uM, false, this.bodyMatrix(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
@@ -210,6 +210,14 @@ export class Views {
         }
       }
       gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniformMatrix4fv(lp.loc.uM, false, IDENT);
+      if (this.highlights.length) {
+        gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        const mp2 = this.meshProg; gl.useProgram(mp2.p); gl.uniformMatrix4fv(mp2.loc.uVP, false, cam.M); gl.uniform3fv(mp2.loc.uO, this.O); gl.uniformMatrix4fv(mp2.loc.uM, false, IDENT); gl.uniform1f(mp2.loc.uClipOn, 0);
+        for (const h of this.highlights) { gl.uniform3fv(mp2.loc.uC, [1, 0.23, 0.23]); gl.uniform1f(mp2.loc.uA, 0.55); this.bindAttr(mp2.loc.aP, h.mesh, 3); this.bindAttr(mp2.loc.aN, h.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, h.count); }
+        gl.disable(gl.BLEND); gl.useProgram(lp.p); gl.uniform4fv(lp.loc.uC, [0.85, 0.1, 0.1, 1]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.6 * dpr); gl.uniform1f(lp.loc.uClipOn, 0);
+        for (const h of this.highlights) this.drawLines(lp, h.edges);
+        gl.enable(gl.DEPTH_TEST);
+      }
       /* ghost of a selected tool / consumed object: drawn through everything */
       if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
     }
@@ -217,6 +225,11 @@ export class Views {
   }
   bindAttr(loc, buf, size) { const gl = this.gl; if (loc < 0 || loc == null) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
   drawLines(lp, L) { if (!L || !L.count) return; const gl = this.gl; this.bindAttr(lp.loc.aA, L.a, 3); this.bindAttr(lp.loc.aB, L.b, 3); this.bindAttr(lp.loc.aS, L.s, 1); this.bindAttr(lp.loc.aT, L.t, 1); gl.drawArrays(gl.TRIANGLES, 0, L.count); }
+  /* overlap regions from the interference check: red, seen through everything */
+  setHighlights(solids) {
+    const gl = this.gl; for (const h of this.highlights) { gl.deleteBuffer(h.mesh); gl.deleteBuffer(h.nrm); this.freeLines(h.edges); }
+    this.highlights = (solids || []).filter(x => x && !x.isEmpty()).map(sol => this.upload(sol, { color: '#ff3b3b' })); this.draw();
+  }
   setGhost(solid) { if (this.ghost) this.freeLines(this.ghost.edges); this.ghost = solid && !solid.isEmpty() ? { edges: this.lineBuf(K.creaseEdges(solid)) } : null; this.draw(); }
   /* ---------- overlay: labels, origin, dims, connectors, cube, tool previews ---------- */
   drawOverlay() {

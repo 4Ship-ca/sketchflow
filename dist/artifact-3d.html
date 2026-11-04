@@ -89,6 +89,9 @@ table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var
 .sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
 .sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
 table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
+#check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
+#check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
+#check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
 .row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
 @media (hover:none){ .row .more{opacity:1} }
 .row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
@@ -146,6 +149,7 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
       <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
       <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
       <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="checkBtn" title="Interference check: do any parts overlap? (I)" data-icon="clash"></button>
       <button class="tb" id="sectionBtn" title="Section view: cut the model with a plane (X)" data-icon="section"></button>
       <button class="tb" id="motionBtn" title="Motion: move joints, play, see gears turn (J)" data-icon="motion"></button>
       <button class="tb" id="explodeBtn" title="Pull apart: exploded view of the parts (E)" data-icon="explode"></button>
@@ -158,7 +162,7 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>
@@ -2374,7 +2378,7 @@ class Views {
     this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
     this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
-    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null;
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null; this.highlights = []; this.collide = null;
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
@@ -2516,7 +2520,7 @@ class Views {
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
-        const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
+        const col = this.collide && this.collide.has(id) ? [0.95, 0.25, 0.22] : selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
         gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniformMatrix4fv(mp.loc.uM, false, this.bodyMatrix(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
@@ -2536,6 +2540,14 @@ class Views {
         }
       }
       gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniformMatrix4fv(lp.loc.uM, false, IDENT);
+      if (this.highlights.length) {
+        gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        const mp2 = this.meshProg; gl.useProgram(mp2.p); gl.uniformMatrix4fv(mp2.loc.uVP, false, cam.M); gl.uniform3fv(mp2.loc.uO, this.O); gl.uniformMatrix4fv(mp2.loc.uM, false, IDENT); gl.uniform1f(mp2.loc.uClipOn, 0);
+        for (const h of this.highlights) { gl.uniform3fv(mp2.loc.uC, [1, 0.23, 0.23]); gl.uniform1f(mp2.loc.uA, 0.55); this.bindAttr(mp2.loc.aP, h.mesh, 3); this.bindAttr(mp2.loc.aN, h.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, h.count); }
+        gl.disable(gl.BLEND); gl.useProgram(lp.p); gl.uniform4fv(lp.loc.uC, [0.85, 0.1, 0.1, 1]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.6 * dpr); gl.uniform1f(lp.loc.uClipOn, 0);
+        for (const h of this.highlights) this.drawLines(lp, h.edges);
+        gl.enable(gl.DEPTH_TEST);
+      }
       /* ghost of a selected tool / consumed object: drawn through everything */
       if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
     }
@@ -2543,6 +2555,11 @@ class Views {
   }
   bindAttr(loc, buf, size) { const gl = this.gl; if (loc < 0 || loc == null) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
   drawLines(lp, L) { if (!L || !L.count) return; const gl = this.gl; this.bindAttr(lp.loc.aA, L.a, 3); this.bindAttr(lp.loc.aB, L.b, 3); this.bindAttr(lp.loc.aS, L.s, 1); this.bindAttr(lp.loc.aT, L.t, 1); gl.drawArrays(gl.TRIANGLES, 0, L.count); }
+  /* overlap regions from the interference check: red, seen through everything */
+  setHighlights(solids) {
+    const gl = this.gl; for (const h of this.highlights) { gl.deleteBuffer(h.mesh); gl.deleteBuffer(h.nrm); this.freeLines(h.edges); }
+    this.highlights = (solids || []).filter(x => x && !x.isEmpty()).map(sol => this.upload(sol, { color: '#ff3b3b' })); this.draw();
+  }
   setGhost(solid) { if (this.ghost) this.freeLines(this.ghost.edges); this.ghost = solid && !solid.isEmpty() ? { edges: this.lineBuf(K.creaseEdges(solid)) } : null; this.draw(); }
   /* ---------- overlay: labels, origin, dims, connectors, cube, tool previews ---------- */
   drawOverlay() {
@@ -2804,6 +2821,127 @@ function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) *
 function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
 
 return { Views, fmt };
+})();
+
+__sf3.collide = (() => {
+/* SketchFlow 3D interference & collision.
+   interference(): which parts overlap, by how much (exact boolean intersection for parts of moderate size, a voxel
+   estimate for big ones), and the overlapping region to show.
+   collisionProbe() / collides(): a fast test for motion frames — sample points just inside each part's surface are
+   tested against the other part with grid-accelerated ray parity, so parts that only touch never count. */
+const K = __sf3.kernel;
+const { V, M4 } = K;
+
+const probeCache = new WeakMap();
+/* a part's triangles in a grid over (y, z) for +x rays, its bbox, and surface sample points pushed inward a little */
+function collisionProbe(solid, maxPoints = 1800) {
+  let pr = probeCache.get(solid); if (pr) return pr;
+  const m = solid.toMesh(), P = m.positions, N = m.normals, tris = [], bb = solid.bbox(), G = 48;
+  for (let i = 0; i < P.length; i += 9) tris.push([P[i], P[i + 1], P[i + 2], P[i + 3], P[i + 4], P[i + 5], P[i + 6], P[i + 7], P[i + 8]]);
+  const cy = (bb.max[1] - bb.min[1]) / G || 1, cz = (bb.max[2] - bb.min[2]) / G || 1, grid = Array.from({ length: G * G }, () => []);
+  const cell = (y, z) => [Math.max(0, Math.min(G - 1, Math.floor((y - bb.min[1]) / cy))), Math.max(0, Math.min(G - 1, Math.floor((z - bb.min[2]) / cz)))];
+  tris.forEach((t, i) => { const a = cell(Math.min(t[1], t[4], t[7]), Math.min(t[2], t[5], t[8])), b = cell(Math.max(t[1], t[4], t[7]), Math.max(t[2], t[5], t[8])); for (let y = a[0]; y <= b[0]; y++) for (let z = a[1]; z <= b[1]; z++) grid[z * G + y].push(i); });
+  const size = V.len(V.sub(bb.max, bb.min)), inset = Math.max(0.02, size * 5e-4);
+  /* sample points: vertices and centres of larger triangles, moved inward along the surface normal */
+  const seen = new Set(), pts = [];
+  for (let i = 0; i < P.length; i += 3) {
+    const k = Math.round(P[i] * 1e3) + ',' + Math.round(P[i + 1] * 1e3) + ',' + Math.round(P[i + 2] * 1e3); if (seen.has(k)) continue; seen.add(k);
+    pts.push([P[i] - N[i] * inset, P[i + 1] - N[i + 1] * inset, P[i + 2] - N[i + 2] * inset]);
+  }
+  const areaMin = size * size * 1e-4;
+  for (let i = 0; i < P.length; i += 9) {
+    const a = [P[i], P[i + 1], P[i + 2]], b = [P[i + 3], P[i + 4], P[i + 5]], c = [P[i + 6], P[i + 7], P[i + 8]], cr = V.cross(V.sub(b, a), V.sub(c, a)), ar = V.len(cr) / 2;
+    if (ar < areaMin) continue; const n = V.norm(cr), g = V.mul(V.add(V.add(a, b), c), 1 / 3); pts.push(V.sub(g, V.mul(n, inset)));
+  }
+  /* points along the edges too: two thin parts crossing like an X have no corner inside each other */
+  const ctr = V.lerp(bb.min, bb.max, 0.5), stepL = Math.max(size / 30, 0.5), edgePts = [];
+  for (const [a, b] of K.creaseEdges(solid)) { const L = V.len(V.sub(b, a)), n = Math.min(60, Math.floor(L / stepL)); for (let k = 1; k < n; k++) { const q = V.lerp(a, b, k / n), toC = V.sub(ctr, q), l = V.len(toC) || 1; edgePts.push(V.add(q, V.mul(toC, inset / l))); } }
+  let sample = pts, budget = Math.max(200, maxPoints - Math.min(edgePts.length, maxPoints / 2));
+  if (pts.length > budget) { const step = pts.length / budget; sample = Array.from({ length: budget }, (_, k) => pts[Math.floor(k * step)]); }
+  const eb = Math.min(edgePts.length, maxPoints - sample.length); if (eb > 0) { const step = edgePts.length / eb; for (let k = 0; k < eb; k++) sample.push(edgePts[Math.floor(k * step)]); }
+  pr = { tris, grid, G, cy, cz, bb, points: sample, inset, size }; probeCache.set(solid, pr); return pr;
+}
+/* is point q (in the probe's own frame) inside its solid? ray along +x, count crossings */
+function inside(pr, q0) {
+  /* a straight +x ray (it stays in its grid cell); the start is nudged off grid-aligned edges and vertices */
+  const q = [q0[0], q0[1] + 1.37e-6 * (1 + pr.size * 1e-3), q0[2] + 2.91e-6 * (1 + pr.size * 1e-3)];
+  const { bb } = pr; if (q[0] > bb.max[0] || q[1] < bb.min[1] || q[1] > bb.max[1] || q[2] < bb.min[2] || q[2] > bb.max[2]) return false;
+  const y = Math.max(0, Math.min(pr.G - 1, Math.floor((q[1] - bb.min[1]) / pr.cy))), z = Math.max(0, Math.min(pr.G - 1, Math.floor((q[2] - bb.min[2]) / pr.cz)));
+  const d = [1, 0, 0]; let n = 0;
+  for (const i of pr.grid[z * pr.G + y]) {
+    const t = pr.tris[i]; if (Math.max(t[0], t[3], t[6]) < q[0]) continue;
+    const e1 = [t[3] - t[0], t[4] - t[1], t[5] - t[2]], e2 = [t[6] - t[0], t[7] - t[1], t[8] - t[2]];
+    const p = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]], det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2]; if (Math.abs(det) < 1e-14) continue;
+    const s = [q[0] - t[0], q[1] - t[1], q[2] - t[2]], u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det; if (u < 0 || u > 1) continue;
+    const qq = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]], v = (d[0] * qq[0] + d[1] * qq[1] + d[2] * qq[2]) / det; if (v < 0 || u + v > 1) continue;
+    if ((e2[0] * qq[0] + e2[1] * qq[1] + e2[2] * qq[2]) / det > 1e-9) n++;
+  }
+  return n % 2 === 1;
+}
+const bboxOf = (bb, M) => { const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) { const p = M ? M4.point(M, [x, y, z]) : [x, y, z]; for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k]); mx[k] = Math.max(mx[k], p[k]); } } return { min: mn, max: mx }; };
+const overlapBox = (a, b, pad = 0) => { const mn = [0, 1, 2].map(k => Math.max(a.min[k], b.min[k])), mx = [0, 1, 2].map(k => Math.min(a.max[k], b.max[k])); return mn.every((v, k) => v < mx[k] - pad) ? { min: mn, max: mx } : null; };
+/* how many of A's sample points (A placed by MA) are inside B (placed by MB) */
+function penetration(prA, MA, prB, MB, stopAt = Infinity) {
+  const rel = M4.mul(M4.inv(MB), MA); let n = 0;
+  for (const q of prA.points) { if (inside(prB, M4.point(rel, q))) { n++; if (n >= stopAt) break; } }
+  return n;
+}
+/* pairs of bodies that should not overlap (a weld bead touches what it joins by design) */
+function checkPairs(model) {
+  const R = model.result, bodies = R.bodies.filter(b => !b.hidden && !b.solid.isEmpty()), pairs = [];
+  const joins = new Map(); for (const o of model.doc.objects) if (o.type === 'weld') joins.set(o.id, new Set((o.joins || []).map(id => (model.bodyContaining(id) || {}).id)));
+  for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
+    const a = bodies[i], b = bodies[j];
+    if ((joins.get(a.id) && joins.get(a.id).has(b.id)) || (joins.get(b.id) && joins.get(b.id).has(a.id))) continue;
+    pairs.push([a, b]);
+  }
+  return pairs;
+}
+/* one-click interference check */
+function interference(model, opts = {}) {
+  const out = [], maxExact = opts.maxExact || 7000;
+  for (const [a, b] of checkPairs(model)) {
+    const ob = overlapBox(a.solid.bbox(), b.solid.bbox(), 1e-6); if (!ob) continue;
+    const exact = a.solid.polys.length + b.solid.polys.length <= maxExact;
+    if (exact) {
+      const I = a.solid.intersect(b.solid), v = Math.abs(I.volume());
+      if (v > 1e-3) out.push({ a: a.id, b: b.id, names: [a.name, b.name], volume: +v.toFixed(3), exact: true, region: I, bbox: I.bbox() });
+      continue;
+    }
+    /* big parts: voxels in the overlap box that are inside both */
+    const pa = collisionProbe(a.solid), pb = collisionProbe(b.solid), ext = V.sub(ob.max, ob.min), cellSz = Math.max(Math.max(...ext) / 28, 0.15), nx = Math.max(1, Math.ceil(ext[0] / cellSz)), ny = Math.max(1, Math.ceil(ext[1] / cellSz)), nz = Math.max(1, Math.ceil(ext[2] / cellSz));
+    const vox = []; let hits = 0;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) for (let k = 0; k < nz; k++) {
+      const q = [ob.min[0] + (i + 0.5) * ext[0] / nx, ob.min[1] + (j + 0.5) * ext[1] / ny, ob.min[2] + (k + 0.5) * ext[2] / nz];
+      if (inside(pa, q) && inside(pb, q)) { hits++; if (vox.length < 3000) vox.push(q); }
+    }
+    if (!hits) { const pen = penetration(pa, M4.ident(), pb, M4.ident(), 3) + penetration(pb, M4.ident(), pa, M4.ident(), 3); if (pen < 3) continue; }
+    const cv = (ext[0] / nx) * (ext[1] / ny) * (ext[2] / nz), polys = [];
+    for (const q of vox) polys.push(...K.box(ext[0] / nx, ext[1] / ny, ext[2] / nz).transform(M4.translate([q[0], q[1], q[2] - ext[2] / nz / 2])).polys);
+    out.push({ a: a.id, b: b.id, names: [a.name, b.name], volume: +(hits * cv).toFixed(2), exact: false, region: new K.Solid(polys), bbox: ob });
+  }
+  return out.sort((x, y) => y.volume - x.volume);
+}
+/* collisions at a motion pose: bodies with their pose matrices (relative to where they were built); baseline pairs that
+   already overlapped at rest are skipped. Returns [{a, b, count}] */
+function collisions(model, deltas, opts = {}) {
+  const out = [], base = opts.baseline || new Set(), moving = new Set([...deltas.keys()]);
+  for (const [a, b] of checkPairs(model)) {
+    const key = a.id + '|' + b.id; if (base.has(key)) continue;
+    const Ma = deltas.get(a.id) || M4.ident(), Mb = deltas.get(b.id) || M4.ident();
+    if (!moving.has(a.id) && !moving.has(b.id)) continue;
+    if (!overlapBox(bboxOf(a.solid.bbox(), Ma), bboxOf(b.solid.bbox(), Mb), 1e-6)) continue;
+    const pa = collisionProbe(a.solid), pb = collisionProbe(b.solid);
+    const n = penetration(pa, Ma, pb, Mb, opts.stopAt || 3) + penetration(pb, Mb, pa, Ma, opts.stopAt || 3);
+    if (n >= (opts.min || 2)) out.push({ a: a.id, b: b.id, names: [a.name, b.name], count: n });
+  }
+  return out;
+}
+function restBaseline(model) {
+  const s = new Set(); for (const r of interference(model, { maxExact: 0 })) s.add(r.a + '|' + r.b); return s;
+}
+
+return { collisionProbe, inside, penetration, checkPairs, interference, collisions, restBaseline };
 })();
 
 __sf3.drawing = (() => {
@@ -3402,6 +3540,7 @@ const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
 const { drawingSVG, drawingDXF } = __sf3.drawing;
 const { autoConstraints, KINDS as SKETCH_KINDS } = __sf3.sketch;
+const { interference, collisions, restBaseline } = __sf3.collide;
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -3428,7 +3567,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', clash: 'M8 8a5 5 0 1 0 0 0.01M16 8a5 5 0 1 0 0 0.01M12 13v4M12 20v.5', instance: 'M4 9h9v9H4zM9 4h11v11h-3M9 4v5', mesh: 'M12 3l9 5-9 5-9-5zM3 8v8l9 5 9-5V8M12 13v8', hole: 'M4 7h16v10H4zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 4v3M12 17v3', shell: 'M4 8l8-4 8 4v8l-8 4-8-4zM7 9.5l5-2.5 5 2.5v5L12 17l-5-2.5z', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -3445,7 +3584,7 @@ const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify
 if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
 const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 views.setTheme(isDark());
-model.on(() => { if (views.motion && !anim) { motionPose = null; views.motion = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
+model.on(() => { collisionBase = null; if (views.motion && !anim) { motionPose = null; views.motion = null; views.collide = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
 function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
 
 /* ---------- tree ---------- */
@@ -3484,22 +3623,37 @@ function subOf(o) {
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
 /* ---------- motion: preview joint poses by moving the existing meshes (the model is untouched until you keep a pose) ---------- */
 let motionPose = null;
+let collisionBase = null, lastHit = null;
 function previewPose(pose) {
   motionPose = Object.assign({}, motionPose || {}); for (const [id, kv] of Object.entries(pose)) motionPose[id] = Object.assign({}, motionPose[id] || {}, kv);
-  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map();
+  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map(), moving = new Map();
   for (const b of R.bodies) {
     const w = b.weld ? model.get(b.id) : null, root = w ? (model.bodyContaining((w.joins || [])[0]) || {}).id : b.id;
     const Wo = R.world.get(root), Wn = R2.world.get(root); if (!Wo || !Wn) continue;
-    deltas.set(b.id, Float32Array.from(M4.mul(Wn, M4.inv(Wo))));
+    const D = M4.mul(Wn, M4.inv(Wo)); deltas.set(b.id, Float32Array.from(D));
+    if (D.some((v, k) => Math.abs(v - (k % 5 === 0 ? 1 : 0)) > 1e-9)) moving.set(b.id, D);
   }
-  views.motion = deltas; views.draw();
+  views.motion = deltas;
+  /* collisions: moving parts against everything, ignoring pairs that already overlap at rest */
+  lastHit = null; views.collide = null;
+  if (prefs.collide !== false && moving.size) {
+    if (!collisionBase) collisionBase = restBaseline(model);
+    const hits = collisions(model, moving, { baseline: collisionBase });
+    if (hits.length) { lastHit = hits; views.collide = new Set(hits.flatMap(h => [h.a, h.b])); }
+  }
+  const msg = document.querySelector('#motion .clashmsg'); if (msg) { msg.textContent = lastHit ? `⚠ ${lastHit.map(h => h.names.join(' ↔ ')).join(', ')}` : ''; }
+  views.draw();
+  return lastHit;
 }
-function clearPreview() { motionPose = null; views.motion = null; views.draw(); }
+function clearPreview() { motionPose = null; views.motion = null; views.collide = null; lastHit = null; views.draw(); }
 let anim = null;
 function openMotion(focusId) {
   const box = $('#motion'); box.hidden = false; box.innerHTML = '';
   const joints = jointsOf(model.doc);
   const head = el('div', { class: 'mhead' }, el('b', null, 'Motion'), el('span', { class: 'note' }, joints.length ? 'Drag a slider or press play. Meshed gears and mated parts follow.' : 'No joints yet.'),
+    el('label', { class: 'hf', title: 'Turn parts red where moving parts run into others' }, (() => { const c = el('input', { type: 'checkbox' }); c.checked = prefs.collide !== false; c.onchange = () => { prefs.collide = c.checked; savePrefs(); }; return c; })(), 'collisions'),
+    el('label', { class: 'hf', title: 'Stop playing at the first collision' }, (() => { const c = el('input', { type: 'checkbox' }); c.checked = prefs.stopOnHit !== false; c.onchange = () => { prefs.stopOnHit = c.checked; savePrefs(); }; return c; })(), 'stop at contact'),
+    el('span', { class: 'warnline clashmsg' }, ''),
     el('span', { style: 'flex:1' }), el('button', { class: 'btn pri keep', hidden: !motionPose, onclick: keepPose, title: 'Make this pose the model’s position (undoable)' }, 'Keep this pose'), el('button', { class: 'btn', onclick: () => { stopAnim(); clearPreview(); openMotion(); } }, 'Reset'), el('button', { class: 'btn', onclick: closeMotion }, 'Close'));
   box.append(head);
   if (!joints.length) {
@@ -3527,7 +3681,9 @@ function startAnim(j, dof, rng, val, btn) {
     if (!anim) return;
     const dt = (now - t0) / 1000; t0 = now;
     if (spin) v0 += speed * dt; else { v0 += dir * speed * dt; if (v0 > dof.max) { v0 = dof.max; dir = -1; } if (v0 < dof.min) { v0 = dof.min; dir = 1; } }
-    previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false; rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
+    const hit = previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false;
+    if (hit && prefs.stopOnHit !== false && prefs.collide !== false) { stopAnim(); rng.value = Math.max(dof.min, Math.min(dof.max, v0)); toast(`Stopped: ${hit[0].names.join(' and ')} touch at ${fmt(Math.round(v0 * 10) / 10)}${dof.unit}`, 3000); const m2 = document.querySelector('#motion .clashmsg'); if (m2) m2.textContent = `⚠ contact at ${fmt(Math.round(v0 * 10) / 10)}${dof.unit}: ${hit.map(h => h.names.join(' ↔ ')).join(', ')}`; return; }
+    rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
     anim.raf = requestAnimationFrame(step);
   };
   anim = { btn, raf: requestAnimationFrame(step) };
@@ -3539,6 +3695,17 @@ function keepPose() {
   apply([{ op: 'drive', values: pose }], 'Keep pose'); openMotion();
 }
 function closeMotion() { stopAnim(); clearPreview(); $('#motion').hidden = true; }
+/* ---------- interference check ---------- */
+function runInterference() {
+  const t0 = performance.now(); let res; try { res = interference(model); } catch (e) { toast('Check failed: ' + e.message, 3000); return; }
+  const ms = performance.now() - t0, box = $('#check'); box.hidden = false; box.innerHTML = '';
+  views.setHighlights(res.map(r => r.region));
+  box.append(el('div', { class: 'mhead' }, el('b', null, 'Interference'), el('span', { class: res.length ? 'warnline' : 'ok' }, res.length ? `${res.length} overlap${res.length > 1 ? 's' : ''}` : 'No parts overlap'), el('span', { style: 'flex:1' }), el('button', { class: 'btn', onclick: runInterference }, 'Re-check'), el('button', { class: 'btn', onclick: closeCheck }, 'Close')));
+  for (const r of res) box.append(el('button', { class: 'clash', onclick: () => { select(r.a); views.setHighlights([r.region]); } }, el('span', null, `${r.names[0]} ↔ ${r.names[1]}`), el('span', { class: 'mono' }, `${fmt(r.volume)} mm³${r.exact ? '' : ' ≈'}`)));
+  if (res.length) box.append(el('div', { class: 'note' }, 'Red = where they overlap. Click one to select the first part; mate it away, resize it, or subtract one from the other.'));
+  box.append(el('div', { class: 'note' }, `${model.result.bodies.length} parts checked in ${Math.round(ms)} ms`));
+}
+function closeCheck() { $('#check').hidden = true; views.setHighlights([]); }
 /* the ⋯ / right-click menu of a feature-list row */
 const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 function rowMenu(o, r) {
@@ -3953,6 +4120,7 @@ $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
 $('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#checkBtn').onclick = () => { if (!$('#check').hidden) closeCheck(); else runInterference(); };
 $('#sectionBtn').onclick = () => { if (views.section) { views.section = null; hint(null); views.draw(); syncBar(); } else sectionHint(); };
 $('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
 $('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
@@ -4374,7 +4542,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -4461,6 +4629,20 @@ async function runCmd(cmd, a) {
       let tri = a.triangles, count = a.count, data = a.data;
       if (a.file_b64) { const bin = atob(a.file_b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const parsed = parseMesh(a.name, u); tri = encodeTriangles(parsed.triangles); count = parsed.count; data = undefined; }
       const r = model.apply([{ op: 'import', name: a.name, triangles: tri, count, data, scale: a.scale, material: a.material }], `Import ${a.name}`, { relative: true })[0]; views.fitAll(); return { result: r, model: model.describe() };
+    }
+    case 'model.check': {
+      const res = interference(model); if (a.look) views.setHighlights(res.map(r => r.region));
+      const out = { overlaps: res.map(r => ({ a: r.a, b: r.b, parts: r.names, volume_mm3: r.volume, exact: r.exact, bbox: r.bbox && { min: V.sub(r.bbox.min, model.result.originPoint).map(v => +v.toFixed(2)), max: V.sub(r.bbox.max, model.result.originPoint).map(v => +v.toFixed(2)) } })) };
+      if (a.motion && a.motion.id) {
+        /* sweep a joint and report the first contact */
+        const j = jointsOf(model.doc).find(q => q.id === a.motion.id); if (!j) throw new Error(`${a.motion.id} is not a joint`);
+        const dof = j.dofs.find(d => d.key === (a.motion.key || j.dofs[0].key)), from = a.motion.from != null ? a.motion.from : dof.min, to = a.motion.to != null ? a.motion.to : dof.max, steps = Math.max(2, Math.min(720, a.motion.steps || 120));
+        collisionBase = null; let first = null;
+        for (let k = 0; k <= steps && !first; k++) { const v = from + (to - from) * k / steps, hit = previewPose({ [j.id]: { [dof.key]: v } }); if (hit) first = { value: +v.toFixed(3), parts: hit.map(h => h.names) }; }
+        clearPreview(); out.motion = { joint: j.id, key: dof.key, from, to, steps, first_contact: first || null, clear: !first };
+      }
+      if (a.look) { Object.assign(out, await snapshotFor(a)); views.setHighlights([]); }
+      return out;
     }
     case 'model.mass': return { mass: massReport(model.doc, model.result), parts_list: bom(model.doc, model.result), materials: Object.fromEntries(Object.entries(MATERIALS).map(([k, m]) => [k, `${m.name} ${m.density} g/cm³`])) };
     case 'model.addon': {

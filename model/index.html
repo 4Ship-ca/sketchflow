@@ -89,6 +89,9 @@ table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var
 .sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
 .sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
 table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
+#check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
+#check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
+#check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
 .row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
 @media (hover:none){ .row .more{opacity:1} }
 .row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
@@ -146,6 +149,7 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
       <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
       <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
       <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="checkBtn" title="Interference check: do any parts overlap? (I)" data-icon="clash"></button>
       <button class="tb" id="sectionBtn" title="Section view: cut the model with a plane (X)" data-icon="section"></button>
       <button class="tb" id="motionBtn" title="Motion: move joints, play, see gears turn (J)" data-icon="motion"></button>
       <button class="tb" id="explodeBtn" title="Pull apart: exploded view of the parts (E)" data-icon="explode"></button>
@@ -158,7 +162,7 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>
