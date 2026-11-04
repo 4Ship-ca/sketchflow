@@ -318,8 +318,41 @@ function cachedLocal(o) {
   if (!s) { s = localSolid(o); LOCAL_CACHE.set(key, s); if (LOCAL_CACHE.size > 200) LOCAL_CACHE.delete(LOCAL_CACHE.keys().next().value); }
   return s;
 }
-export function evaluate(doc) {
-  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map() };
+/* ---------- joints (moving mates) ----------
+   mate.joint: fixed | revolute (spins about the connector axis) | slider (travels along axis n / u / v) | cylindrical (spin + travel)
+   | planar (slides on the face + spin). The joint's values are the mate's own angle / offset / slide, so a pose is just data. */
+export const JOINTS = {
+  revolute: [{ key: 'angle', unit: '°', min: -180, max: 180 }],
+  slider: [{ key: 'travel', unit: 'mm', min: -50, max: 50 }],
+  cylindrical: [{ key: 'angle', unit: '°', min: -180, max: 180 }, { key: 'offset', unit: 'mm', min: -50, max: 50 }],
+  planar: [{ key: 'u', unit: 'mm', min: -50, max: 50 }, { key: 'v', unit: 'mm', min: -50, max: 50 }, { key: 'angle', unit: '°', min: -180, max: 180 }]
+};
+const dofGet = (m, key) => key === 'angle' ? (m.angle || 0) : key === 'offset' ? (m.offset || 0) : key === 'u' ? (m.slide || [0, 0])[0] : key === 'v' ? (m.slide || [0, 0])[1]
+  : key === 'travel' ? (m.axis === 'u' ? (m.slide || [0, 0])[0] : m.axis === 'v' ? (m.slide || [0, 0])[1] : (m.offset || 0)) : 0;
+function dofSet(m, key, v) {
+  const sl = (m.slide || [0, 0]).slice();
+  if (key === 'angle') m.angle = v; else if (key === 'offset') m.offset = v; else if (key === 'u') { sl[0] = v; m.slide = sl; } else if (key === 'v') { sl[1] = v; m.slide = sl; }
+  else if (key === 'travel') { if (m.axis === 'u') { sl[0] = v; m.slide = sl; } else if (m.axis === 'v') { sl[1] = v; m.slide = sl; } else m.offset = v; }
+}
+export function jointsOf(doc) {
+  return doc.objects.filter(o => o.mate && o.mate.joint && JOINTS[o.mate.joint]).map(o => ({
+    id: o.id, name: o.name, joint: o.mate.joint, axis: o.mate.axis,
+    dofs: JOINTS[o.mate.joint].map(d => { const lim = (o.mate.limits || {})[d.key]; return { key: d.key, unit: d.unit, value: dofGet(o.mate, d.key), min: lim ? lim[0] : d.min, max: lim ? lim[1] : d.max, limited: !!lim }; })
+  }));
+}
+/* apply joint values {id: {key: value}} to a copy of the document (a pose to look at, without editing the model) */
+export function posedDoc(doc, pose) {
+  const d = JSON.parse(JSON.stringify(doc));
+  for (const [id, vals] of Object.entries(pose || {})) {
+    const o = d.objects.find(x => x.id === id); if (!o || !o.mate) continue;
+    for (const [key, v] of Object.entries(typeof vals === 'number' ? { [JOINTS[o.mate.joint] ? JOINTS[o.mate.joint][0].key : 'angle']: vals } : vals)) {
+      const lim = (o.mate.limits || {})[key]; dofSet(o.mate, key, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v);
+    }
+  }
+  return d;
+}
+export function evaluate(doc, opts) {
+  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map(), spin: new Map() };
   R.warnings.push(...resolveLinks(doc));
   /* suppressed features, and everything after the rollback bar, are placed but make no geometry */
   const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, off = new Set(doc.objects.filter((o, i) => o.suppressed || i >= rb).map(o => o.id));
@@ -348,7 +381,7 @@ export function evaluate(doc) {
       if (m.kind && target) {
         const mk = ADDON_MATES.get(m.kind);
         if (!mk) { R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate kind “${m.kind}” needs its add-on` }); m = null; }
-        else { try { m = Object.assign({}, m, mk.solve({ self: o, target, mate: m, api: addonApi, targetWorld: worldOf(m.to) })); } catch (e) { R.warnings.push({ kind: 'error', id, text: `${o.name}: ${e.message}` }); m = null; } }
+        else { try { const tw = worldOf(m.to); m = Object.assign({}, m, mk.solve({ self: o, target, mate: m, api: addonApi, targetWorld: tw, targetSpin: R.spin.get(m.to) })); if (m._spin != null) R.spin.set(id, m._spin); } catch (e) { R.warnings.push({ kind: 'error', id, text: `${o.name}: ${e.message}` }); m = null; } }
       }
       if (!m) { /* keep its own pose */ }
       else if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
@@ -411,6 +444,7 @@ export function evaluate(doc) {
     });
     objs.splice(objs.indexOf(P) + 1, 0, ...add);
   }
+  if (opts && opts.placementOnly) return R;   /* motion frames only need where everything is */
   const intoOf = new Map(); for (const t of objs) if (t.into && !off.has(t.id)) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
@@ -1011,6 +1045,21 @@ export class Model {
         const after = measureDim(this.result, md), other = this.get(mover.id === md.b.obj ? md.a.obj : md.b.obj);
         return { label: `${mover.name}: ${+value.toFixed(3)} from ${other ? other.name : 'it'}`, id: o.id, moved: mover.id, value: after ? +after.value.toFixed(4) : null };
       }
+      case 'joint': {
+        /* make a mate a moving joint: {id, joint: fixed|revolute|slider|cylindrical|planar, axis: n|u|v (slider), limits: {angle:[lo,hi], travel:[..], offset, u, v}} */
+        const x = need(o.id); if (!x.mate) throw new Error(`${x.name} is not mated: mate it first, then make the mate a joint`);
+        if (x.mate.kind) throw new Error(`${x.name} is placed by a ${x.mate.kind} mate; make its partner a joint instead and it will follow`);
+        const j = o.joint || 'revolute'; if (j !== 'fixed' && !JOINTS[j]) throw new Error(`joint is one of fixed, ${Object.keys(JOINTS).join(', ')}`);
+        x.mate = Object.assign({}, x.mate); if (j === 'fixed') { delete x.mate.joint; delete x.mate.limits; delete x.mate.axis; }
+        else { x.mate.joint = j; if (o.axis) x.mate.axis = o.axis; else if (j === 'slider' && !x.mate.axis) x.mate.axis = 'n'; if (o.limits !== undefined) x.mate.limits = o.limits || undefined; }
+        this.recompute(); return { label: `${x.name}: ${j} joint`, id: x.id, joints: jointsOf(d).find(q => q.id === x.id) };
+      }
+      case 'drive': {
+        /* set joint values: {values: {id: {angle: 30}} } or {id, key, value} */
+        const vals = o.values || { [o.id]: { [o.key || 'angle']: o.value } };
+        for (const [id, kv] of Object.entries(vals)) { const x = need(id); if (!x.mate || !x.mate.joint) throw new Error(`${x.name} is not a joint`); x.mate = Object.assign({}, x.mate); for (const [k, v] of Object.entries(kv)) { const lim = (x.mate.limits || {})[k]; dofSet(x.mate, k, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v); } }
+        this.recompute(); return { label: 'Move joints', joints: jointsOf(d) };
+      }
       case 'suppress': {
         const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;
         for (const x of items) { if (on) x.suppressed = true; else delete x.suppressed; }
@@ -1106,6 +1155,7 @@ export class Model {
       material: this.doc.material || null,
       vars: this.doc.vars && Object.keys(this.doc.vars).length ? this.doc.vars : undefined,
       rollback: Number.isInteger(this.doc.rollback) ? this.doc.rollback : undefined,
+      joints: (() => { const j = jointsOf(this.doc); return j.length ? j : undefined; })(),
       dimensions: (this.doc.dims || []).length ? this.doc.dims.map(md => { const m = measureDim(R, md); return { id: md.id, a: md.a, b: md.b, view: md.view, axis: md.axis, value: m ? +m.value.toFixed(3) : null, driving: md.drive != null ? md.drive : undefined }; }) : undefined,
       mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),
       addons: [...ADDONS.keys()],

@@ -1,5 +1,5 @@
 /* Gears add-on tests: node model/test/gears.test.mjs */
-import { Model, registerAddon } from '../js/model.js';
+import { Model, registerAddon, evaluate, posedDoc, jointsOf } from '../js/model.js';
 import gears from '../addons/gears.js';
 registerAddon(gears);
 let pass = 0, fail = 0;
@@ -87,5 +87,19 @@ ok('planetary: impossible planet count is refused with a fix', /must divide by 7
 const pl = D.apply([{ op: 'addon', addon: 'gears', action: 'planetary', args: { sun: 18, planet: 12, planets: 3, module: 1, process: 'cnc' } }])[0];
 const ringW = D.result.world.get(pl.info.ring), sunW = D.result.world.get(pl.info.sun);
 ok('planetary set: ring is concentric with the sun, ratio 1 + ring/sun', near(ringW[12], sunW[12], 1e-6) && near(ringW[13], sunW[13], 1e-6) && near(pl.info.ratio_ring_fixed, 1 + 42 / 18, 1e-3) && !D.result.warnings.length, pl.info);
+/* joints & motion: a revolute pinion drives the meshed wheel continuously, at the ratio, the other way */
+const J = new Model();
+J.apply([{ op: 'add', type: 'box', id: 'base', params: { width: 200, depth: 100, height: 6 } }, G('g1', 18, { width: 6, bore: 5 }, { to: 'base', a: 'top', b: 'bottom', slide: [-30, 0] }), G('g2', 30, { width: 6, bore: 5 }, { to: 'g1', kind: 'gear' })]);
+J.apply([{ op: 'joint', id: 'g1', joint: 'revolute' }]);
+const rz = (M) => Math.atan2(M[1], M[0]) * 180 / Math.PI;
+let prev = null, worst = 0;
+for (let a = 0; a <= 400; a += 10) { const R2 = evaluate(posedDoc(J.doc, { g1: { angle: a } }), { placementOnly: true }), r = [rz(R2.world.get('g1')), rz(R2.world.get('g2'))]; if (prev) { const d = r.map((v, i) => { let x = v - prev[i]; return x - 360 * Math.round(x / 360); }); worst = Math.max(worst, Math.abs(d[1] + d[0] * 18 / 30)); } prev = r; }
+ok('driven gear turns continuously at −z1/z2 through a full turn and beyond', worst < 1e-6, worst);
+const posed = new Model(posedDoc(J.doc, { g1: { angle: 37 } }));
+ok('still in mesh at any pose', Math.abs(body(posed, 'g1').intersect(body(posed, 'g2')).volume()) < 1e-6);
+J.apply([{ op: 'add', type: 'box', id: 'lid', params: { width: 40, depth: 30, height: 4 }, mate: { to: 'base', a: 'top', b: 'bottom', slide: [60, 0] } }, { op: 'joint', id: 'lid', joint: 'slider', axis: 'u', limits: { travel: [0, 30] } }, { op: 'drive', id: 'lid', key: 'travel', value: 99 }]);
+ok('slider joints travel along their axis and stop at their limits', J.get('lid').mate.slide[0] === 30 && jointsOf(J.doc).length === 2);
+let jerr = ''; try { J.apply([{ op: 'joint', id: 'g2' }]); } catch (e) { jerr = e.message; }
+ok('a gear-meshed gear is driven by its partner, not made a joint', /partner/.test(jerr), jerr);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

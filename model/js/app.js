@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr } from './model.js';
+import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 const { V, M4 } = K;
@@ -25,7 +25,7 @@ const ICON = {
   file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
   gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
   pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
-  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', motion: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M10 9l5 3-5 3z', section: 'M4 4h16v16H4zM4 14l10-10M9 20L20 9M14 20l6-6', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
   addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
@@ -42,7 +42,7 @@ const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify
 if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
 const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 views.setTheme(isDark());
-model.on(() => { views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); });
+model.on(() => { if (views.motion && !anim) { motionPose = null; views.motion = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
 function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
 
 /* ---------- tree ---------- */
@@ -73,6 +73,63 @@ function subOf(o) {
   }
 }
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
+/* ---------- motion: preview joint poses by moving the existing meshes (the model is untouched until you keep a pose) ---------- */
+let motionPose = null;
+function previewPose(pose) {
+  motionPose = Object.assign({}, motionPose || {}); for (const [id, kv] of Object.entries(pose)) motionPose[id] = Object.assign({}, motionPose[id] || {}, kv);
+  const R = model.result, R2 = evaluate(posedDoc(model.doc, motionPose), { placementOnly: true }), deltas = new Map();
+  for (const b of R.bodies) {
+    const w = b.weld ? model.get(b.id) : null, root = w ? (model.bodyContaining((w.joins || [])[0]) || {}).id : b.id;
+    const Wo = R.world.get(root), Wn = R2.world.get(root); if (!Wo || !Wn) continue;
+    deltas.set(b.id, Float32Array.from(M4.mul(Wn, M4.inv(Wo))));
+  }
+  views.motion = deltas; views.draw();
+}
+function clearPreview() { motionPose = null; views.motion = null; views.draw(); }
+let anim = null;
+function openMotion(focusId) {
+  const box = $('#motion'); box.hidden = false; box.innerHTML = '';
+  const joints = jointsOf(model.doc);
+  const head = el('div', { class: 'mhead' }, el('b', null, 'Motion'), el('span', { class: 'note' }, joints.length ? 'Drag a slider or press play. Meshed gears and mated parts follow.' : 'No joints yet.'),
+    el('span', { style: 'flex:1' }), el('button', { class: 'btn pri keep', hidden: !motionPose, onclick: keepPose, title: 'Make this pose the model’s position (undoable)' }, 'Keep this pose'), el('button', { class: 'btn', onclick: () => { stopAnim(); clearPreview(); openMotion(); } }, 'Reset'), el('button', { class: 'btn', onclick: closeMotion }, 'Close'));
+  box.append(head);
+  if (!joints.length) {
+    const cands = model.doc.objects.filter(o => o.mate && !o.mate.kind && o.mate.to !== 'origin');
+    box.append(el('div', { class: 'note', style: 'padding:4px 2px 8px' }, 'Select a mated part and choose a Joint type in Properties (Revolute spins it, Slider moves it along a line). Parts mated or meshed to it follow.'));
+    const gearDriver = cands.find(o => o.type === 'gear' && model.doc.objects.some(g => g.mate && g.mate.kind === 'gear' && g.mate.to === o.id));
+    if (gearDriver) box.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => { apply([{ op: 'joint', id: gearDriver.id, joint: 'revolute' }], `${gearDriver.name}: revolute`); openMotion(gearDriver.id); } }, `Make ${gearDriver.name} spin`)));
+    return;
+  }
+  for (const j of joints) for (const dof of j.dofs) {
+    const cur = motionPose && motionPose[j.id] && motionPose[j.id][dof.key] != null ? motionPose[j.id][dof.key] : dof.value;
+    const val = el('span', { class: 'mono' }, fmt(cur) + dof.unit), rng = el('input', { type: 'range', min: dof.min, max: dof.max, step: dof.unit === '°' ? 0.5 : 0.25, value: cur });
+    rng.addEventListener('input', () => { stopAnim(); previewPose({ [j.id]: { [dof.key]: +rng.value } }); val.textContent = fmt(+rng.value) + dof.unit; head.querySelector('.keep').hidden = false; });
+    const play = el('button', { class: 'chain', title: 'Play', onclick: () => startAnim(j, dof, rng, val, play) }, '▶');
+    box.append(el('div', { class: 'mrow' + (j.id === focusId ? ' on' : '') }, el('span', { class: 'mname' }, `${j.name} · ${dof.key}`), rng, val, play));
+  }
+}
+function startAnim(j, dof, rng, val, btn) {
+  if (anim && anim.btn === btn) { stopAnim(); return; }
+  stopAnim();
+  const spin = dof.unit === '°' && !dof.limited, speed = spin ? 60 : (dof.max - dof.min) / 2.5;   /* °/s for free spins, a full stroke in 2.5 s otherwise */
+  let t0 = performance.now(), v0 = +rng.value, dir = 1;
+  btn.textContent = '❚❚';
+  const step = (now) => {
+    if (!anim) return;
+    const dt = (now - t0) / 1000; t0 = now;
+    if (spin) v0 += speed * dt; else { v0 += dir * speed * dt; if (v0 > dof.max) { v0 = dof.max; dir = -1; } if (v0 < dof.min) { v0 = dof.min; dir = 1; } }
+    previewPose({ [j.id]: { [dof.key]: v0 } }); const kb = document.querySelector('#motion .keep'); if (kb) kb.hidden = false; rng.value = ((v0 - dof.min) % (dof.max - dof.min) + (dof.max - dof.min)) % (dof.max - dof.min) + dof.min; val.textContent = fmt(Math.round(v0 * 10) / 10) + dof.unit;
+    anim.raf = requestAnimationFrame(step);
+  };
+  anim = { btn, raf: requestAnimationFrame(step) };
+}
+function stopAnim() { if (anim) { cancelAnimationFrame(anim.raf); if (anim.btn) anim.btn.textContent = '▶'; anim = null; } }
+function keepPose() {
+  stopAnim(); if (!motionPose) return;
+  const pose = motionPose; clearPreview();
+  apply([{ op: 'drive', values: pose }], 'Keep pose'); openMotion();
+}
+function closeMotion() { stopAnim(); clearPreview(); $('#motion').hidden = true; }
 /* the ⋯ / right-click menu of a feature-list row */
 function rowMenu(o, r) {
   const m = el('div', { class: 'menu', style: `left:${Math.min(r.left, innerWidth - 230)}px;top:${r.bottom + 4}px` }), idx = model.doc.objects.indexOf(o);
@@ -314,6 +371,23 @@ function renderProps() {
       s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', numInput(m.offset || 0, v => mate({ offset: v }))), field('angle °', numInput(m.angle || 0, v => mate({ angle: v }))),
         field('slide x', numInput((m.slide || [0, 0])[0], v => mate({ slide: [v, (m.slide || [0, 0])[1]] }))), field('slide y', numInput((m.slide || [0, 0])[1], v => mate({ slide: [(m.slide || [0, 0])[0], v] }))), field('face to face', fl));
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
+      /* joint: how this mate may move */
+      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
+      jt.onchange = () => apply([{ op: 'joint', id: o.id, joint: jt.value }]);
+      sj.append(field('type', jt));
+      if (m.joint === 'slider') { const ax = el('select', null, ...[['n', 'along the mate normal'], ['u', 'across the face (u)'], ['v', 'across the face (v)']].map(([v, n]) => el('option', { value: v, selected: (m.axis || 'n') === v }, n))); ax.onchange = () => apply([{ op: 'joint', id: o.id, joint: 'slider', axis: ax.value }]); sj.append(field('axis', ax)); }
+      const jinfo = jointsOf(model.doc).find(q => q.id === o.id);
+      if (jinfo) for (const dof of jinfo.dofs) {
+        const lim = (m.limits || {})[dof.key], rng = el('input', { type: 'range', min: dof.min, max: dof.max, step: dof.unit === '°' ? 1 : 0.5, value: dof.value });
+        rng.addEventListener('input', () => previewPose({ [o.id]: { [dof.key]: +rng.value } }));
+        rng.addEventListener('change', () => { clearPreview(); apply([{ op: 'drive', id: o.id, key: dof.key, value: +rng.value }], `${o.name} ${dof.key} ${rng.value}${dof.unit}`); });
+        sj.append(field(`${dof.key} ${dof.unit}`, el('span', { class: 'pin' }, rng, el('span', { class: 'mono' }, fmt(dof.value)))));
+        const lo = textInput(lim ? lim[0] : '', () => {}, { type: 'number', step: 'any', placeholder: String(dof.min) }), hi = textInput(lim ? lim[1] : '', () => {}, { type: 'number', step: 'any', placeholder: String(dof.max) });
+        const setLim = () => { const L = Object.assign({}, m.limits || {}); if (lo.value === '' && hi.value === '') delete L[dof.key]; else L[dof.key] = [lo.value === '' ? dof.min : +lo.value, hi.value === '' ? dof.max : +hi.value]; apply([{ op: 'joint', id: o.id, joint: m.joint, limits: Object.keys(L).length ? L : null }]); };
+        lo.addEventListener('change', setLim); hi.addEventListener('change', setLim);
+        sj.append(field('limits', el('span', { class: 'varadd' }, lo, hi, el('span', { class: 'note' }, dof.unit))));
+      }
+      if (m.joint) sj.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => openMotion(o.id) }, 'Animate…')));
     } else {
       const p = o.pose || { at: [0, 0, 0], rot: [0, 0, 0] }, setPose = (at, rot) => apply([{ op: 'set', id: o.id, at, rot }]);
       ['x', 'y', 'z'].forEach((ax, k) => s2.append(field(ax, numInput(+(p.at[k] - R.originPoint[k]).toFixed(3), v => { const at = p.at.slice(); at[k] = v + R.originPoint[k]; setPose(at, p.rot); }))));
@@ -411,6 +485,7 @@ $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
 $('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
 $('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
 $('#addonBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
@@ -715,7 +790,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -762,11 +837,13 @@ async function snapshotFor(a) {
     if (a.view && dirs[a.view]) { const d = V.norm(dirs[a.view]); views.cam.yaw = Math.atan2(d[0], -d[1]) * 180 / Math.PI; views.cam.pitch = Math.asin(d[2]) * 180 / Math.PI; }
     if (a.hidden_lines !== undefined) views.showHidden = !!a.hidden_lines;
     if (a.dimensions !== undefined) views.showDims = !!a.dimensions;
+    if (a.joints) previewPose(Object.fromEntries(Object.entries(a.joints).map(([id, v]) => [id, typeof v === 'number' ? { [((jointsOf(model.doc).find(j => j.id === id) || { dofs: [{ key: 'angle' }] }).dofs[0].key)]: v } : v])));
     if (a.fit !== false) views.fitAll();
     views.draw(); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
     const c = views.snapshot();
     return { png: await b64(c), width: c.width, height: c.height };
   } finally {
+    if (a.joints && a.keep !== true) clearPreview();
     if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); views.draw(); }
   }
 }

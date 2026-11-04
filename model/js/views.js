@@ -12,27 +12,32 @@ const CUBE_FACE_AXES = { FRONT: { r: [1, 0, 0], u: [0, 0, 1] }, BACK: { r: [-1, 
 const BASIS = { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } };
 const LABEL = { top: 'TOP', front: 'FRONT', right: 'RIGHT', '3d': '3D' };
 
+const IDENT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 function mat4mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
 function viewMat(r, u, f, eye) { return new Float32Array([r[0], u[0], f[0], 0, r[1], u[1], f[1], 0, r[2], u[2], f[2], 0, -V.dot(r, eye), -V.dot(u, eye), -V.dot(f, eye), 1]); }
 function ortho(hw, hh, n, f) { return new Float32Array([1 / hw, 0, 0, 0, 0, 1 / hh, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
 function persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); }
 
+/* uM: per-part transform (motion, exploded view); uClip: section plane (world normal, offset) — inside faces show as a hatched cut */
 const MESH_VS = `#version 300 es
-in vec3 aP; in vec3 aN; uniform mat4 uVP; uniform vec3 uO; out vec3 vN;
-void main(){ vN = aN; gl_Position = uVP * vec4(aP - uO, 1.0); }`;
+in vec3 aP; in vec3 aN; uniform mat4 uVP; uniform mat4 uM; uniform vec3 uO; out vec3 vN; out vec3 vW;
+void main(){ vec4 w = uM * vec4(aP, 1.0); vW = w.xyz; vN = mat3(uM) * aN; gl_Position = uVP * vec4(w.xyz - uO, 1.0); }`;
 const MESH_FS = `#version 300 es
-precision highp float; in vec3 vN; uniform vec3 uC; uniform vec3 uL; uniform float uA; uniform float uFlat; out vec4 o;
-void main(){ vec3 n = normalize(vN); float d = max(dot(n, uL), 0.0); float h = 0.5 + 0.5 * n.z;
+precision highp float; in vec3 vN; in vec3 vW; uniform vec3 uC; uniform vec3 uL; uniform float uA; uniform float uFlat; uniform vec4 uClip; uniform float uClipOn; uniform vec3 uCap; out vec4 o;
+void main(){
+  if (uClipOn > 0.5 && dot(vW, uClip.xyz) > uClip.w) discard;
+  if (uClipOn > 0.5 && !gl_FrontFacing) { float s = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 10.0)); o = vec4(mix(uCap, uCap * 0.62, s), 1.0); return; }
+  vec3 n = normalize(vN); float d = max(dot(n, uL), 0.0); float h = 0.5 + 0.5 * n.z;
   vec3 c = uC * (mix(0.42 + 0.58 * d + 0.12 * h, 0.94 + 0.06 * d, uFlat)); o = vec4(c, uA); }`;
 /* thick lines: each segment is a screen-space quad */
 const LINE_VS = `#version 300 es
-in vec3 aA; in vec3 aB; in float aS; in float aT; uniform mat4 uVP; uniform vec3 uO; uniform vec2 uVp; uniform float uW; out float vD;
-void main(){ vec4 a = uVP * vec4(aA - uO, 1.0), b = uVP * vec4(aB - uO, 1.0); vec2 sa = a.xy / a.w * uVp, sb = b.xy / b.w * uVp;
+in vec3 aA; in vec3 aB; in float aS; in float aT; uniform mat4 uVP; uniform mat4 uM; uniform vec3 uO; uniform vec2 uVp; uniform float uW; out float vD; out vec3 vW;
+void main(){ vec3 wa = (uM * vec4(aA, 1.0)).xyz, wb = (uM * vec4(aB, 1.0)).xyz; vW = aT < 0.5 ? wa : wb; vec4 a = uVP * vec4(wa - uO, 1.0), b = uVP * vec4(wb - uO, 1.0); vec2 sa = a.xy / a.w * uVp, sb = b.xy / b.w * uVp;
   vec2 d = normalize(sb - sa + vec2(1e-6)); vec2 n = vec2(-d.y, d.x); vec4 p = aT < 0.5 ? a : b;
   vec2 off = n * aS * uW / uVp; p.xy += off * p.w; vD = (aT < 0.5 ? 0.0 : length(sb - sa)); gl_Position = p; }`;
 const LINE_FS = `#version 300 es
-precision highp float; in float vD; uniform vec4 uC; uniform float uDash; out vec4 o;
-void main(){ if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard; o = uC; }`;
+precision highp float; in float vD; in vec3 vW; uniform vec4 uC; uniform float uDash; uniform vec4 uClip; uniform float uClipOn; out vec4 o;
+void main(){ if (uClipOn > 0.5 && dot(vW, uClip.xyz) > uClip.w + 1e-3) discard; if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard; o = uC; }`;
 
 export class Views {
   constructor(canvas, overlay, model) {
@@ -43,7 +48,7 @@ export class Views {
     this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
     this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
-    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map();
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map(); this.motion = null; this.section = null;
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
@@ -131,7 +136,20 @@ export class Views {
     const step = () => { const k = Math.min(1, (performance.now() - t0) / dur), e = 1 - Math.pow(1 - k, 3); this.explode = from + (target - from) * e; this.computeOffsets(); this.drawNow(); if (k < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step);
   }
-  offsetO(id) { const off = this.offsets.get(id); return off ? V.sub(this.O, off) : this.O; }
+  offsetO(id) { return this.O; }
+  /* a part's display transform: its motion pose (joints being moved) and its exploded-view offset */
+  bodyMatrix(id) {
+    let M = this.motion && this.motion.get(id); const off = this.offsets.get(id);
+    if (!M && !off) return IDENT;
+    M = M ? Float32Array.from(M) : Float32Array.from(IDENT);
+    if (off) { M[12] += off[0]; M[13] += off[1]; M[14] += off[2]; }
+    return M;
+  }
+  setClip(prog) {
+    const gl = this.gl, S = this.section;
+    gl.uniform1f(prog.loc.uClipOn, S ? 1 : 0);
+    if (S) { gl.uniform4fv(prog.loc.uClip, [S.n[0], S.n[1], S.n[2], S.d]); if (prog.loc.uCap) gl.uniform3fv(prog.loc.uCap, this.dark ? [0.86, 0.44, 0.25] : [0.93, 0.48, 0.27]); }
+  }
   upload(solid, body) {
     const gl = this.gl, mesh = solid.toMesh();
     const mb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
@@ -167,29 +185,31 @@ export class Views {
       gl.clearColor(...C.bg, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const cam = this.vp(pane), ortho = pane.id !== '3d';
       /* faces */
-      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O);
+      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O); this.setClip(mp);
       gl.uniform3fv(mp.loc.uL, V.norm(V.add(V.mul(cam.f, 0.6), [0.3, 0.2, 0.75])));
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
         const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
-        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniform3fv(mp.loc.uO, this.offsetO(id));
+        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniformMatrix4fv(mp.loc.uM, false, this.bodyMatrix(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       /* edges: visible solid, hidden dashed (drawings) */
-      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]);
+      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]); this.setClip(lp);
       const passes = ortho && this.showHidden ? ['hidden', 'visible'] : ['visible'];
       for (const pass of passes) {
         gl.depthFunc(pass === 'hidden' ? gl.GREATER : gl.LEQUAL); gl.depthMask(false);
         gl.uniform4fv(lp.loc.uC, pass === 'hidden' ? C.hidden : C.edge); gl.uniform1f(lp.loc.uDash, pass === 'hidden' ? 9 * dpr : 0); gl.uniform1f(lp.loc.uW, (pass === 'hidden' ? 0.9 : 1.25) * dpr);
         for (const [id, b] of this.buffers) {
-          gl.uniform3fv(lp.loc.uO, this.offsetO(id));
+          const BM = this.bodyMatrix(id); gl.uniformMatrix4fv(lp.loc.uM, false, BM);
           this.drawLines(lp, b.edges);
-          this.drawLines(lp, this.silhouettes(id, b, cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f).buf);
+          let vd = cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f;
+          if (BM !== IDENT) vd = [BM[0] * vd[0] + BM[1] * vd[1] + BM[2] * vd[2], BM[4] * vd[0] + BM[5] * vd[1] + BM[6] * vd[2], BM[8] * vd[0] + BM[9] * vd[1] + BM[10] * vd[2]];   /* view direction in the part's own pose */
+          this.drawLines(lp, this.silhouettes(id, b, vd).buf);
         }
       }
-      gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniform3fv(lp.loc.uO, this.O);
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniformMatrix4fv(lp.loc.uM, false, IDENT);
       /* ghost of a selected tool / consumed object: drawn through everything */
       if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
     }
@@ -212,9 +232,10 @@ export class Views {
       const axLen = cam.persp ? this.cam.dist * 0.06 : 16 / this.ortho.s;
       for (const [x, y, z, col] of ax) { const p = this.project(pane, [x * axLen, y * axLen, z * axLen], cam); if (Math.hypot(p.x - o.x, p.y - o.y) < 2) continue; c.beginPath(); c.moveTo(o.x, o.y); c.lineTo(p.x, p.y); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
       c.beginPath(); c.arc(o.x, o.y, 3, 0, Math.PI * 2); c.fillStyle = C.ink; c.fill();
-      if (pane.id !== '3d' && this.showDims && !this.explode) this.drawDims(c, pane, cam, R, O);
-      if (this.connectorsFor && !this.explode) this.drawConnectors(c, pane, cam);
-      if (this.showCoG && !this.explode) this.drawCoG(c, pane, cam);
+      const still = !this.explode && !this.motion;
+      if (pane.id !== '3d' && this.showDims && still) this.drawDims(c, pane, cam, R, O);
+      if (this.connectorsFor && still) this.drawConnectors(c, pane, cam);
+      if (this.showCoG && still) this.drawCoG(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -387,9 +408,11 @@ export class Views {
   pick(pane, px, py) {
     const r = this.ray(pane, px, py); let best = null;
     for (const [id, b] of this.buffers) {
-      const P = b.tris.positions, O = this.offsetO(id);
+      const P = b.tris.positions, O = this.O, BM = this.bodyMatrix(id), moved = BM !== IDENT;
+      const X = (k) => (moved ? [BM[0] * P[k] + BM[4] * P[k + 1] + BM[8] * P[k + 2] + BM[12] - O[0], BM[1] * P[k] + BM[5] * P[k + 1] + BM[9] * P[k + 2] + BM[13] - O[1], BM[2] * P[k] + BM[6] * P[k + 1] + BM[10] * P[k + 2] + BM[14] - O[2]] : [P[k] - O[0], P[k + 1] - O[1], P[k + 2] - O[2]]);
       for (let i = 0; i < P.length; i += 9) {
-        const a = [P[i] - O[0], P[i + 1] - O[1], P[i + 2] - O[2]], bb = [P[i + 3] - O[0], P[i + 4] - O[1], P[i + 5] - O[2]], cc = [P[i + 6] - O[0], P[i + 7] - O[1], P[i + 8] - O[2]];
+        const a = X(i), bb = X(i + 3), cc = X(i + 6);
+        if (this.section) { const S = this.section, cen = [(a[0] + bb[0] + cc[0]) / 3 + O[0], (a[1] + bb[1] + cc[1]) / 3 + O[1], (a[2] + bb[2] + cc[2]) / 3 + O[2]]; if (V.dot(cen, S.n) > S.d) continue; }
         const t = rayTri(r.o, r.d, a, bb, cc);
         if (t != null && (!best || t < best.t)) { const poly = b.tris.polysOfTri[i / 9]; best = { t, id, point: V.add(V.add(r.o, V.mul(r.d, t)), O), normal: poly.plane.n, sid: poly.sid }; }
       }

@@ -98,24 +98,27 @@ function meshPlacement(A, B, mate) {
   if (ga.internal && gb.internal) throw new Error('two ring gears cannot mesh');
   if (Math.abs(Math.abs(helA) - Math.abs(helB)) > 1e-9 || (helA && (oneRing ? Math.sign(helA) !== Math.sign(helB) : Math.sign(helA) === Math.sign(helB))) || (A.style === 'herringbone') !== (B.style === 'herringbone'))
     throw new Error(oneRing ? 'a ring and its pinion need the same helix angle and hand' : 'helical pairs need equal helix angles of opposite hand (one +, one −)');
-  const phi = (+mate.around || 0) * DEG, za = ga.z, zb = gb.z;
+  /* around = world direction of this gear from the target; spin = the target's own (continuous) rotation.
+     phi is the direction in the target's turned frame; d is how far the target's nearest tooth is from the
+     line of centres — kept continuous in spin, so the driven gear turns smoothly instead of snapping tooth to tooth */
+  const around = (+mate.around || 0) * DEG, spin = (+mate.spin || 0) * DEG, phi = around - spin, za = ga.z, zb = gb.z;
   let a, beta;
   const nearest = (ang, z) => ang - (2 * Math.PI / z) * Math.round(ang / (2 * Math.PI / z));
   if (!oneRing) {
     a = ga.r + gb.r + (ga.x + gb.x) * ga.m;
-    const d = nearest(phi, za);
+    const d = nearest(around, za) - spin;
     beta = phi + Math.PI + Math.PI / zb + d * za / zb;
   } else if (ga.internal) {            /* ring (target) with a pinion inside */
     a = ga.r - gb.r;
-    const d = nearest(phi, za);
+    const d = nearest(around, za) - spin;
     beta = phi + Math.PI / zb - d * za / zb;
   } else {                              /* this gear is the ring around the target pinion */
     a = gb.r - ga.r;
-    const d = nearest(phi + Math.PI, za);
+    const d = nearest(around + Math.PI, za) - spin;
     beta = phi + Math.PI + Math.PI / zb - d * za / zb;
   }
   beta += (+mate.phase || 0) * DEG;
-  return { a, phi, beta };
+  return { a, phi, beta, spinSelf: (spin + beta) / DEG };
 }
 
 /* ---------- advisor: purpose + process → module, teeth, form, tolerances ---------- */
@@ -274,18 +277,25 @@ export default {
   mates: {
     gear: {
       doc: 'Keeps this gear in mesh with the target gear: centre distance and tooth phase follow both gears\' live parameters. Fields: around (direction from the target, degrees), axial (shift along the axis, mm), phase (extra spin, degrees).',
-      solve({ self, target, mate, api, targetWorld }) {
+      solve({ self, target, mate, api, targetWorld, targetSpin }) {
         if (!target || target.type !== 'gear' || self.type !== 'gear') throw new Error('a gear mate joins two gears');
-        /* "around" is a world direction: take out the target's own spin (a meshed gear has turned to engage) */
+        /* "around" is a world direction: take out the target's own spin (a meshed gear has turned to engage, a driven one turns) */
         let spin = 0;
-        if (targetWorld && api) {
+        if (targetSpin != null) spin = targetSpin;
+        else if (targetWorld && api) {
           const V = api.V, xl = V.norm([targetWorld[0], targetWorld[1], targetWorld[2]]), zl = V.norm([targetWorld[8], targetWorld[9], targetWorld[10]]);
           let ref = V.sub([1, 0, 0], V.mul(zl, zl[0])); if (V.len(ref) < 1e-6) ref = V.sub([0, 1, 0], V.mul(zl, zl[1])); ref = V.norm(ref);
           spin = Math.atan2(V.dot(V.cross(ref, xl), zl), V.dot(ref, xl)) / DEG;
+          /* a revolute target keeps counting past ±180°: its mate angle turns it about its own mate face's normal,
+             which points along +z or −z of the gear (bottom face → the world turn is −angle) */
+          if (target.mate && !target.mate.kind) {
+            const nb = target.mate.b === 'bottom' ? -1 : target.mate.b === 'top' || target.mate.b === 'center' ? 1 : 0;
+            if (nb) { const th = nb * (+target.mate.angle || 0); let c = spin - th; c -= 360 * Math.round(c / 360); spin = th + c; }
+          }
         }
-        const { a, phi, beta } = meshPlacement(target.params, self.params, Object.assign({}, mate, { around: (+mate.around || 0) - spin }));
+        const { a, phi, beta, spinSelf } = meshPlacement(target.params, self.params, Object.assign({}, mate, { spin }));
         /* expressed as an ordinary mate between the two bottom faces (frame: u = +x, v = −y, normal −z) */
-        return { a: 'bottom', b: 'bottom', flip: false, offset: -(+mate.axial || 0), slide: [a * Math.cos(phi), -a * Math.sin(phi)], angle: -beta / DEG };
+        return { a: 'bottom', b: 'bottom', flip: false, offset: -(+mate.axial || 0), slide: [a * Math.cos(phi), -a * Math.sin(phi)], angle: -beta / DEG, _spin: spinSelf };
       }
     }
   },
