@@ -29,7 +29,7 @@ function bundleModule([name, dir]) {
   src = src.replace(/^export \{([^}]+)\};?\s*$/gm, (_, list) => { list.split(',').map(x => x.trim()).filter(Boolean).forEach(n => { const m = n.split(/\s+as\s+/); names.add(m.length === 2 ? `${m[1]}: ${m[0]}` : n); }); return ''; });
   src = src.replace(/^export (const|let|function|class) (\w+)/gm, (_, kw, n) => { names.add(n); return `${kw} ${n}`; });
   src = src.replace(/^import \* as (\w+) from '\.\/(\w+)\.js';/gm, (_, ns, m) => `const ${ns} = __sf3.${m};`);
-  src = src.replace(/^import \{([^}]+)\} from '\.\/(\w+)\.js';/gm, (_, list, m) => `const {${list}} = __sf3.${m};`);
+  src = src.replace(/^import \{([^}]+)\} from '\.\/(\w+)\.js';/gm, (_, list, m) => `const {${list.replace(/(\w+)\s+as\s+(\w+)/g, '$1: $2')}} = __sf3.${m};`);
   if (/^\s*(import|export)\b/m.test(src)) throw new Error(name + '.js: an import/export form the bundler does not handle');
   return `__sf3.${name} = (() => {\n${src}\nreturn { ${[...names].join(', ')} };\n})();\n`;
 }

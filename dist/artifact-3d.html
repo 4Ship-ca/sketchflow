@@ -874,7 +874,7 @@ __sf3.model = (() => {
    evaluated in list order — editable at any time. Edge treatments (fillet / weld / chamfer) are objects too.
    One API — apply(ops) — serves the UI and the MCP bridge, so an LLM builds with the same JSON a click produces. */
 const K = __sf3.kernel;
-const { solveSketch, KINDS as SKETCH_KINDS, measure as measureConstraint } = __sf3.sketch;
+const { solveSketch, KINDS: SKETCH_KINDS, measure: measureConstraint } = __sf3.sketch;
 const { V, M4 } = K;
 
 const TYPES = {
@@ -3539,7 +3539,7 @@ const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, mas
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
 const { drawingSVG, drawingDXF } = __sf3.drawing;
-const { autoConstraints, KINDS as SKETCH_KINDS } = __sf3.sketch;
+const { autoConstraints, KINDS: SKETCH_KINDS } = __sf3.sketch;
 const { interference, collisions, restBaseline } = __sf3.collide;
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
