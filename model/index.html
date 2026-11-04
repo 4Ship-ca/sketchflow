@@ -59,6 +59,10 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 .btns{display:flex;flex-wrap:wrap;gap:6px}
 .btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:6px 10px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
 .btn:hover{border-color:var(--accent)} .btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .btn.danger:hover{border-color:var(--warn);color:var(--warn)}
+.mono{font:500 11.5px/1.35 var(--f-mono);color:var(--ink)} .ok{color:var(--ok);font-weight:600} .warnline{color:var(--warn);font-size:12px;font-weight:600;line-height:1.4}
+.why{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:4px;font-size:11.5px;line-height:1.4;color:var(--ink-2)} .subsec{display:flex;flex-direction:column;gap:6px;padding:6px 0 2px 8px;border-left:2px solid var(--line)}
+.menu .mh{font:700 10px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding:9px 12px 4px}
+.f a{color:var(--accent)}
 .empty{padding:16px;color:var(--ink-3);font-size:12.5px;line-height:1.5}
 #dimEd{position:absolute;z-index:8;width:90px;font:600 13px var(--f-mono);border:2px solid var(--accent);border-radius:8px;padding:4px 7px;background:var(--panel);color:var(--ink)}
 #toasts{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
@@ -95,10 +99,11 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
       <button class="tb" data-tool="bool-intersect" title="Intersect: target, then tool" data-icon="intersect">Intersect</button>
     </div>
     <div class="grp"><span class="lbl">Edge</span>
-      <button class="tb" data-tool="edge-fillet" title="Fillet an edge (rounds outer edges, fills inner corners)" data-icon="fillet">Fillet</button>
-      <button class="tb" data-tool="edge-weld" title="Weld bead in an inside corner" data-icon="weld">Weld</button>
+      <button class="tb" data-tool="edge-fillet" title="Fillet an edge: rounds outer edges, fills inner corners; on the seam between two parts it merges them into one" data-icon="fillet">Fillet</button>
+      <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
       <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
     </div>
+    <div class="grp"><button class="tb" id="addonBtn" title="Add-ons: gears and anything side-built" data-icon="addon">Add-ons</button></div>
     <div class="grp"><button class="tb" data-tool="measure" title="Measure / add a dimension between connectors (G)" data-icon="dim">Measure</button></div>
     <div class="grp">
       <button class="tb" id="undo" title="Undo (Ctrl Z)" data-icon="undo"></button>
@@ -109,6 +114,8 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
       <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
       <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
       <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="explodeBtn" title="Pull apart: exploded view of the parts (E)" data-icon="explode"></button>
+      <button class="tb" id="cogBtn" title="Show the centre of gravity (mass and balance are in Properties)" data-icon="cog"></button>
       <button class="tb" id="theme" title="Light / dark" data-icon="sun"></button>
     </div>
     <div class="grp">

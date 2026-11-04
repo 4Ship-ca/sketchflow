@@ -89,16 +89,22 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_describe` | parameters, positions from the origin, mates, connector names (with positions and normals on request), volumes, warnings |
 | `model_view` | a picture of the four views or one view, from any direction |
 | `model_session` | undo, redo, new, demo, load a `.sf3d.json`, select, say |
-| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json` |
+| `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
+| `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
+| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV |
 
 **In the browser:**
 - Add a shape with the toolbar (B box, W wedge, C cylinder, K cone, O sphere).
 - *Profile* (S): click points in FRONT, TOP or RIGHT, close the shape, then type a length, twist or end scale and choose Extrude, Revolve or Loft. Loft asks you to sketch the end profile.
 - *Mate* (M): click the part, then its connector, then the target connector.
 - *Union / Subtract / Intersect*: click the target, then the tool.
-- *Fillet / Weld / Chamfer*: set the size and click near an edge. Outer edges are trimmed and inner corners are filled; round edges get the treatment all the way round.
+- *Fillet / Chamfer*: set the size and click near an edge. Outer edges are trimmed and inner corners are filled; round edges get the treatment all the way round. On the seam between two parts, a fillet merges them into one piece.
+- *Weld*: click where two separate parts meet. The bead joins them and they stay separate parts (**E** pulls the assembly apart to show it). Mixing materials that can't be welded gets a warning.
+- *Pattern* (**P**, or Properties → Pattern…): a row, grid, circle or mirror of the selected part or feature. Copies follow the original.
+- *Material & mass* in Properties: pick a material, or set density, fill %, part no., supplier and notes. With nothing selected you see the total mass, the centre of gravity (the toolbar button marks it in the views), whether the model stands, and a parts list button.
+- *Add-ons* menu: gears (single, pair, train, planetary, and an advisor that picks the right gear for the job and the process). Drop your own into `model/addons/`: see [model/ADDONS.md](model/ADDONS.md).
 - Click any orange dimension in the 2D views to change it.
-- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors.
+- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart.
 
 ## 2 · Or just draw
 
@@ -257,6 +263,6 @@ These build on the same joint model:
 ## Tests
 
 ```bash
-node model/test/kernel.test.mjs && node model/test/model.test.mjs   # 3D kernel + parametric model
+npm test                                                            # 3D kernel, model, gears, add-ons
 node build.mjs                                                      # rebuild dist/
 ```

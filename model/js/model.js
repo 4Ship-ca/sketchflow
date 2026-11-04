@@ -17,8 +17,31 @@ export const TYPES = {
   loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0 } },
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
-  edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } }
+  edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
+  /* array of other features: linear (1 or 2 directions), circular (about an axis), mirror (across a plane) */
+  pattern: { label: 'Pattern', params: { kind: 'linear', count: 3, spacing: 20, direction: [1, 0, 0], count2: 1, spacing2: 20, direction2: [0, 1, 0], angle: 360, axis: [0, 0, 1], center: [0, 0, 0], about: null, plane: 'yz', offset: 0 } },
+  /* weld bead joining two separate parts; the parts stay separate components (an assembly), unlike a fillet, which merges */
+  weld: { label: 'Weld', params: { size: 4, profile: 'flat', all_around: false } }
 };
+/* materials: density in g/cm³ (= mg/mm³), a display colour, and a family */
+export const MATERIALS = {
+  pla: { name: 'PLA', density: 1.24, color: '#e9e4d8', family: 'plastic' }, petg: { name: 'PETG', density: 1.27, color: '#cfe3ea', family: 'plastic' },
+  abs: { name: 'ABS', density: 1.04, color: '#e8e2dc', family: 'plastic' }, asa: { name: 'ASA', density: 1.07, color: '#e2ddd5', family: 'plastic' },
+  tpu: { name: 'TPU', density: 1.21, color: '#5b5f66', family: 'plastic' }, nylon: { name: 'Nylon PA12', density: 1.01, color: '#efeee9', family: 'plastic' },
+  pa_cf: { name: 'Nylon CF', density: 1.15, color: '#3b3e44', family: 'plastic' }, pom: { name: 'POM (acetal)', density: 1.41, color: '#f2f1ec', family: 'plastic' },
+  acrylic: { name: 'Acrylic (PMMA)', density: 1.18, color: '#d8eef2', family: 'plastic' }, polycarbonate: { name: 'Polycarbonate', density: 1.20, color: '#dfe8ec', family: 'plastic' },
+  resin: { name: 'Resin (SLA)', density: 1.18, color: '#c9cfd8', family: 'plastic' }, tough_resin: { name: 'Tough resin', density: 1.15, color: '#b9c3cc', family: 'plastic' },
+  aluminium: { name: 'Aluminium 6061', density: 2.70, color: '#c4c9cf', family: 'metal' }, steel: { name: 'Steel (mild)', density: 7.85, color: '#9aa1a8', family: 'metal' },
+  stainless: { name: 'Stainless 304', density: 8.00, color: '#b4b9bd', family: 'metal' }, cast_iron: { name: 'Cast iron', density: 7.20, color: '#6f7377', family: 'metal' },
+  brass: { name: 'Brass', density: 8.50, color: '#c9a94f', family: 'metal' }, bronze: { name: 'Bronze', density: 8.80, color: '#b0814a', family: 'metal' },
+  copper: { name: 'Copper', density: 8.96, color: '#c27a4e', family: 'metal' }, titanium: { name: 'Titanium Ti-6Al-4V', density: 4.43, color: '#a4a29d', family: 'metal' },
+  oak: { name: 'Oak', density: 0.75, color: '#b8895a', family: 'wood' }, pine: { name: 'Pine', density: 0.50, color: '#d9b77e', family: 'wood' },
+  plywood: { name: 'Plywood (birch)', density: 0.68, color: '#d6b98a', family: 'wood' }, mdf: { name: 'MDF', density: 0.75, color: '#b49a78', family: 'wood' },
+  carbon_fibre: { name: 'Carbon fibre (CFRP)', density: 1.60, color: '#2d2f33', family: 'composite' }, concrete: { name: 'Concrete', density: 2.40, color: '#a9a79f', family: 'other' },
+  glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
+};
+/* object types that are not shapes of their own */
+const META = new Set(['edge', 'pattern', 'weld']);
 export const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
@@ -60,8 +83,8 @@ function connectorsOf(o, solid) {
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
       conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
     default: {
-      /* features: start/end faces + bounding-box faces & centre */
-      const c = [];
+      /* features: start/end faces + bounding-box faces & centre (add-on shapes add their own connectors first) */
+      const T = TYPES[o.type], c = T && T.def && T.def.connectors ? T.def.connectors(p, addonApi).slice() : [];
       if (o.type === 'extrude' || o.type === 'loft') {
         const cen = centroid2(p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
         const end = o.type === 'extrude' ? V.add([cen[0], cen[1], 0], V.mul(dir, L / (dir[2] || 1))) : [cen[0], cen[1], L];
@@ -69,7 +92,7 @@ function connectorsOf(o, solid) {
       }
       if (solid && !solid.isEmpty()) {
         const b = solid.bbox(), m = V.lerp(b.min, b.max, 0.5);
-        c.push(conn('center', m, [0, 0, 1], [1, 0, 0], 'center'));
+        if (!c.find(x => x.name === 'center')) c.push(conn('center', m, [0, 0, 1], [1, 0, 0], 'center'));
         for (const [nm, k, s] of [['+x', 0, 1], ['-x', 0, -1], ['+y', 1, 1], ['-y', 1, -1], ['+z', 2, 1], ['-z', 2, -1]]) {
           const o2 = m.slice(); o2[k] = s > 0 ? b.max[k] : b.min[k]; const n = [0, 0, 0]; n[k] = s;
           c.push(conn('bbox' + nm, o2, n, k === 2 ? [1, 0, 0] : [0, 0, 1]));
@@ -84,6 +107,40 @@ function connectorsOf(o, solid) {
 const centroid2 = (pts) => { let x = 0, y = 0; for (const p of pts) { x += p[0]; y += p[1]; } return [x / pts.length, y / pts.length]; };
 const ORIGIN_CONNS = [conn('origin', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center'), conn('xy', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('xz', [0, 0, 0], [0, -1, 0], [1, 0, 0]), conn('yz', [0, 0, 0], [1, 0, 0], [0, 1, 0])];
 const frameOf = (c) => M4.frame(c.o, c.u, c.n);
+
+/* ---------- add-ons ----------
+   An add-on is a plain object (no imports needed): { id, name, version, description,
+     types:   { typeName: { label, params, doc, build(p, api) → Solid, connectors?(p, api), dims?(p, api), info?(p, api) } },
+     mates:   { kind: { doc, solve({ self, target, mate, api }) → { a, b, flip, offset, angle, slide } } },
+     actions: { name: { doc, args: { key: { default, doc, options? } }, run(args, ctx) → { ops?, info? } } } }
+   Its shapes become first-class objects (mates, booleans, edges, patterns, dimensions, export, MCP) — see model/ADDONS.md. */
+export const ADDONS = new Map();
+const ADDON_MATES = new Map();
+export const addonApi = {
+  K, V, M4, SEG: 48,
+  conn: (name, o, n, u, kind) => conn(name, o, n, u, kind),
+  dim: (param, a, b, view, kind) => ({ param, a, b, view, kind: kind || 'linear' }),
+  num: (v, d) => num(v, d)
+};
+export function registerAddon(a) {
+  if (!a || typeof a !== 'object' || !a.id) throw new Error('An add-on needs an id');
+  for (const [t, def] of Object.entries(a.types || {})) {
+    if (TYPES[t] && TYPES[t].addon !== a.id) throw new Error(`Add-on ${a.id}: type “${t}” already exists`);
+    if (typeof def.build !== 'function') throw new Error(`Add-on ${a.id}: type “${t}” needs build(params, api)`);
+    TYPES[t] = { label: def.label || t, params: def.params || {}, addon: a.id, def };
+  }
+  for (const [k, def] of Object.entries(a.mates || {})) { if (typeof def.solve !== 'function') throw new Error(`Add-on ${a.id}: mate “${k}” needs solve()`); ADDON_MATES.set(k, Object.assign({ addon: a.id }, def)); }
+  ADDONS.set(a.id, a); BODY_CACHE.clear(); LOCAL_CACHE.clear(); localCache.clear();
+  return a;
+}
+export function listAddons() {
+  return [...ADDONS.values()].map(a => ({
+    id: a.id, name: a.name || a.id, version: a.version || '0', description: a.description || '',
+    types: Object.fromEntries(Object.entries(a.types || {}).map(([t, d]) => [t, { label: d.label || t, params: d.params || {}, doc: d.doc || '' }])),
+    mates: Object.fromEntries(Object.entries(a.mates || {}).map(([k, d]) => [k, d.doc || ''])),
+    actions: Object.fromEntries(Object.entries(a.actions || {}).map(([k, d]) => [k, { doc: d.doc || '', args: d.args || {}, query: !!d.query }]))
+  }));
+}
 
 /* ---------- local geometry ---------- */
 const SEG = 48;
@@ -101,6 +158,7 @@ function buildLocal(o) {
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
   }
+  const T = TYPES[o.type]; if (T && T.def) return T.def.build(p, addonApi);
   throw new Error('Unknown shape ' + o.type);
 }
 const localCache = new Map();
@@ -121,7 +179,7 @@ export function dimsOf(o) {
     case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
     case 'extrude': { const c = centroid2(p.profile), dir = V.norm(p.direction || [0, 0, 1]); return [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')]; }
     case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto')]; }
-    default: return [];
+    default: { const T = TYPES[o.type]; if (T && T.def && T.def.dims) { try { return T.def.dims(p, addonApi) || []; } catch (e) { return []; } } return []; }
   }
 }
 
@@ -142,15 +200,15 @@ function cachedLocal(o) {
   return s;
 }
 export function evaluate(doc) {
-  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set() };
+  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map() };
   const byId = new Map(doc.objects.map(o => [o.id, o]));
-  const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => o.type !== 'edge') || {}).id;
+  const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
   R.ground = ground;
   /* local solids + connectors */
   for (const o of doc.objects) {
-    if (o.type === 'edge') continue;
+    if (META.has(o.type)) continue;
     try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
-    catch (e) { R.errors.set(o.id, e.message); R.conns.set(o.id, connectorsOf(o, null)); }
+    catch (e) { R.errors.set(o.id, e.message); let c = []; try { c = connectorsOf(o, null); } catch (e2) { /* an add-on shape with bad parameters has no connectors */ } R.conns.set(o.id, c); }
   }
   /* world transforms: mates resolved from the ground outward */
   const state = new Map();
@@ -160,11 +218,17 @@ export function evaluate(doc) {
     const o = byId.get(id); if (!o) return M4.ident();
     if (state.get(id) === 'busy') { R.warnings.push({ kind: 'cycle', id, text: `${o.name}: its mates form a loop` }); return poseM(o); }
     state.set(id, 'busy');
-    let M = poseM(o);
-    const m = o.mate;
+    let M = poseM(o), m = o.mate;
     if (m && id !== ground) {
       const target = m.to === 'origin' ? null : byId.get(m.to);
-      if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
+      /* add-on mate kinds (e.g. a gear mesh) work out ordinary mate values from both objects' live parameters */
+      if (m.kind && target) {
+        const mk = ADDON_MATES.get(m.kind);
+        if (!mk) { R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate kind “${m.kind}” needs its add-on` }); m = null; }
+        else { try { m = Object.assign({}, m, mk.solve({ self: o, target, mate: m, api: addonApi, targetWorld: worldOf(m.to) })); } catch (e) { R.warnings.push({ kind: 'error', id, text: `${o.name}: ${e.message}` }); m = null; } }
+      }
+      if (!m) { /* keep its own pose */ }
+      else if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
       else {
         const tConns = m.to === 'origin' ? ORIGIN_CONNS : (R.conns.get(m.to) || []), tc = tConns.find(c => c.name === m.a), sc = (R.conns.get(id) || []).find(c => c.name === m.b);
         if (!tc || !sc) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate connector “${!tc ? m.a : m.b}” no longer exists` });
@@ -180,10 +244,51 @@ export function evaluate(doc) {
     }
     state.set(id, 'done'); R.world.set(id, M); return M;
   };
-  for (const o of doc.objects) if (o.type !== 'edge') worldOf(o.id);
-  /* floating = not grounded, not fixed, and no mate chain to the ground / origin */
-  const grounded = (id, seen = new Set()) => { if (id === ground) return true; const o = byId.get(id); if (!o || seen.has(id)) return false; seen.add(id); if (o.fixed) return true; if (!o.mate) return false; return o.mate.to === 'origin' || grounded(o.mate.to, seen); };
-  for (const o of doc.objects) if (o.type !== 'edge' && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
+  for (const o of doc.objects) if (!META.has(o.type)) worldOf(o.id);
+  /* ephemeral world origin: a connector the user (or the first object) chose; display coordinates are relative to it */
+  const og = doc.origin && byId.get(doc.origin.obj) ? doc.origin : (ground ? { obj: ground, conn: 'bottom' } : null);
+  if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
+  R.originRef = og;
+  /* floating = not grounded, not fixed, no mate chain to the ground / origin, and not welded to something that is */
+  const welds = doc.objects.filter(o => o.type === 'weld' && Array.isArray(o.joins));
+  const grounded = (id, seen = new Set()) => {
+    if (id === ground) return true; const o = byId.get(id); if (!o || seen.has(id)) return false; seen.add(id);
+    if (o.fixed) return true;
+    if (o.mate && (o.mate.to === 'origin' || grounded(o.mate.to, seen))) return true;
+    for (const w of welds) { const k = w.joins.indexOf(id); if (k >= 0 && grounded(w.joins[1 - k], seen)) return true; }
+    return false;
+  };
+  for (const o of doc.objects) if (!META.has(o.type) && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
+  /* patterns: virtual copies of their source features (live: they follow the source's parameters) */
+  const objs = doc.objects.slice();
+  for (const P of doc.objects.filter(o => o.type === 'pattern')) {
+    const srcs = (P.of || []).map(id => byId.get(id)).filter(Boolean);
+    if (!srcs.length) { R.warnings.push({ kind: 'orphan', id: P.id, text: `${P.name}: nothing to repeat (its source was deleted)` }); continue; }
+    let Ts; try { Ts = patternTransforms(P, R, byId); } catch (e) { R.warnings.push({ kind: 'error', id: P.id, text: `${P.name}: ${e.message}` }); continue; }
+    const add = [];
+    Ts.forEach((Tk, k) => {
+      const map = new Map(srcs.map(src => [src.id, `${src.id}@${P.id}.${k + 1}`]));
+      for (const src of srcs) {
+        const vid = map.get(src.id), v = Object.assign({}, src, { id: vid, name: `${src.name} ·${k + 2}`, _virtual: P.id, _source: src.id, mate: null });
+        delete v._resolved;
+        if (src.type === 'edge') {
+          if (!src.edge) continue;
+          const own = map.has(src.into), Wb = R.world.get(src.into);
+          const mm = own || !Wb ? src.edge.m : M4.point(M4.inv(Wb), M4.point(Tk, M4.point(Wb, src.edge.m)));
+          const dd = own || !Wb || !src.edge.d ? src.edge.d : M4.dir(M4.inv(Wb), M4.dir(Tk, M4.dir(Wb, src.edge.d)));
+          v.into = own ? map.get(src.into) : src.into;
+          v.edge = Object.assign({}, src.edge, { m: mm, d: dd, faces: (src.edge.faces || []).map(f => { const i = f.indexOf(':'), pre = f.slice(0, i); return map.has(pre) ? map.get(pre) + f.slice(i) : f; }) });
+        } else if (!META.has(src.type)) {
+          if (!R.world.has(src.id)) continue;
+          if (map.has(src.into)) v.into = map.get(src.into);
+          R.world.set(vid, M4.mul(Tk, R.world.get(src.id))); if (R.local.has(src.id)) R.local.set(vid, R.local.get(src.id)); R.conns.set(vid, R.conns.get(src.id) || []);
+        } else continue;
+        add.push(v); byId.set(vid, v); R.virtual.set(vid, { pattern: P.id, source: src.id, index: k + 1 });
+      }
+    });
+    objs.splice(objs.indexOf(P) + 1, 0, ...add);
+  }
+  const intoOf = new Map(); for (const t of objs) if (t.into) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
   const bodyOf = (id, chain = new Set()) => {
@@ -191,11 +296,11 @@ export function evaluate(doc) {
     const o = byId.get(id); if (!o || chain.has(id)) return K.Solid.empty();
     chain.add(id);
     let s = R.local.has(id) ? R.local.get(id).transform(R.world.get(id)).tag(id) : K.Solid.empty();
-    for (const t of doc.objects) {
-      if (t.into !== id) continue;
+    for (const t of intoOf.get(id) || []) {
       R.consumed.add(t.id);
       try {
         if (t.type === 'edge') { s = applyEdge(s, t, o, R); continue; }
+        if (META.has(t.type)) continue;
         const tool = bodyOf(t.id, chain);
         const op = t.op || 'subtract';
         s = op === 'add' || op === 'union' ? s.union(tool) : op === 'intersect' ? s.intersect(tool) : s.subtract(tool);
@@ -207,13 +312,13 @@ export function evaluate(doc) {
   for (const o of doc.objects) {
     if (o.into && !byId.has(o.into)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: its boolean target was deleted` });
   }
-  /* body cache: a body is rebuilt only when something it is made of changed (shape, size, place, booleans, edges) */
+  /* body cache: a body is rebuilt only when something it is made of changed (shape, size, place, booleans, edges, patterns) */
   const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
   const sig = (id, seen = new Set()) => {
     const o = byId.get(id); if (!o || seen.has(id)) return null; seen.add(id);
-    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, doc.objects.filter(t => t.into === id).map(t => sig(t.id, seen))];
+    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, (intoOf.get(id) || []).map(t => [t.id, sig(t.id, seen)])];
   };
-  const subtree = (id, out = []) => { for (const t of doc.objects) if (t.into === id && !out.includes(t.id)) { out.push(t.id); subtree(t.id, out); } return out; };
+  const subtree = (id, out = []) => { for (const t of intoOf.get(id) || []) if (!out.includes(t.id)) { out.push(t.id); subtree(t.id, out); } return out; };
   const cachedBody = (id) => {
     const key = JSON.stringify(sig(id)), hit = BODY_CACHE.get(id + '|' + key);
     if (hit) {
@@ -224,22 +329,126 @@ export function evaluate(doc) {
     }
     const w0 = R.warnings.length, e0 = new Set(R.errors.keys()), solid = bodyOf(id), ids = subtree(id);
     const entry = { solid, consumed: ids, warnings: R.warnings.slice(w0), errors: [...R.errors].filter(([k]) => !e0.has(k)), resolved: ids.map(k => [k, byId.get(k)._resolved]).filter(([, v]) => v) };
-    BODY_CACHE.set(id + '|' + key, entry); if (BODY_CACHE.size > 120) BODY_CACHE.delete(BODY_CACHE.keys().next().value);
+    BODY_CACHE.set(id + '|' + key, entry); if (BODY_CACHE.size > 160) BODY_CACHE.delete(BODY_CACHE.keys().next().value);
     return solid;
   };
-  for (const o of doc.objects) {
-    if (o.type === 'edge' || (o.into && byId.has(o.into))) continue;
+  for (const o of objs) {
+    if (META.has(o.type) || (o.into && byId.has(o.into))) continue;
     const s = cachedBody(o.id);
     if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
-    R.bodies.push({ id: o.id, solid: s, color: o.color, name: o.name, hidden: !!o.hidden });
+    const mat = MATERIALS[(o.meta || {}).material] || MATERIALS[doc.material];
+    R.bodies.push({ id: o.id, solid: s, color: o.color || (mat ? mat.color : null), name: o.name, hidden: !!o.hidden, virtual: o._virtual || null });
     R.roots.push(o.id);
   }
-  /* ephemeral world origin: a connector the user (or the first object) chose; display coordinates are relative to it */
-  const og = doc.origin && byId.get(doc.origin.obj) ? doc.origin : (ground ? { obj: ground, conn: 'bottom' } : null);
-  if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
-  R.originRef = og;
+  /* welds: their own bodies, between two parts that stay separate */
+  for (const w of welds) {
+    try {
+      const out = weldBody(w, R, byId);
+      if (out.warning) R.warnings.push({ kind: 'weld', id: w.id, text: `${w.name}: ${out.warning}` });
+      const matOf = (id) => { const x = byId.get(rootIdOf(id, byId)); return (x && x.meta && x.meta.material) || doc.material || null; };
+      const adv = weldAdvice(matOf(w.joins[0]), matOf(w.joins[1])); if (adv) R.warnings.push({ kind: 'weld-material', id: w.id, text: `${w.name}: ${adv}` });
+      if (out.solid) R.bodies.push({ id: w.id, solid: out.solid, color: w.color || '#a8824f', name: w.name, hidden: !!w.hidden, weld: true });
+      w._resolved = out.resolved || null;
+    } catch (e) { R.warnings.push({ kind: 'error', id: w.id, text: `${w.name}: ${e.message}` }); }
+  }
   for (const [id, msg] of R.errors) { const o = byId.get(id); R.warnings.push({ kind: 'error', id, text: `${o ? o.name : id}: ${msg}` }); }
   return R;
+}
+/* ---------- patterns ---------- */
+function connWorld(R, ref) {
+  if (!ref || !ref.obj) return null;
+  if (ref.obj === 'origin') { const c = ORIGIN_CONNS.find(x => x.name === (ref.conn || 'origin')); return c ? { o: R.originPoint, n: c.n } : null; }
+  const c = (R.conns.get(ref.obj) || []).find(x => x.name === (ref.conn || 'center')), M = R.world.get(ref.obj);
+  if (!c || !M) throw new Error(`no connector “${ref.conn}” on ${ref.obj}`);
+  return { o: M4.point(M, c.o), n: V.norm(M4.dir(M, c.n)) };
+}
+/* world transforms of the copies (the original is not included) */
+function patternTransforms(P, R) {
+  const p = P.params || {}, out = [];
+  if (p.kind === 'circular') {
+    const ref = connWorld(R, p.about), axis = V.norm(ref ? ref.n : (p.axis || [0, 0, 1])), c = ref ? ref.o : V.add(p.center || [0, 0, 0], R.originPoint);
+    const n = Math.max(1, Math.round(p.count || 1)), total = num(p.angle, 360), step = Math.abs(total) >= 360 - 1e-9 ? total / n : (n > 1 ? total / (n - 1) : 0);
+    for (let k = 1; k < n; k++) out.push(M4.mul(M4.translate(c), M4.mul(M4.axisAngle(axis, step * k), M4.translate(V.neg(c)))));
+  } else if (p.kind === 'mirror') {
+    const ref = connWorld(R, p.about), planeN = { yz: [1, 0, 0], xz: [0, 1, 0], xy: [0, 0, 1] };
+    const nn = V.norm(ref ? ref.n : (planeN[p.plane] || p.normal || [1, 0, 0])), c = V.add(ref ? ref.o : R.originPoint, V.mul(nn, num(p.offset, 0)));
+    const Rm = [1 - 2 * nn[0] * nn[0], -2 * nn[0] * nn[1], -2 * nn[0] * nn[2], 0, -2 * nn[1] * nn[0], 1 - 2 * nn[1] * nn[1], -2 * nn[1] * nn[2], 0, -2 * nn[2] * nn[0], -2 * nn[2] * nn[1], 1 - 2 * nn[2] * nn[2], 0, 0, 0, 0, 1];
+    out.push(M4.mul(M4.translate(c), M4.mul(Rm, M4.translate(V.neg(c)))));
+  } else {
+    const d1 = V.norm(p.direction || [1, 0, 0]), d2 = V.norm(p.direction2 || [0, 1, 0]);
+    const n1 = Math.max(1, Math.round(p.count || 1)), n2 = Math.max(1, Math.round(p.count2 || 1));
+    for (let j = 0; j < n2; j++) for (let i = 0; i < n1; i++) { if (!i && !j) continue; out.push(M4.translate(V.add(V.mul(d1, num(p.spacing, 0) * i), V.mul(d2, num(p.spacing2, 0) * j)))); }
+  }
+  if (out.length > 400) throw new Error('more than 400 copies — lower the count');
+  return out;
+}
+/* ---------- welds ---------- */
+const solidSerial = new WeakMap(); let serialN = 0;
+const serialOf = (s) => { let n = solidSerial.get(s); if (!n) solidSerial.set(s, (n = ++serialN)); return n; };
+const WELD_CACHE = new Map();
+const rootIdOf = (id, byId) => { let cur = byId.get(id); const seen = new Set(); while (cur && cur.into && byId.has(cur.into) && !seen.has(cur.id)) { seen.add(cur.id); cur = byId.get(cur.into); } return cur ? cur.id : null; };
+const sidSet = (s) => new Set(s.polys.map(p => p.sid));
+/* the inside-corner edges where two separate bodies meet (found on their union, faces from one body on each side) */
+export function findSeams(sa, sb) {
+  const U = sa.union(sb), A = sidSet(sa), B = sidSet(sb), out = [], seen = new Set();
+  for (const [a, b] of creasesOf(U)) {
+    const f = edgeFacesAt(U, V.lerp(a, b, 0.5), V.norm(V.sub(b, a)), a, b); if (f.length < 2) continue;
+    const mixed = (A.has(f[0].sid) && B.has(f[1].sid)) || (B.has(f[0].sid) && A.has(f[1].sid)); if (!mixed) continue;
+    const key = [f[0].sid, f[1].sid].sort().join('|'); if (seen.has(key)) continue; seen.add(key);
+    const e = findEdge(U, { faces: [f[0].sid, f[1].sid], m: V.lerp(a, b, 0.5) }); if (e) out.push(e);
+  }
+  return { U, seams: out };
+}
+const WELD_STYLE = { flat: 'chamfer', convex: 'weld', concave: 'fillet' };
+/* can these two materials actually be welded? (null = fine / unknown) */
+const FERROUS = new Set(['steel', 'stainless', 'cast_iron']), COPPERY = new Set(['copper', 'brass', 'bronze']), THERMOSET = new Set(['resin', 'tough_resin']);
+export function weldAdvice(a, b) {
+  if (!a || !b || !MATERIALS[a] || !MATERIALS[b]) return null;
+  const A = MATERIALS[a], B = MATERIALS[b], fa = A.family, fb = B.family;
+  if (fa === 'metal' && fb === 'metal') {
+    if (a === b) return a === 'cast_iron' ? 'cast iron welds poorly (pre-heat, nickel rod) — consider brazing or bolting' : null;
+    if (FERROUS.has(a) && FERROUS.has(b)) return a === 'cast_iron' || b === 'cast_iron' ? 'cast iron to steel needs pre-heat and nickel filler — brazing or bolting is easier' : `${A.name} to ${B.name} welds with a 309 filler`;
+    if ((COPPERY.has(a) || COPPERY.has(b)) && !(a === 'aluminium' || b === 'aluminium')) return `${A.name} to ${B.name}: braze or silver-solder rather than fusion weld`;
+    return `${A.name} cannot be fusion-welded to ${B.name} — use fasteners, rivets or a structural adhesive`;
+  }
+  if (fa === 'plastic' && fb === 'plastic') {
+    if (THERMOSET.has(a) || THERMOSET.has(b)) return 'cured resin does not melt, so it cannot be welded — bond it with epoxy or fasten it';
+    return a === b ? null : `different plastics (${A.name}, ${B.name}) do not weld to each other — use an adhesive or fasteners`;
+  }
+  const kind = (m) => (m.family === 'wood' ? 'wood' : m.family === 'metal' ? 'metal' : m.family === 'plastic' ? 'plastic' : m.name.toLowerCase());
+  return `a weld cannot join ${kind(A)} (${A.name}) to ${kind(B)} (${B.name}) — use glue, screws or bolts; the joint is still modelled so you can see the bead`;
+}
+function weldBody(w, R, byId) {
+  const [aId, bId] = w.joins, ra = rootIdOf(aId, byId), rb = rootIdOf(bId, byId);
+  if (!ra || !rb) return { warning: 'one of the welded parts was deleted' };
+  if (ra === rb) return { warning: 'these parts are now one part (a boolean joined them) — a weld joins separate parts' };
+  const ba = R.bodies.find(b => b.id === ra), bb = R.bodies.find(b => b.id === rb);
+  if (!ba || !bb || ba.solid.isEmpty() || bb.solid.isEmpty()) return { warning: 'a welded part has no geometry' };
+  const p = w.params || {}, key = [w.id, JSON.stringify(p), JSON.stringify(w.seam || null), serialOf(ba.solid), serialOf(bb.solid)].join('|');
+  const hit = WELD_CACHE.get(key); if (hit) return hit;
+  const { U, seams } = findSeams(ba.solid, bb.solid);
+  let pick = [];
+  if (p.all_around) pick = seams.filter(e => !e.convex);
+  else {
+    const Wa = R.world.get(ra), ref = w.seam || {}, m = ref.m && Wa ? M4.point(Wa, ref.m) : null;
+    let e = ref.faces ? findEdge(U, { faces: ref.faces, m: m || [0, 0, 0] }) : null;
+    if (!e && m) { let bd = Infinity; for (const s2 of seams) { const d = V.len(V.sub(s2.m, m)); if (d < bd) { bd = d; e = s2; } } }
+    if (e) pick = [e];
+  }
+  let out;
+  if (!pick.length) out = { warning: seams.length ? 'the seam it was on is gone' : 'the parts no longer touch' };
+  else if (pick.every(e => e.convex)) out = { warning: 'that edge is an outside edge — a weld goes in the inside corner where the parts meet' };
+  else {
+    const style = WELD_STYLE[p.profile] || 'chamfer', polys = [];
+    for (const e of pick) {
+      if (e.convex) continue;
+      const piece = e.loop ? K.loopPiece(e.loop, e.closed, e.c, e.axis, e.uu1, e.uu2, num(p.size, 4), style) : K.edgePiece(e.m, e.d, e.u1, e.u2, num(p.size, 4), style, V.len(V.sub(e.b, e.a)), 0);
+      polys.push(...piece.tag(w.id).polys);
+    }
+    out = { solid: new K.Solid(polys), resolved: { seams: pick.length, round: pick.some(e => e.loop), length: +pick.reduce((L, e) => L + (e.loop ? 2 * Math.PI * e.radius : V.len(V.sub(e.b, e.a))), 0).toFixed(2) } };
+  }
+  WELD_CACHE.set(key, out); if (WELD_CACHE.size > 80) WELD_CACHE.delete(WELD_CACHE.keys().next().value);
+  return out;
 }
 /* world-space connectors of an object */
 export function worldConnectors(R, id) {
@@ -319,7 +528,7 @@ export function findEdge(s, ref) {
   }
   return e;
 }
-const SMOOTH = /:(side|surface|rev\d+|arc)$/;
+const SMOOTH = /:(side|surface|rev\d+|arc|bore|rim)$/;
 /* all crease segments between the same two surfaces, chained into an ordered loop / polyline */
 function edgeLoop(s, segs, sids) {
   const want = sids.slice().sort().join('|'), mine = [];
@@ -369,6 +578,81 @@ function applyEdge(s, t, target, R) {
   return mode === 'subtract' ? s.subtract(piece) : s.union(piece);
 }
 
+/* ---------- metadata & mass properties ---------- */
+function cleanMeta(m) {
+  const out = {};
+  for (const [k, v] of Object.entries(m || {})) {
+    if (v === undefined || v === null || v === '') continue;
+    if (k === 'material') { const key = String(v).toLowerCase().replace(/[\s-]+/g, '_'); if (!MATERIALS[key]) throw new Error(`Unknown material “${v}”. Try: ${Object.keys(MATERIALS).join(', ')} (or give density in g/cm³)`); out.material = key; }
+    else if (k === 'density' || k === 'fill' || k === 'quantity') { const n = +v; if (!(n > 0)) throw new Error(`${k} must be a number above 0`); out[k] = k === 'fill' ? Math.min(1, n > 1 ? n / 100 : n) : n; }
+    else out[k] = typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : (typeof v === 'number' || typeof v === 'boolean' ? v : String(v));
+  }
+  return out;
+}
+const MASS_CACHE = new WeakMap();
+const massOf = (s) => { let m = MASS_CACHE.get(s); if (!m) MASS_CACHE.set(s, (m = s.massProps())); return m; };
+/* per part: material → density → mass, centre of gravity, inertia; then the assembly (parallel-axis sum) and whether it stands */
+export function massReport(doc, R) {
+  const byId = new Map(doc.objects.map(o => [o.id, o])), O = R.originPoint, parts = [];
+  for (const b of R.bodies) {
+    if (b.hidden || b.solid.isEmpty()) continue;
+    const v = R.virtual && R.virtual.get(b.id), src = byId.get(v ? v.source : b.id); if (!src) continue;
+    let meta = src.meta || {};
+    if (src.type === 'weld' && !meta.material && !meta.density) { const base = byId.get(src.joins && src.joins[0]); meta = Object.assign({}, base && base.meta, meta); }
+    const matKey = meta.material || doc.material || null, mat = matKey ? MATERIALS[matKey] : null;
+    const density = meta.density || (mat ? mat.density : null), fill = meta.fill || 1, mp = massOf(b.solid);
+    const rho = density ? density * fill / 1000 : null;   /* g per mm³ */
+    parts.push({ id: b.id, name: b.name, source: v ? v.source : undefined, weld: b.weld || undefined, material: matKey, material_name: mat ? mat.name : (meta.density ? 'custom' : null), assumed: !meta.material && !meta.density && !!doc.material,
+      density, fill: fill < 1 ? fill : undefined, volume_mm3: mp.volume, mass_g: rho == null ? null : mp.volume * rho, centroid: V.sub(mp.centroid, O), inertia_kg_mm2: rho == null ? null : mp.inertia.map(x => x * rho / 1000), meta });
+  }
+  const known = parts.filter(p => p.mass_g != null), M = known.reduce((t, p) => t + p.mass_g, 0);
+  const cog = M > 0 ? V.mul(known.reduce((acc, p) => V.add(acc, V.mul(p.centroid, p.mass_g)), [0, 0, 0]), 1 / M) : null;
+  let I = null;
+  if (M > 0) {
+    I = [0, 0, 0, 0, 0, 0];
+    for (const p of known) {
+      const d = V.sub(p.centroid, cog), m = p.mass_g / 1000, J = p.inertia_kg_mm2;
+      I[0] += J[0] + m * (d[1] * d[1] + d[2] * d[2]); I[1] += J[1] + m * (d[2] * d[2] + d[0] * d[0]); I[2] += J[2] + m * (d[0] * d[0] + d[1] * d[1]);
+      I[3] += J[3] - m * d[0] * d[1]; I[4] += J[4] - m * d[1] * d[2]; I[5] += J[5] - m * d[2] * d[0];
+    }
+  }
+  /* balance: is the centre of gravity over the base (the footprint of what touches the lowest level)? */
+  let balance = null;
+  if (cog && R.bodies.length) {
+    let zmin = Infinity; for (const b of R.bodies) if (!b.hidden && !b.solid.isEmpty()) zmin = Math.min(zmin, b.solid.bbox().min[2]);
+    const foot = []; for (const b of R.bodies) { if (b.hidden || b.solid.isEmpty()) continue; for (const pl of b.solid.polys) if (pl.plane.n[2] < -0.999 && pl.v.every(q => Math.abs(q.p[2] - zmin) < 1e-3)) for (const q of pl.v) foot.push([q.p[0] - O[0], q.p[1] - O[1]]); }
+    if (foot.length >= 3) {
+      const hull = hull2(foot), c2 = [cog[0], cog[1]], inside = hull.length >= 3 && hull.every((a, i) => { const b2 = hull[(i + 1) % hull.length]; return (b2[0] - a[0]) * (c2[1] - a[1]) - (b2[1] - a[1]) * (c2[0] - a[0]) >= -1e-9; });
+      let margin = Infinity, edgeDir = null;
+      for (let i = 0; i < hull.length; i++) { const a = hull[i], b2 = hull[(i + 1) % hull.length], ex = b2[0] - a[0], ey = b2[1] - a[1], L = Math.hypot(ex, ey) || 1, dist = ((c2[0] - a[0]) * ey - (c2[1] - a[1]) * ex) / -L; if (Math.abs(dist) < Math.abs(margin)) { margin = dist; edgeDir = [ey / L, -ex / L]; } }
+      balance = { stands: inside, margin_mm: +margin.toFixed(2), tips_toward: inside ? null : (Math.abs(edgeDir[0]) > Math.abs(edgeDir[1]) ? (edgeDir[0] > 0 ? '+x' : '-x') : (edgeDir[1] > 0 ? '+y' : '-y')), base_z: +(zmin - O[2]).toFixed(3) };
+    }
+  }
+  const r = (v, n = 3) => (v == null ? null : +v.toFixed(n));
+  return {
+    parts: parts.map(p => ({ id: p.id, name: p.name, source: p.source, weld: p.weld, material: p.material, material_name: p.material_name, assumed: p.assumed || undefined, density: p.density, fill: p.fill, volume_cm3: r(p.volume_mm3 / 1000, 3), mass_g: r(p.mass_g, 2), centroid: p.centroid.map(x => r(x)), inertia_kg_mm2: p.inertia_kg_mm2 && p.inertia_kg_mm2.map(x => r(x, 4)), meta: p.meta })),
+    total_mass_g: r(M, 2), cog: cog && cog.map(x => r(x)), inertia_kg_mm2: I && I.map(x => r(x, 3)), balance,
+    unassigned: parts.filter(p => p.mass_g == null).map(p => p.name)
+  };
+}
+function hull2(pts) {
+  const P = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = []; for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  up.pop(); lo.pop(); return lo.concat(up);
+}
+/* bill of materials: one line per distinct part (pattern copies counted as quantity), welds with their length */
+export function bom(doc, R) {
+  const rep = massReport(doc, R), byId = new Map(doc.objects.map(o => [o.id, o])), lines = new Map();
+  for (const p of rep.parts) {
+    const key = p.source || p.id, o = byId.get(key) || {}, meta = o.meta || {};
+    let L = lines.get(key);
+    if (!L) { L = { item: lines.size + 1, part: (o.name || p.name), part_no: meta.part_no || '', type: o.type === 'weld' ? 'weld' : o.type, material: p.material_name || '', quantity: 0, mass_each_g: p.mass_g, mass_total_g: 0, volume_each_cm3: p.volume_cm3, notes: meta.notes || '', supplier: meta.supplier || '', size: o.type === 'weld' ? `${(o.params || {}).size} mm × ${(o._resolved || {}).length || '?'} mm` : '' }; lines.set(key, L); }
+    const q = (meta.quantity || 1); L.quantity += q; L.mass_total_g = +((L.mass_total_g || 0) + (p.mass_g || 0) * q).toFixed(2);
+  }
+  return { lines: [...lines.values()], total_mass_g: rep.total_mass_g };
+}
+
 /* ---------- the API ---------- */
 export class Model {
   constructor(doc) { this.doc = doc || newDoc(); this.undoStack = []; this.redoStack = []; this.listeners = new Set(); this.result = null; this.recompute(); }
@@ -397,9 +681,9 @@ export class Model {
     const W = (p) => (Array.isArray(p) && this.rel ? V.add(p.map(Number), this.result.originPoint) : p);
     switch (o.op) {
       case 'add': {
-        const type = o.type || o.shape; if (!TYPES[type] || type === 'edge') throw new Error('Unknown shape “' + type + '”. Use ' + Object.keys(TYPES).filter(t => t !== 'edge').join(', '));
+        const type = o.type || o.shape; if (!TYPES[type] || META.has(type)) throw new Error('Unknown shape “' + type + '”. Use ' + Object.keys(TYPES).filter(t => !META.has(t)).join(', ') + (type === 'pattern' || type === 'weld' ? ` (for a ${type} use op “${type}”)` : ''));
         const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
-        const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, o.params), pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed };
+        const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, o.params), pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
         d.objects.push(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
@@ -414,6 +698,7 @@ export class Model {
         const x = need(o.id);
         if (o.params) { x.params = Object.assign({}, x.params, o.params); for (const k of Object.keys(o.params)) if (typeof TYPES[x.type].params[k] === 'number') x.params[k] = num(+x.params[k], TYPES[x.type].params[k]); }
         if (o.name) x.name = String(o.name); if (o.color !== undefined) x.color = o.color; if (o.hidden !== undefined) x.hidden = !!o.hidden;
+        if (o.meta || o.material !== undefined) { const mm = Object.assign({}, x.meta || {}, o.meta || {}, o.material !== undefined ? { material: o.material } : {}); for (const k of Object.keys(mm)) if (mm[k] === null || mm[k] === '') delete mm[k]; x.meta = cleanMeta(mm); }
         if (o.at || o.rot) { x.pose = { at: W(o.at) || (x.pose || {}).at || [0, 0, 0], rot: o.rot || (x.pose || {}).rot || [0, 0, 0] }; }
         if (o.fixed !== undefined) x.fixed = !!o.fixed;
         this.recompute(); return { label: 'Edit ' + x.name, id: x.id };
@@ -421,6 +706,13 @@ export class Model {
       case 'mate': {
         const x = need(o.id); if (o.to !== 'origin') need(o.to);
         if (o.to === x.id) throw new Error('An object cannot mate to itself');
+        if (o.kind) {
+          /* add-on mate kinds: the add-on works out the placement from both objects (e.g. gears in mesh) */
+          const mk = ADDON_MATES.get(o.kind); if (!mk) throw new Error(`Unknown mate kind “${o.kind}”. Available: ${[...ADDON_MATES.keys()].join(', ') || 'none (load an add-on)'}`);
+          const extra = Object.assign({}, o); delete extra.op; delete extra.id;
+          mk.solve({ self: x, target: need(o.to), mate: extra, api: addonApi });   /* throws a helpful error now rather than a warning later */
+          x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
+        }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
         const sconns = this.result.conns.get(x.id) || connectorsOf(x, null);
         const a = o.a || 'top', b = o.b || 'bottom';
@@ -460,6 +752,46 @@ export class Model {
         if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
         return this.op(add);
       }
+      case 'pattern': {
+        const of = (Array.isArray(o.of) ? o.of : [o.of || o.source]).filter(Boolean); if (!of.length) throw new Error('Give of: the id (or ids) of the features to repeat');
+        for (const id of of) { const x = need(id); if (x.type === 'pattern' || x.type === 'weld') throw new Error(`${x.name} is a ${x.type}; pattern the parts or features it uses instead`); }
+        /* a hole's countersink / an edge on a patterned part comes along by default */
+        if (o.include_edges !== false) for (const e of d.objects) if (e.type === 'edge' && !of.includes(e.id) && e.edge && (e.edge.faces || []).some(f => of.includes(f.split(':')[0]))) of.push(e.id);
+        const params = defaultParams('pattern', o.params); for (const k of Object.keys(TYPES.pattern.params)) if (o[k] !== undefined) params[k] = o[k];
+        if (!['linear', 'circular', 'mirror'].includes(params.kind)) throw new Error('kind is linear, circular or mirror');
+        if (params.about && params.about.obj && params.about.obj !== 'origin') need(params.about.obj);
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('pat');
+        d.objects.push({ id, name: o.name || (params.kind === 'mirror' ? 'Mirror ' : params.kind === 'circular' ? 'Circular array ' : 'Array ') + (d.objects.filter(x => x.type === 'pattern').length + 1), type: 'pattern', params, of, pose: null, mate: null, into: null, op: null });
+        this.recompute();
+        const copies = [...this.result.virtual.values()].filter(v => v.pattern === id).length;
+        return { label: 'Pattern ' + of.map(i => this.get(i).name).join(', '), id, of, copies };
+      }
+      case 'weld': {
+        const A = need(o.a), B = need(o.b); if (A.id === B.id) throw new Error('A weld joins two different parts');
+        const ba = this.bodyContaining(A.id), bb = this.bodyContaining(B.id);
+        if (!ba || !bb) throw new Error('Both parts need geometry');
+        if (ba.id === bb.id) throw new Error(`${A.name} and ${B.name} are one part already (a boolean merged them). A weld joins separate parts; to blend one part use an edge fillet or chamfer`);
+        const { seams } = findSeams(ba.solid, bb.solid), concave = seams.filter(e => !e.convex);
+        if (!concave.length) throw new Error(`${A.name} and ${B.name} do not meet in an inside corner — mate them so they touch first`);
+        let e = null; const near = W(o.near);
+        if (near) { let bd = Infinity; for (const c of concave) { const dd = c.loop ? Math.min(...c.loop.map(q => V.len(V.sub(q, near)))) : segDist(near, c.a, c.b); if (dd < bd) { bd = dd; e = c; } } }
+        else e = concave.reduce((b2, c) => ((c.loop ? 2 * Math.PI * c.radius : V.len(V.sub(c.b, c.a))) > (b2.loop ? 2 * Math.PI * b2.radius : V.len(V.sub(b2.b, b2.a))) ? c : b2));
+        const Wa = this.result.world.get(ba.id), id = o.id && !this.get(o.id) ? String(o.id) : uid('wld');
+        const params = defaultParams('weld', o.params); for (const k of ['size', 'profile', 'all_around']) if (o[k] !== undefined) params[k] = o[k];
+        d.objects.push({ id, name: o.name || 'Weld ' + (d.objects.filter(x => x.type === 'weld').length + 1), type: 'weld', params, joins: [A.id, B.id], seam: { m: M4.point(M4.inv(Wa), e.m), faces: e.sids }, color: o.color || null, pose: null, mate: null, into: null, op: null });
+        this.recompute();
+        const r = this.get(id)._resolved || {};
+        const mat = (x) => (x.meta && x.meta.material) || d.material || null, advice = weldAdvice(mat(this.get(ba.id) || A), mat(this.get(bb.id) || B));
+        return { label: `Weld ${A.name} to ${B.name}`, id, seams: r.seams || 0, length: r.length || 0, round: !!r.round, other_seams: concave.length - 1, material_advice: advice || undefined };
+      }
+      case 'addon': {
+        const a = ADDONS.get(o.addon); if (!a) throw new Error(`No add-on “${o.addon}”. Loaded: ${[...ADDONS.keys()].join(', ') || 'none'}`);
+        const act = (a.actions || {})[o.action]; if (!act) throw new Error(`Add-on ${a.id} has no action “${o.action}”. Try: ${Object.keys(a.actions || {}).join(', ')}`);
+        const args = Object.assign({}, ...Object.entries(act.args || {}).map(([k, v]) => ({ [k]: v && v.default !== undefined ? JSON.parse(JSON.stringify(v.default)) : undefined })), o.args || {});
+        const res = act.run(args, this.addonContext()) || {};
+        const results = (res.ops || []).map(x => this.op(x));
+        return { label: res.label || `${a.name || a.id}: ${o.action}`, info: res.info, results };
+      }
       case 'delete': {
         const x = need(o.id); d.objects = d.objects.filter(y => y.id !== x.id);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
@@ -476,12 +808,17 @@ export class Model {
           if (y.into && !ids.has(y.into)) { y.into = null; y.op = null; n++; }
           if (y.mate && y.mate.to !== 'origin' && !ids.has(y.mate.to)) { const M = this.result.world.get(y.id); y.mate = null; if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; }
         }
+        d.objects = d.objects.filter(y => { if (y.type === 'pattern') { y.of = (y.of || []).filter(i => ids.has(i)); if (!y.of.length) { n++; return false; } } if (y.type === 'weld' && !(y.joins || []).every(i => ids.has(i))) { n++; return false; } return true; });
         for (const w of this.result.warnings) if (w.kind === 'floating') { const y = this.get(w.id); if (y && o.fixFloating) { const M = this.result.world.get(y.id); if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; } }
         this.recompute(); return { label: 'Clean up (' + n + ' fixes)', fixes: n };
       }
       case 'dim': { const id = uid('dim'); d.dims.push({ id, a: o.a, b: o.b, view: o.view || 'front' }); return { label: 'Add dimension', id }; }
       case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); return { label: 'Remove dimension', id: o.id }; }
       case 'rename': { d.name = String(o.name || d.name); return { label: 'Rename model', name: d.name }; }
+      case 'material': {   /* the model's default material, used by parts that have none of their own */
+        if (o.material && !MATERIALS[o.material]) throw new Error(`Unknown material “${o.material}”. Try: ${Object.keys(MATERIALS).join(', ')}`);
+        d.material = o.material || null; return { label: 'Default material ' + (o.material ? MATERIALS[o.material].name : 'none'), material: d.material };
+      }
     }
     throw new Error('Unknown op “' + o.op + '”');
   }
@@ -490,6 +827,14 @@ export class Model {
     while (cur && cur.into && !seen.has(cur.id)) { seen.add(cur.id); cur = this.get(cur.into); }
     return cur ? this.result.bodies.find(b => b.id === cur.id) : null;
   }
+  /* the object a picked body / id stands for: pattern copies resolve to their pattern */
+  resolveId(id) { if (!id || this.get(id)) return id; const v = this.result.virtual && this.result.virtual.get(id); return v ? v.pattern : null; }
+  /* what add-on actions see: read access plus small helpers (they return ops; they never edit the document directly) */
+  addonContext() {
+    const self = this;
+    return { api: addonApi, get doc() { return self.doc; }, get result() { return self.result; }, get: (id) => self.get(id), describe: () => self.describe(), uid, ground: () => self.result.ground,
+      newId: (prefix) => { let i = 1; while (self.get(prefix + i)) i++; return prefix + i; } };
+  }
   /* summary for the AI and the tree */
   describe() {
     const R = this.result;
@@ -497,10 +842,17 @@ export class Model {
       name: this.doc.name, units: this.doc.units, ground: R.ground, origin: R.originRef, origin_point: R.originPoint.map(v => +v.toFixed(3)),
       objects: this.doc.objects.map(o => {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
-        return { id: o.id, name: o.name, type: o.type, params: o.params, at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
-          connectors: o.type === 'edge' ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
+        const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
+        return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+          of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined,
+          copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
+          connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
-      bodies: R.bodies.map(b => ({ id: b.id, name: b.name, volume: +b.solid.volume().toFixed(3), bbox: (() => { const bb = b.solid.bbox(); return b.solid.isEmpty() ? null : { min: bb.min.map((v, k) => +(v - R.originPoint[k]).toFixed(3)), max: bb.max.map((v, k) => +(v - R.originPoint[k]).toFixed(3)) }; })() })),
+      bodies: R.bodies.map(b => ({ id: b.id, name: b.name, weld: b.weld || undefined, copy_of: b.virtual || undefined, volume: +b.solid.volume().toFixed(3), bbox: (() => { const bb = b.solid.bbox(); return b.solid.isEmpty() ? null : { min: bb.min.map((v, k) => +(v - R.originPoint[k]).toFixed(3)), max: bb.max.map((v, k) => +(v - R.originPoint[k]).toFixed(3)) }; })() })),
+      assembly: R.bodies.length > 1 ? { parts: R.bodies.filter(b => !b.weld).length, welds: R.bodies.filter(b => b.weld).length } : undefined,
+      material: this.doc.material || null,
+      mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),
+      addons: [...ADDONS.keys()],
       warnings: R.warnings.map(w => w.text), eval_ms: +R.ms.toFixed(1)
     };
   }

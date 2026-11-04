@@ -1,8 +1,11 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K } from './model.js';
+import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams } from './model.js';
 import { Views, fmt } from './views.js';
+import gears from '../addons/gears.js';
 const { V, M4 } = K;
+/* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
+registerAddon(gears);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
 const toast = (t, ms) => { const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); setTimeout(() => d.remove(), ms || 2200); };
@@ -14,7 +17,11 @@ const ICON = {
   mate: 'M7 7h4v4H7zM13 13h4v4h-4zM11 11l2 2', union: 'M9 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12M15 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12', subtract: 'M9 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12M15 6a6 6 0 0 1 0 12',
   intersect: 'M12 7.5a6 6 0 0 1 0 9a6 6 0 0 1 0-9M9 6a6 6 0 1 0 0 12M15 6a6 6 0 1 1 0 12', dim: 'M4 7v10M20 7v10M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3', undo: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3', redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', hidden: 'M3 12h3M9 12h3M15 12h3M21 12h0M4 6h16M4 18h16', sun: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
-  file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14'
+  file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14',
+  gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
+  pattern: 'M4 9h4v4H4zM10 9h4v4h-4zM16 9h4v4h-4zM4 15l16 0', circular: 'M12 4a8 8 0 1 0 8 8M20 4v5h-5M11 11h2v2h-2z', mirror: 'M12 3v18M9 7L4 17h5zM15 7l5 10h-5z',
+  explode: 'M9 9h6v6H9zM4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3', cog: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v9h9M12 21v-9H3',
+  addon: 'M9 4h6v3a2 2 0 1 0 4 0V4h1v16H4V4h1v3a2 2 0 1 0 4 0z', material: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'
 };
 const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
 document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon)));
@@ -42,14 +49,33 @@ function statusOf(o) {
   if (o.id === model.result.ground) b.push(['ground', '']);
   return b;
 }
+function subOf(o) {
+  const p = o.params || {}, name = (id) => (model.get(id) || {}).name || id;
+  switch (o.type) {
+    case 'box': case 'wedge': return `${fmt(p.width)} × ${fmt(p.depth)} × ${fmt(p.height)}`;
+    case 'cylinder': return `Ø${fmt(p.diameter)} × ${fmt(p.height)}`;
+    case 'cone': return `Ø${fmt(p.diameter)}→${fmt(p.top || 0)} × ${fmt(p.height)}`;
+    case 'sphere': return `Ø${fmt(p.diameter)}`;
+    case 'edge': return `${p.style} ${fmt(p.size)}${o._resolved && o._resolved.round ? ' round' : ''} · on ${name(o.into)}`;
+    case 'fillet': return `${p.style} ${fmt(p.size)} × ${fmt(p.length)}`;
+    case 'extrude': case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}`;
+    case 'revolve': return `${p.profile.length} pts · ${fmt(p.degrees)}°`;
+    case 'sweep': return `${p.profile.length} pts · ${p.path.length - 1} segments`;
+    case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
+    case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
+    case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
+    default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
+  }
+}
+const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
 function renderTree() {
   const list = $('#list'); list.innerHTML = '';
   const objs = model.doc.objects; $('#count').textContent = objs.length;
   if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
   for (const o of objs) {
-    const p = o.params, sub = o.type === 'box' || o.type === 'wedge' ? `${fmt(p.width)} × ${fmt(p.depth)} × ${fmt(p.height)}` : o.type === 'cylinder' ? `Ø${fmt(p.diameter)} × ${fmt(p.height)}` : o.type === 'cone' ? `Ø${fmt(p.diameter)}→${fmt(p.top || 0)} × ${fmt(p.height)}` : o.type === 'sphere' ? `Ø${fmt(p.diameter)}` : o.type === 'edge' ? `${p.style} ${fmt(p.size)}` : o.type === 'fillet' ? `${p.style} ${fmt(p.size)} × ${fmt(p.length)}` : o.type === 'extrude' || o.type === 'loft' ? `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}` : o.type === 'revolve' ? `${p.degrees}°` : '';
+    const sub = subOf(o);
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (o.into ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
-      el('span', { class: 'ic' }, icon(o.type === 'edge' ? o.params.style : o.type)),
+      el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, sub)),
       el('div', { style: 'display:flex;gap:3px' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t))));
     list.append(row);
@@ -65,34 +91,100 @@ function renderTree() {
 /* ---------- properties ---------- */
 function field(label, input) { return el('label', { class: 'f' }, label, input); }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
+const OPTIONS = { style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] } };
+const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
+const label = (k) => k.replace(/_/g, ' ');
+function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
+function paramField(o, k, v) {
+  const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = optionsFor(o.type, k);
+  if (opts) { const sl = el('select', null, ...opts.map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => set(sl.value); return field(label(k), sl); }
+  if (typeof v === 'number') return field(label(k), numInput(v, set));
+  if (typeof v === 'boolean') { const c = el('input', { type: 'checkbox' }); c.checked = v; c.onchange = () => set(c.checked); return field(label(k), c); }
+  if (typeof v === 'string') return field(label(k), textInput(v, set));
+  const ta = el('textarea', null, JSON.stringify(v)); ta.addEventListener('keydown', e => e.stopPropagation()); ta.addEventListener('change', () => { try { set(JSON.parse(ta.value)); } catch (e) { toast('Not valid JSON: ' + e.message); } });
+  return field(label(k), ta);
+}
+const PATTERN_KEYS = { linear: ['kind', 'count', 'spacing', 'direction', 'count2', 'spacing2', 'direction2'], circular: ['kind', 'count', 'angle', 'about', 'axis', 'center'], mirror: ['kind', 'plane', 'offset', 'about'] };
+const r1 = (v) => (v == null ? '—' : fmt(v));
+const xyz = (p) => (p ? p.map(v => fmt(v)).join(', ') : '—');
+function materialSelect(value, withDefault, on) {
+  const sl = el('select', null, el('option', { value: '' }, withDefault));
+  const fam = {}; for (const [k, m] of Object.entries(MATERIALS)) (fam[m.family] = fam[m.family] || []).push([k, m]);
+  for (const [f, list] of Object.entries(fam)) sl.append(el('optgroup', { label: f }, ...list.map(([k, m]) => el('option', { value: k, selected: value === k }, `${m.name} · ${m.density} g/cm³`))));
+  sl.onchange = () => on(sl.value || null); return sl;
+}
+function massSection(o, sec) {
+  const rep = massReport(model.doc, model.result);
+  if (o.into && o.type !== 'edge') { const s = sec('Material & mass'); s.append(el('div', { class: 'empty', style: 'padding:4px 0' }, `Part of ${(model.get(o.into) || {}).name}: its material and mass are that part's.`)); return; }
+  const s = sec('Material & mass'), meta = o.meta || {}, setMeta = (patch) => apply([{ op: 'set', id: o.id, meta: patch }]);
+  const def = model.doc.material ? `model default · ${MATERIALS[model.doc.material].name}` : '— choose —';
+  s.append(field('material', materialSelect(meta.material, def, v => setMeta({ material: v }))));
+  const mat = MATERIALS[meta.material || model.doc.material];
+  s.append(field('density g/cm³', textInput(meta.density, v => setMeta({ density: v === '' ? null : +v }), { type: 'number', step: 'any', placeholder: mat ? mat.density : 'from material' })));
+  s.append(field('fill %', textInput(meta.fill ? Math.round(meta.fill * 100) : '', v => setMeta({ fill: v === '' ? null : +v / 100 }), { type: 'number', step: 'any', placeholder: '100 (solid)' })));
+  s.append(field('quantity', textInput(meta.quantity, v => setMeta({ quantity: v === '' ? null : +v }), { type: 'number', step: '1', placeholder: '1' })));
+  s.append(field('part no.', textInput(meta.part_no, v => setMeta({ part_no: v || null }))), field('supplier', textInput(meta.supplier, v => setMeta({ supplier: v || null }))), field('notes', textInput(meta.notes, v => setMeta({ notes: v || null }))));
+  const part = rep.parts.find(x => x.id === o.id);
+  if (part) {
+    s.append(el('div', { class: 'f' }, 'volume', el('span', null, r1(part.volume_cm3) + ' cm³')), el('div', { class: 'f' }, 'mass', el('b', null, part.mass_g == null ? 'set a material' : fmt(part.mass_g) + ' g' + (part.assumed ? ' (model default)' : ''))), el('div', { class: 'f' }, 'centre of gravity', el('span', { class: 'mono' }, xyz(part.centroid))));
+    if (part.inertia_kg_mm2) s.append(el('div', { class: 'f' }, 'inertia kg·mm²', el('span', { class: 'mono' }, part.inertia_kg_mm2.slice(0, 3).map(v => fmt(v)).join(' / '))));
+  }
+}
+function infoSection(o, sec) {
+  const T = TYPES[o.type]; if (!T || !T.def || !T.def.info) return;
+  let info; try { info = T.def.info(o.params, { K, V, M4 }); } catch (e) { info = { warning: e.message }; }
+  const s = sec(T.label + ' data');
+  for (const [k, v] of Object.entries(info || {})) s.append(k === 'warning' ? el('div', { class: 'warnline' }, '⚠ ' + v) : el('div', { class: 'f' }, label(k), el('span', { class: 'mono' }, typeof v === 'number' ? fmt(v) : String(v))));
+}
 function renderProps() {
   const body = $('#pbody'); body.innerHTML = '';
+  if (addonForm) { renderAddonForm(body); return; }
   const o = selected && model.get(selected);
-  if (!o) {
-    const R = model.result, s = el('div', { class: 'sec' });
-    s.append(el('h4', null, 'Model'), field('Name', (() => { const i = el('input', { value: model.doc.name }); i.addEventListener('change', () => apply([{ op: 'rename', name: i.value }])); i.addEventListener('keydown', e => e.stopPropagation()); return i; })()));
-    s.append(el('div', { class: 'f' }, 'Bodies', el('span', null, R.bodies.length + ' · ' + model.doc.objects.length + ' features · ' + R.ms.toFixed(0) + ' ms')));
-    const og = R.originRef; s.append(el('div', { class: 'f' }, 'World origin', el('span', null, og ? (model.get(og.obj) || {}).name + ' · ' + og.conn : 'board 0,0,0')));
-    s.append(el('div', { class: 'empty', style: 'padding:6px 0' }, 'Tip: every object has its own frame. The world origin is just a reference point; pick any connector as origin from an object’s properties.'));
-    body.append(s); return;
-  }
   const R = model.result, sec = (t) => { const s = el('div', { class: 'sec' }, el('h4', null, t)); body.append(s); return s; };
-  const s1 = sec(TYPES[o.type].label);
-  const nm = el('input', { value: o.name }); nm.addEventListener('change', () => apply([{ op: 'set', id: o.id, name: nm.value }])); nm.addEventListener('keydown', e => e.stopPropagation());
-  s1.append(field('Name', nm));
-  for (const [k, v] of Object.entries(o.params)) {
-    if (k === 'segments') continue;
-    if (typeof v === 'number') s1.append(field(k, numInput(v, (nv) => apply([{ op: 'set', id: o.id, params: { [k]: nv } }]))));
-    else if (k === 'style') { const sl = el('select', null, ...['fillet', 'weld', 'chamfer'].map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => apply([{ op: 'set', id: o.id, params: { style: sl.value } }]); s1.append(field('style', sl)); }
-    else if (k === 'mode') { const sl = el('select', null, ...['auto', 'add', 'subtract'].map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => apply([{ op: 'set', id: o.id, params: { mode: sl.value } }]); s1.append(field('add / remove', sl)); }
-    else if (Array.isArray(v) || v === null) { const ta = el('textarea', null, JSON.stringify(v)); ta.addEventListener('keydown', e => e.stopPropagation()); ta.addEventListener('change', () => { try { apply([{ op: 'set', id: o.id, params: { [k]: JSON.parse(ta.value) } }]); } catch (e) { toast('Not valid JSON: ' + e.message); } }); s1.append(field(k, ta)); }
+  if (!o) {
+    const s = sec('Model');
+    s.append(field('Name', textInput(model.doc.name, v => apply([{ op: 'rename', name: v }]))));
+    s.append(el('div', { class: 'f' }, 'Bodies', el('span', null, `${R.bodies.filter(b => !b.weld).length} parts${R.bodies.some(b => b.weld) ? ' · ' + R.bodies.filter(b => b.weld).length + ' welds' : ''} · ${model.doc.objects.length} features · ${R.ms.toFixed(0)} ms`)));
+    const og = R.originRef; s.append(el('div', { class: 'f' }, 'World origin', el('span', null, og ? (model.get(og.obj) || {}).name + ' · ' + og.conn : 'board 0,0,0')));
+    s.append(field('default material', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
+    const rep = massReport(model.doc, R), sm = sec('Mass & balance');
+    sm.append(el('div', { class: 'f' }, 'total mass', el('b', null, rep.total_mass_g ? (rep.total_mass_g >= 1000 ? fmt(rep.total_mass_g / 1000) + ' kg' : fmt(rep.total_mass_g) + ' g') : '—')));
+    sm.append(el('div', { class: 'f' }, 'centre of gravity', el('span', { class: 'mono' }, xyz(rep.cog))));
+    if (rep.balance) sm.append(el('div', { class: 'f' }, 'stands?', el('span', { class: rep.balance.stands ? 'ok' : 'warnline' }, rep.balance.stands ? `yes · ${fmt(rep.balance.margin_mm)} mm inside the base` : `no · tips toward ${rep.balance.tips_toward}`)));
+    if (rep.inertia_kg_mm2) sm.append(el('div', { class: 'f' }, 'inertia kg·mm²', el('span', { class: 'mono' }, rep.inertia_kg_mm2.slice(0, 3).map(v => fmt(v)).join(' / '))));
+    if (rep.unassigned.length) sm.append(el('div', { class: 'warnline' }, `No material: ${rep.unassigned.slice(0, 4).join(', ')}${rep.unassigned.length > 4 ? '…' : ''}`));
+    sm.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv') }, 'Parts list (CSV)'), el('button', { class: 'btn' + (views.showCoG ? ' pri' : ''), onclick: () => { views.showCoG = !views.showCoG; renderProps(); syncBar(); views.draw(); } }, views.showCoG ? 'Hide CoG' : 'Show CoG')));
+    const sa = sec('Add-ons');
+    for (const a of listAddons()) sa.append(el('div', { class: 'f' }, a.name, el('span', { class: 'btns' }, ...Object.entries(a.actions).map(([k]) => el('button', { class: 'btn', onclick: () => openAddonForm(a.id, k) }, k)))));
+    if (!ADDONS.size) sa.append(el('div', { class: 'empty' }, 'No add-ons loaded.'));
+    return;
   }
-  if (o.type === 'edge' && o._resolved) s1.append(el('div', { class: 'f' }, 'edge', el('span', null, (o._resolved.convex ? 'outer (convex) → removes' : 'inner (concave) → adds') + ' · ' + o._resolved.angle + '°')));
+  const s1 = sec(TYPES[o.type] ? TYPES[o.type].label : o.type);
+  s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
+  const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params) : Object.keys(o.params);
+  for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
+  if (o.type === 'edge' && o._resolved) s1.append(el('div', { class: 'f' }, 'edge', el('span', null, (o._resolved.convex ? 'outer (convex) → removes' : 'inner (concave) → adds') + ' · ' + o._resolved.angle + '°' + (o._resolved.round ? ' · all round' : ''))));
+  if (o.type === 'pattern') {
+    const copies = [...(R.virtual || new Map()).values()].filter(v => v.pattern === o.id);
+    s1.append(el('div', { class: 'f' }, 'repeats', el('span', null, (o.of || []).map(i => (model.get(i) || {}).name || i).join(', '))), el('div', { class: 'f' }, 'copies', el('span', null, String(new Set(copies.map(c => c.index)).size))));
+    s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'Copies follow the original: change its size and every copy changes. about = {"obj": id, "conn": connector} sets the axis (circular) or plane (mirror).'));
+  }
+  if (o.type === 'weld') {
+    const r = o._resolved || {};
+    s1.append(el('div', { class: 'f' }, 'joins', el('span', null, ...(o.joins || []).map((id, i) => [i ? ' + ' : '', el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(id); } }, (model.get(id) || {}).name || id)]).flat())));
+    s1.append(el('div', { class: 'f' }, 'seam', el('span', null, r.seams ? `${fmt(r.length)} mm${r.round ? ' (round)' : ''}${r.seams > 1 ? ' · ' + r.seams + ' seams' : ''}` : '—')));
+    s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
+  }
+  infoSection(o, sec);
   /* placement */
-  if (o.type !== 'edge') {
+  if (!['edge', 'pattern', 'weld'].includes(o.type)) {
     const s2 = sec('Placement');
-    if (o.mate) {
-      const m = o.mate, targets = [['origin', 'World origin']].concat(model.doc.objects.filter(x => x.id !== o.id && x.type !== 'edge').map(x => [x.id, x.name]));
+    if (o.mate && o.mate.kind) {
+      const m = o.mate, mate = (patch) => apply([Object.assign({}, m, { op: 'mate', id: o.id }, patch)]);
+      s2.append(el('div', { class: 'f' }, 'mate', el('span', null, `${m.kind} mesh with ${(model.get(m.to) || {}).name}`)), field('around °', numInput(m.around || 0, v => mate({ around: v }))), field('axial mm', numInput(m.axial || 0, v => mate({ axial: v }))), field('phase °', numInput(m.phase || 0, v => mate({ phase: v }))));
+      s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
+    } else if (o.mate) {
+      const m = o.mate, targets = [['origin', 'World origin']].concat(model.doc.objects.filter(x => x.id !== o.id && !['edge', 'pattern', 'weld'].includes(x.type)).map(x => [x.id, x.name]));
       const to = el('select', null, ...targets.map(([id, n]) => el('option', { value: id, selected: m.to === id }, n))); to.onchange = () => apply([{ op: 'mate', id: o.id, to: to.value, a: m.a, b: m.b }]);
       const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
       const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
@@ -103,7 +195,7 @@ function renderProps() {
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
     } else {
       const p = o.pose || { at: [0, 0, 0], rot: [0, 0, 0] }, setPose = (at, rot) => apply([{ op: 'set', id: o.id, at, rot }]);
-      ['x', 'y', 'z'].forEach((ax, k) => s2.append(field(ax, numInput(+(p.at[k] - (k < 3 ? R.originPoint[k] : 0)).toFixed(3), v => { const at = p.at.slice(); at[k] = v + R.originPoint[k]; setPose(at, p.rot); }))));
+      ['x', 'y', 'z'].forEach((ax, k) => s2.append(field(ax, numInput(+(p.at[k] - R.originPoint[k]).toFixed(3), v => { const at = p.at.slice(); at[k] = v + R.originPoint[k]; setPose(at, p.rot); }))));
       ['rx', 'ry', 'rz'].forEach((ax, k) => s2.append(field(ax + ' °', numInput(p.rot[k], v => { const rot = p.rot.slice(); rot[k] = v; setPose(p.at, rot); }))));
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => setTool('mate', o.id) }, 'Mate…'), o.id !== R.ground ? el('button', { class: 'btn', onclick: () => apply([{ op: 'ground', id: o.id }]) }, 'Make ground') : null, !o.fixed && o.id !== R.ground ? el('button', { class: 'btn', onclick: () => apply([{ op: 'fix', id: o.id }]) }, 'Fix in place') : null));
     }
@@ -117,11 +209,60 @@ function renderProps() {
     mode.onchange = () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: mode.value }]);
     s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')), el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
   }
+  if (!['edge', 'pattern'].includes(o.type)) massSection(o, sec);
   const s4 = sec('Object');
-  if (o.type !== 'edge') { const col = el('input', { type: 'color', value: o.color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
-  s4.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'), el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
+  if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
+  s4.append(el('div', { class: 'btns' },
+    !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
+    el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
+    el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
 }
-function select(id) { selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); }
+/* ---------- add-on action forms (right panel) ---------- */
+let addonForm = null;
+function openAddonForm(addonId, action) { addonForm = { addonId, action, values: null, result: null }; setTool(null); selected = null; views.sel = null; renderProps(); }
+function argInput(key, spec, value) {
+  const v = value !== undefined ? value : spec.default;
+  if (spec.options) { const sl = el('select', { 'data-k': key }, el('option', { value: '' }, '—'), ...spec.options.map(x => el('option', { value: x, selected: v === x }, x))); return sl; }
+  if (typeof spec.default === 'boolean') { const c = el('input', { type: 'checkbox', 'data-k': key }); c.checked = !!v; return c; }
+  const i = el('input', { 'data-k': key, value: v == null ? '' : Array.isArray(v) ? v.map(x => (Array.isArray(x) ? x.join(':') : x)).join(', ') : v, placeholder: spec.doc || '' }); i.addEventListener('keydown', e => e.stopPropagation()); return i;
+}
+function readArg(input, spec) {
+  if (input.type === 'checkbox') return input.checked;
+  const raw = input.value.trim(); if (raw === '') return null;
+  if (Array.isArray(spec.default) || /[,:]/.test(raw)) { const parts = raw.split(/\s*,\s*/).map(x => (x.includes(':') ? x.split(':').map(Number) : (isFinite(+x) ? +x : x))); return parts; }
+  return isFinite(+raw) && !spec.options ? +raw : raw;
+}
+function renderAddonForm(body) {
+  const a = ADDONS.get(addonForm.addonId), act = a && a.actions[addonForm.action];
+  if (!act) { addonForm = null; renderProps(); return; }
+  const s = el('div', { class: 'sec' }, el('h4', null, `${a.name} · ${addonForm.action}`)); body.append(s);
+  s.append(el('div', { class: 'empty', style: 'padding:4px 0' }, act.doc || ''));
+  const inputs = Object.entries(act.args || {}).map(([k, spec]) => { const i = argInput(k, spec, addonForm.values ? addonForm.values[k] : undefined); s.append(field(label(k), i)); return [k, spec, i]; });
+  const run = (extra) => {
+    const args = Object.fromEntries(inputs.map(([k, spec, i]) => [k, readArg(i, spec)]).filter(([, v]) => v !== null)); Object.assign(args, extra || {});
+    addonForm.values = args;
+    try {
+      if (act.query && !args.build) addonForm.result = act.run(args, model.addonContext()).info;
+      else { const r = apply([{ op: 'addon', addon: a.id, action: addonForm.action, args }], `${a.name}: ${addonForm.action}`)[0]; addonForm.result = r.info || {}; const last = [...(r.results || [])].reverse().find(x => x && x.id); if (last) { views.sel = last.id; } views.fitAll(); toast(`${a.name}: ${addonForm.action} done`, 1600); }
+    } catch (e) { addonForm.result = { error: e.message }; }
+    renderProps();
+  };
+  s.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => run() }, act.query ? 'Advise' : 'Build'), act.query && act.args && 'build' in act.args ? el('button', { class: 'btn', onclick: () => run({ build: true }) }, 'Advise + build') : null, el('button', { class: 'btn', onclick: () => { addonForm = null; renderProps(); } }, 'Close')));
+  if (addonForm.result) {
+    const r = el('div', { class: 'sec' }, el('h4', null, addonForm.result.error ? 'Problem' : 'Result')); body.append(r);
+    const show = (obj, into) => {
+      for (const [k, v] of Object.entries(obj)) {
+        if (v == null) continue;
+        if (k === 'error') { into.append(el('div', { class: 'warnline' }, v)); continue; }
+        if (Array.isArray(v) && v.every(x => typeof x === 'string') && v.some(x => x.length > 24)) { into.append(el('div', { class: 'f' }, label(k), el('ul', { class: 'why' }, ...v.map(x => el('li', null, x))))); continue; }
+        if (v && typeof v === 'object' && !Array.isArray(v)) { const sub = el('div', { class: 'subsec' }, el('b', null, label(k))); into.append(sub); show(v, sub); continue; }
+        into.append(el('div', { class: 'f' }, label(k), el('span', { class: 'mono' }, Array.isArray(v) ? v.join(', ') : typeof v === 'number' ? fmt(v) : String(v))));
+      }
+    };
+    show(addonForm.result, r);
+  }
+}
+function select(id) { id = model.resolveId(id); if (id) addonForm = null; selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); }
 function refreshGhost() {
   const o = selected && model.get(selected), R = model.result;
   if (o && (o.into || o.hidden) && R.local.has(o.id)) views.setGhost(R.local.get(o.id).transform(M4.mul(M4.translate(V.neg(R.originPoint)), R.world.get(o.id))).transform(M4.translate(R.originPoint)));
@@ -133,6 +274,7 @@ function syncBar() {
   $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
   $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
+  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
 document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addShape(b.dataset.add)));
@@ -147,6 +289,18 @@ $('#undo').onclick = () => { const l = model.undo(); if (l) toast('Undo · ' + l
 $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l, 900); };
 $('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
 $('#fit').onclick = () => views.fitAll();
+$('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
+$('#addonBtn').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
+  for (const a of listAddons()) {
+    m.append(el('div', { class: 'mh' }, a.name));
+    for (const [t, d] of Object.entries(a.types)) m.append(el('button', { onclick: () => { m.remove(); addShape(t); } }, 'Add ' + d.label.toLowerCase()));
+    for (const k of Object.keys(a.actions)) m.append(el('button', { onclick: () => { m.remove(); openAddonForm(a.id, k); } }, k[0].toUpperCase() + k.slice(1) + '…'));
+  }
+  if (!ADDONS.size) m.append(el('div', { class: 'mh' }, 'No add-ons loaded'));
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+};
 $('#hiddenBtn').onclick = () => { views.showHidden = !views.showHidden; syncBar(); views.draw(); };
 $('#dimsBtn').onclick = () => { views.showDims = !views.showDims; syncBar(); views.draw(); };
 $('#theme').onclick = () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); };
@@ -161,6 +315,7 @@ $('#fileBtn').onclick = (e) => {
   item('Export STL (3D print)', () => download(new Blob([exportSTL()], { type: 'model/stl' }), slug() + '.stl'));
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
+  item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
   item('Load the demo model', demo);
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
@@ -204,10 +359,13 @@ let tool = null;
 /* the hint bar doubles as a tiny inline form: fields = [[key, label, value]], actions get the current values */
 const hint = (t, actions, fields) => {
   const h = $('#hint'); if (!t) { h.hidden = true; return; } h.hidden = false; h.innerHTML = '';
-  const inputs = (fields || []).map(([k, label, v]) => { const i = el('input', { type: 'number', step: 'any', value: v, 'data-k': k, 'aria-label': label }); i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && actions && actions[0]) actions[0][1](vals()); if (e.key === 'Escape') setTool(null); }); return [k, label, i]; });
-  const vals = () => Object.fromEntries(inputs.map(([k, , i]) => [k, parseFloat(String(i.value).replace(',', '.'))]));
+  const inputs = (fields || []).map(([k, label, v, options]) => {
+    const i = options ? el('select', { 'data-k': k, 'aria-label': label }, ...options.map(x => el('option', { value: x, selected: x === v }, x))) : el('input', { type: 'number', step: 'any', value: v, 'data-k': k, 'aria-label': label });
+    i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && actions && actions[0]) actions[0][1](vals()); if (e.key === 'Escape') setTool(null); }); return [k, label, i, options];
+  });
+  const vals = () => Object.fromEntries(inputs.map(([k, , i, options]) => [k, options ? i.value : parseFloat(String(i.value).replace(',', '.'))]));
   h.append(el('span', null, t), ...inputs.map(([, label, i]) => el('label', { class: 'hf' }, label, i)), ...(actions || []).map(([l, f]) => el('button', { onclick: () => f(vals()) }, l)), el('button', { onclick: () => setTool(null) }, 'Esc'));
-  if (inputs[0]) setTimeout(() => { inputs[0][2].focus(); inputs[0][2].select(); }, 0);
+  if (inputs[0] && !inputs[0][3]) setTimeout(() => { inputs[0][2].focus(); if (inputs[0][2].select) inputs[0][2].select(); }, 0);
 };
 let pendingLoft = null;
 function setTool(name, arg) {
@@ -215,8 +373,13 @@ function setTool(name, arg) {
   if (!name) hint(null);
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
+  else if (name === 'edge-weld') {
+    hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
+    const [sz, pf] = document.querySelectorAll('#hint [data-k]');
+    sz.addEventListener('input', () => { const v = parseFloat(sz.value); if (v > 0) { prefs.weldSize = v; savePrefs(); } }); pf.addEventListener('change', () => { prefs.weldProfile = pf.value; savePrefs(); }); setTimeout(() => sz.blur(), 0);
+  }
   else if (name.startsWith('edge-')) {
-    hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near a straight edge — outer edges are trimmed, inner corners are filled`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
+    hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Measure: click two connectors in a FRONT / TOP / RIGHT view'); }
@@ -326,9 +489,26 @@ function clickTool(pane, x, y, hit, e) {
     apply([{ op: 'boolean', target: t.data.target, tool: id, mode: t.name.slice(5) }]); select(t.data.target); setTool(null); return;
   }
   if (t.name.startsWith('edge-')) {
-    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a body, close to the edge'); return; }
-    try { const r = apply([{ op: 'edge', target: pk.id, near: nearestEdgePoint(pk), style: t.name.slice(5), size: prefs.edgeSize || 4 }])[0]; toast(`${r.convex ? 'Outer edge → trimmed' : 'Inner corner → filled'} (${r.angle}°)${r.round ? ' · all the way round Ø' + fmt(r.round.diameter) : ''}`, 2000); select(r.id); }
-    catch (err) { /* toast shown */ }
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part, close to the edge'); return; }
+    if (R.virtual && R.virtual.has(pk.id)) { toast('That is a pattern copy: change the original and every copy follows'); return; }
+    const style = t.name.slice(5), own = nearestEdgePoint(pk), ownD = V.len(V.sub(own, pk.point)), seam = seamNear(pk);
+    const onSeam = seam && seam.dist <= ownD + 0.5;
+    try {
+      if (style === 'weld') {
+        if (!onSeam) { toast('A weld joins two separate parts: click where two parts meet. Inside one part, use Fillet (it blends the part).', 3200); return; }
+        const r = apply([{ op: 'weld', a: pk.id, b: seam.other, near: seam.point, size: prefs.weldSize || 4, profile: prefs.weldProfile || 'flat' }], `Weld ${model.get(pk.id).name} to ${model.get(seam.other).name}`)[0];
+        toast(r.material_advice ? `Welded, but: ${r.material_advice}` : `Welded: ${fmt(r.length)} mm seam${r.round ? ' (round)' : ''} — the parts stay separate${r.other_seams ? ` · ${r.other_seams} more seam${r.other_seams > 1 ? 's' : ''}: tick “all around” in Properties` : ''}`, r.material_advice ? 4200 : 2600); select(r.id);
+        return;
+      }
+      if (onSeam) {
+        const A = model.get(pk.id), B = model.get(seam.other);
+        const r = apply([{ op: 'boolean', target: A.id, tool: B.id, mode: 'add' }, { op: 'edge', target: A.id, near: seam.point, style, size: prefs.edgeSize || 4 }], `${style === 'chamfer' ? 'Chamfer' : 'Fillet'} merges ${B.name} into ${A.name}`)[1];
+        toast(`${B.name} is now part of ${A.name} (one piece) and the corner is ${style === 'chamfer' ? 'chamfered' : 'filleted'}. To keep them separate, Undo and use Weld.`, 3600); select(r.id);
+        return;
+      }
+      const r = apply([{ op: 'edge', target: pk.id, near: own, style, size: prefs.edgeSize || 4 }])[0];
+      toast(`${r.convex ? 'Outer edge → trimmed' : 'Inner corner → filled'} (${r.angle}°)${r.round ? ' · all the way round Ø' + fmt(r.round.diameter) : ''}`, 2000); select(r.id);
+    } catch (err) { /* toast shown */ }
     return;
   }
   if (t.name === 'measure') {
@@ -339,6 +519,40 @@ function clickTool(pane, x, y, hit, e) {
   }
 }
 const rootOrSelf = (id) => id;
+/* the nearest inside-corner seam between the picked part and another separate part that touches it */
+function seamNear(pk) {
+  const R = model.result, A = R.bodies.find(b => b.id === pk.id); if (!A || A.weld) return null;
+  const ba = A.solid.bbox(), touch = (b) => { const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) if (bb.min[k] > ba.max[k] + 0.5 || bb.max[k] < ba.min[k] - 0.5) return false; return true; };
+  let best = null;
+  for (const B of R.bodies) {
+    if (B.id === A.id || B.weld || B.hidden || B.virtual || !model.get(B.id) || !touch(B)) continue;
+    let seams; try { seams = findSeams(A.solid, B.solid).seams; } catch (e) { continue; }
+    for (const e of seams) {
+      if (e.convex) continue;
+      const pts = e.loop ? e.loop.map((q, i) => [q, e.loop[(i + 1) % e.loop.length]]) : [[e.a, e.b]];
+      for (const [a, b] of pts) { const ab = V.sub(b, a), tt = Math.max(0, Math.min(1, V.dot(V.sub(pk.point, a), ab) / (V.dot(ab, ab) || 1))), q = V.add(a, V.mul(ab, tt)), d = V.len(V.sub(q, pk.point)); if (!best || d < best.dist) best = { other: B.id, point: q, dist: d }; }
+    }
+  }
+  return best;
+}
+function patternHint(id) {
+  const o = model.get(id); if (!o) return;
+  const root = o.into ? (model.bodyContaining(o.id) || {}).id : null;
+  setTool(null);
+  const make = (extra) => { try { const r = apply([Object.assign({ op: 'pattern', of: id }, extra)])[0]; hint(null); select(r.id); toast(`${r.copies ? 'Pattern made' : 'Pattern'} · change ${o.name} and every copy follows`, 2000); } catch (e) { /* toast shown */ } };
+  hint(`Pattern ${o.name}:`, [
+    ['Row → X', (v) => make({ kind: 'linear', count: v.count, spacing: v.spacing, direction: [1, 0, 0] })],
+    ['Row → Y', (v) => make({ kind: 'linear', count: v.count, spacing: v.spacing, direction: [0, 1, 0] })],
+    ['Grid', (v) => make({ kind: 'linear', count: v.count, spacing: v.spacing, direction: [1, 0, 0], count2: v.count, spacing2: v.spacing, direction2: [0, 1, 0] })],
+    ['Circular', (v) => make({ kind: 'circular', count: v.count, angle: v.angle, about: root ? { obj: root, conn: 'center' } : { obj: 'origin', conn: 'xy' } })],
+    ['Mirror X', () => make({ kind: 'mirror', plane: 'yz' })], ['Mirror Y', () => make({ kind: 'mirror', plane: 'xz' })]
+  ], [['count', 'count', 4], ['spacing', 'spacing mm', Math.round(Math.max(10, (o.params.width || o.params.diameter || 10) * 1.5))], ['angle', 'circle °', 360]]);
+}
+function bomCSV() {
+  const b = bom(model.doc, model.result), q = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const head = ['item', 'part', 'part_no', 'type', 'material', 'quantity', 'mass_each_g', 'mass_total_g', 'volume_each_cm3', 'size', 'supplier', 'notes'];
+  return [head.join(','), ...b.lines.map(L => head.map(k => q(L[k])).join(',')), ['', 'TOTAL', '', '', '', b.lines.reduce((n, L) => n + L.quantity, 0), '', b.total_mass_g, '', '', '', ''].join(',')].join('\n');
+}
 function nearestEdgePoint(pk) {
   const body = model.bodyContaining(pk.id); if (!body) return pk.point;
   let best = pk.point, bd = Infinity;
@@ -361,7 +575,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure');
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -369,16 +583,16 @@ window.addEventListener('keydown', (e) => {
 function demo() {
   model.load(newDoc('Bracket demo'));
   apply([
-    { op: 'add', type: 'box', id: 'plate', name: 'Base plate', params: { width: 120, depth: 70, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' }, color: '#c7cbd8' },
-    { op: 'add', type: 'box', id: 'web', name: 'Upright', params: { width: 12, depth: 70, height: 60 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-54, 0] }, into: 'plate', mode: 'add' },
+    { op: 'add', type: 'box', id: 'plate', name: 'Base plate', params: { width: 120, depth: 70, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' }, meta: { material: 'steel', part_no: 'BR-001' } },
+    { op: 'add', type: 'box', id: 'web', name: 'Upright', params: { width: 12, depth: 70, height: 60 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-54, 0] }, meta: { material: 'steel', part_no: 'BR-002' } },
     { op: 'add', type: 'cylinder', id: 'hole1', name: 'Bolt hole', params: { diameter: 10, height: 12 }, mate: { to: 'plate', a: 'top', b: 'top', flip: false, offset: 1, slide: [40, 22] }, into: 'plate', mode: 'subtract' },
-    { op: 'add', type: 'cylinder', id: 'hole2', name: 'Bolt hole 2', params: { diameter: 10, height: 12 }, mate: { to: 'plate', a: 'top', b: 'top', flip: false, offset: 1, slide: [40, -22] }, into: 'plate', mode: 'subtract' },
-    { op: 'add', type: 'cylinder', id: 'boss', name: 'Boss', params: { diameter: 26, height: 18 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [5, 0] }, color: '#7aa2ff' },
-    { op: 'add', type: 'cone', id: 'tip', name: 'Cap', params: { diameter: 26, top: 8, height: 14 }, mate: { to: 'boss', a: 'top', b: 'bottom' }, color: '#ff7b3d' }
+    { op: 'add', type: 'cylinder', id: 'boss', name: 'Boss', params: { diameter: 26, height: 18 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [5, 0] }, color: '#7aa2ff', meta: { material: 'aluminium', part_no: 'BR-010' } },
+    { op: 'add', type: 'cone', id: 'tip', name: 'Cap', params: { diameter: 26, top: 8, height: 14 }, mate: { to: 'boss', a: 'top', b: 'bottom' }, color: '#ff7b3d', meta: { material: 'brass' } }
   ], 'Demo bracket');
-  apply([{ op: 'edge', target: 'plate', near: [-48, 0, 10], style: 'fillet', size: 8 }], 'Fillet inside corner');
-  apply([{ op: 'edge', target: 'plate', near: [60, -35, 5], style: 'chamfer', size: 3 }, { op: 'edge', target: 'plate', near: [-60, 0, 70], d: [0, 1, 0], style: 'fillet', size: 5 }, { op: 'edge', target: 'plate', near: [45, 22, 10], style: 'chamfer', size: 1.5 }], 'Round edges + countersink');
-  select(null); views.fitAll(); toast('Demo: union, holes, mates, an auto-filled inner fillet, trimmed outer edges and a countersink', 2600);
+  apply([{ op: 'weld', id: 'weld1', a: 'plate', b: 'web', near: [-48, 0, 10], size: 6, profile: 'flat' }], 'Weld the upright to the plate');
+  apply([{ op: 'edge', target: 'plate', near: [60, -35, 5], style: 'chamfer', size: 3 }, { op: 'edge', target: 'web', near: [-60, 0, 70], d: [0, 1, 0], style: 'fillet', size: 5 }, { op: 'edge', target: 'plate', near: [45, 22, 10], style: 'chamfer', size: 1.5 }], 'Round edges + countersink');
+  apply([{ op: 'pattern', id: 'holes', of: 'hole1', kind: 'linear', count: 2, spacing: 44, direction: [0, -1, 0] }], 'Second bolt hole (array)');
+  select(null); views.fitAll(); toast('Demo: a welded steel bracket (two separate parts), an arrayed countersunk hole, mates and materials — Properties shows mass and balance', 3200);
 }
 
 /* ---------- AI bridge (MCP) ---------- */
@@ -431,7 +645,7 @@ async function runCmd(cmd, a) {
       return out;
     }
     case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
-    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : JSON.stringify(model.doc, null, 1) }; }
+    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : JSON.stringify(model.doc, null, 1) }; }
     case 'model.select': select(a.id || null); return { selected };
     case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }
@@ -439,12 +653,39 @@ async function runCmd(cmd, a) {
     case 'model.load': { const doc = typeof a.doc === 'string' ? JSON.parse(a.doc) : a.doc; if (!doc || !Array.isArray(doc.objects)) throw new Error('Not a SketchFlow 3D model (needs objects[])'); model.load(Object.assign(newDoc(doc.name || 'Model'), doc)); select(null); views.fitAll(); return { model: model.describe() }; }
     case 'model.demo': demo(); return { model: model.describe() };
     case 'model.say': toast('🤖 ' + String(a.text || ''), Math.max(1500, (a.seconds || 6) * 1000)); return { ok: true };
+    case 'model.mass': return { mass: massReport(model.doc, model.result), parts_list: bom(model.doc, model.result), materials: Object.fromEntries(Object.entries(MATERIALS).map(([k, m]) => [k, `${m.name} ${m.density} g/cm³`])) };
+    case 'model.addon': {
+      if (!a.addon) return { addons: listAddons() };
+      const ad = ADDONS.get(a.addon); if (!ad) throw new Error(`No add-on “${a.addon}”. Loaded: ${[...ADDONS.keys()].join(', ')}`);
+      if (!a.action) return { addon: listAddons().find(x => x.id === a.addon) };
+      const act = ad.actions[a.action]; if (!act) throw new Error(`${ad.name} has no action “${a.action}”. Try: ${Object.keys(ad.actions).join(', ')}`);
+      if (act.query && !(a.args || {}).build) {
+        const args = Object.assign({}, ...Object.entries(act.args || {}).map(([k, v]) => ({ [k]: v && v.default !== undefined ? v.default : undefined })), a.args || {});
+        return { info: act.run(args, model.addonContext()).info };
+      }
+      const r = model.apply([{ op: 'addon', addon: a.addon, action: a.action, args: a.args || {} }], a.label || `${ad.name}: ${a.action}`, { relative: true })[0];
+      if (a.fit !== false) views.fitAll();
+      const out = { info: r.info, results: r.results, model: model.describe() };
+      if (a.look) Object.assign(out, await snapshotFor(a));
+      return out;
+    }
   }
   throw new Error('Unknown command ' + cmd);
 }
-window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, demo, exportSTL, exportOBJ, runCmd };
+window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear };
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 /* the 2D board link only makes sense when both are served by the SketchFlow server */
 if (!bridge.token || !/^https?:$/.test(location.protocol)) { const a = document.querySelector('a[href="/"]'); if (a) a.remove(); }
-renderTree(); renderProps(); syncBar(); connectBridge();
+/* side-built add-ons: any .js file in model/addons/ (or SKETCHFLOW_ADDONS) is loaded when served */
+async function loadAddons() {
+  if (!/^https?:$/.test(location.protocol) || !bridge.token) return;
+  let files = []; try { files = await (await fetch('addons/index.json', { cache: 'no-store' })).json(); } catch (e) { return; }
+  let n = 0;
+  for (const f of files) {
+    try { const mod = await import('../addons/' + encodeURIComponent(f)); const a = mod.default || mod.addon; if (a && a.id && !ADDONS.has(a.id)) { registerAddon(a); n++; } }
+    catch (e) { toast(`Add-on ${f} did not load: ${e.message}`, 4000); }
+  }
+  if (n) { model.recompute(); views.rebuild(); views.draw(); renderTree(); renderProps(); toast(`${n} add-on${n > 1 ? 's' : ''} loaded`, 1500); }
+}
+renderTree(); renderProps(); syncBar(); connectBridge(); loadAddons();
 if (!model.doc.objects.length) demo();

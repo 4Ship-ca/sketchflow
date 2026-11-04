@@ -11,6 +11,7 @@
  *   SKETCHFLOW_NO_OPEN=1   never auto-open a browser
  *   SKETCHFLOW_LAN=1       also listen on your network so a tablet/phone can be the drawing surface (pairing code required)
  *   SKETCHFLOW_EXPORT_DIR  default folder for exports (else ~/Pictures/SketchFlow or ~/SketchFlow)
+ *   SKETCHFLOW_ADDONS      extra folder of 3D add-ons (*.js, see model/ADDONS.md); model/addons/ is always loaded
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -81,6 +82,10 @@ const server = http.createServer(async (req, res) => {
       if (!local && url.searchParams.get('k') !== PAIR) return send(res, 403, `<p style="font:16px system-ui;padding:2em">Add the pairing code: <code>?k=…</code> (ask Claude to call <b>open_model</b> to see it).</p>`, 'text/html; charset=utf-8');
       return send(res, 200, await pageHtml(path.join('model', 'index.html')), 'text/html; charset=utf-8');
     }
+    /* 3D add-ons: model/addons/*.js plus SKETCHFLOW_ADDONS; the page loads every file listed here */
+    if (req.method === 'GET' && url.pathname === '/3d/addons/index.json') return send(res, 200, await addonFiles().then(m => [...m.keys()]));
+    const ad = url.pathname.match(/^\/3d\/addons\/([\w.-]+\.js)$/);
+    if (req.method === 'GET' && ad) { const f = (await addonFiles()).get(ad[1]); if (!f) return send(res, 404, 'not found', 'text/plain'); return send(res, 200, await fsp.readFile(f), 'text/javascript; charset=utf-8'); }
     const js = url.pathname.match(/^\/(3d\/)?js\/([\w-]+\.js)$/);
     if (req.method === 'GET' && js) {
       const f = path.join(ROOT, js[1] ? path.join('model', 'js') : 'js', js[2]);
@@ -124,6 +129,13 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { log('http error', e.message); try { send(res, 500, { error: e.message }); } catch { /* already sent */ } }
 });
 
+async function addonFiles() {
+  const out = new Map();
+  for (const dir of [path.join(ROOT, 'model', 'addons'), process.env.SKETCHFLOW_ADDONS && process.env.SKETCHFLOW_ADDONS.replace(/^~(?=$|\/|\\)/, os.homedir())].filter(Boolean)) {
+    try { for (const f of await fsp.readdir(dir)) if (/^[\w.-]+\.js$/.test(f) && !out.has(f)) out.set(f, path.join(dir, f)); } catch { /* folder missing */ }
+  }
+  return out;
+}
 function listen(port, tries = 0) {
   return new Promise((resolve, reject) => {
     const onErr = (e) => { server.off('listening', onOk); if (e.code === 'EADDRINUSE' && tries < 25) resolve(listen(port + 1, tries + 1)); else reject(e); };
@@ -275,7 +287,7 @@ const TOOLS = [
       return text(`SketchFlow 3D is open at ${modelUrl()}${LAN ? '\nTablet/phone: ' + lanUrls('/3d/').join('  ') : ''}\n` + JSON.stringify(d, null, 1));
     } },
   { name: 'model_build', description: 'Build or change the 3D model with a batch of operations (atomic: all apply or none, one undo step for the user). Same operations the UI uses. Returns per-op results (new ids, edge convexity) and the model summary; look:true also returns a picture of the 4 views. See the server instructions for the op list, connector names and mate rules.', inputSchema: S({
-      ops: { type: 'array', description: 'Operations, applied in order. Each is an object with "op": add | set | mate | unmate | boolean | separate | edge | extrude | loft | revolve | sweep | delete | origin | ground | fix | cleanup | dim | undim | rename.', items: { type: 'object', additionalProperties: true, properties: { op: { type: 'string', enum: ['add', 'set', 'mate', 'unmate', 'boolean', 'separate', 'edge', 'extrude', 'loft', 'revolve', 'sweep', 'delete', 'origin', 'ground', 'fix', 'cleanup', 'dim', 'undim', 'rename'] } }, required: ['op'] } },
+      ops: { type: 'array', description: 'Operations, applied in order. Each is an object with "op": add | set | mate | unmate | boolean | separate | edge | weld | pattern | extrude | loft | revolve | sweep | delete | origin | ground | fix | cleanup | dim | undim | rename | material | addon.', items: { type: 'object', additionalProperties: true, properties: { op: { type: 'string', enum: ['add', 'set', 'mate', 'unmate', 'boolean', 'separate', 'edge', 'weld', 'pattern', 'extrude', 'loft', 'revolve', 'sweep', 'delete', 'origin', 'ground', 'fix', 'cleanup', 'dim', 'undim', 'rename', 'material', 'addon'] } }, required: ['op'] } },
       label: { type: 'string', description: 'Undo-history label the user sees, e.g. "Add mounting holes"' },
       look: { type: 'boolean', description: 'also return a PNG of the views after building (default false)' },
       layout: { type: 'string', enum: ['4', '3d', 'top', 'front', 'right'], description: 'with look: which view(s) to picture' },
@@ -310,12 +322,21 @@ const TOOLS = [
       }
       return json(await model(a.action, a));
     } },
-  { name: 'model_export', description: 'Save the 3D model to disk: stl (mesh for printing/slicers), obj (mesh, one object per body), json (.sf3d.json, the editable parametric model). Coordinates are mm from the model origin. Returns the file paths.', inputSchema: S({ formats: { type: 'array', items: { type: 'string', enum: ['stl', 'obj', 'json'] } }, dir: { type: 'string', description: 'folder (default ~/Pictures/SketchFlow)' } }),
+  { name: 'model_mass', description: 'Mass properties of the 3D model: per part material, density, volume, mass, centre of gravity and inertia; assembly total mass, centre of gravity, inertia and whether it stands on its base (or which way it tips); the parts list (quantities, part numbers, materials, masses); and the material library. Set materials with model_build {op:"set", id, material:"steel"} or meta:{material, density, fill, part_no, supplier, notes, quantity}, or a model default with {op:"material", material}.', inputSchema: S({}),
+    run: async () => json(await model('mass')) },
+  { name: 'model_addon', description: 'Use a 3D add-on (built-in: "gears"). With no addon: lists the loaded add-ons with their shapes, mate kinds and actions (with argument docs). With addon + action: runs it — query actions (e.g. gears/advise) return advice and change nothing; build actions (gears/pair, train, planetary, gear, or advise with build:true) add objects as one undoable step. look:true returns a picture.', inputSchema: S({ addon: { type: 'string' }, action: { type: 'string' }, args: { type: 'object', additionalProperties: true }, label: { type: 'string' }, look: { type: 'boolean' }, layout: { type: 'string', enum: ['4', '3d', 'top', 'front', 'right'] } }),
+    run: async (a) => {
+      const r = await model('addon', a, 120000);
+      const out = text(JSON.stringify({ addons: r.addons, addon: r.addon, info: r.info, results: r.results, model: r.model }, null, 1));
+      if (r.png) out.content.unshift({ type: 'image', data: r.png, mimeType: 'image/png' });
+      return out;
+    } },
+  { name: 'model_export', description: 'Save the 3D model to disk: stl (watertight mesh for printing/slicers), obj (mesh, one object per body), json (.sf3d.json, the editable parametric model), bom (parts list CSV with quantities, materials and masses). Coordinates are mm from the model origin. Returns the file paths.', inputSchema: S({ formats: { type: 'array', items: { type: 'string', enum: ['stl', 'obj', 'json', 'bom'] } }, dir: { type: 'string', description: 'folder (default ~/Pictures/SketchFlow)' } }),
     run: async (a) => {
       const base = a.dir ? a.dir.replace(/^~(?=$|\/|\\)/, os.homedir()) : defaultExportDir();
       await fsp.mkdir(base, { recursive: true });
       const written = [];
-      for (const f of (a.formats && a.formats.length ? a.formats : ['stl', 'json'])) {
+      for (const f of (a.formats && a.formats.length ? a.formats : ['stl', 'json', 'bom'])) {
         const r = await model('export', { format: f }, 120000);
         const out = path.join(base, r.name.replace(/(\.[\w.]+)$/, '-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '$1'));
         await fsp.writeFile(out, r.text, 'utf8'); written.push(out);
@@ -361,6 +382,10 @@ Booleans: add with into:"targetId" + mode:"subtract"|"add"|"intersect" (or op bo
 Edges: {op:'edge', target, near:[x,y,z] (a point on the edge), style:'fillet'|'weld'|'chamfer', size}. The edge is found on the finished body; convex (outside) edges are trimmed, concave (inside corner) edges are filled — automatically, by the angle between the faces (override with mode add/subtract). Round edges (a flat face meeting a cylinder/cone/revolve: disc rims, hole rims, boss bases) are treated all the way round — e.g. chamfer a hole rim = countersink, fillet a boss base = filled. The edge is remembered by the two surfaces it lies between, so it is re-found after parameter changes.
 Other ops: set {id, params, name, color, at, rot, hidden, fixed}; delete {id}; ground {id}; origin {obj, conn}; fix {id} (freeze current place, drop mate); cleanup {fixFloating} (repairs orphans: tools or edges whose target is gone, mates to deleted objects); dim {a:{obj,conn}, b:{obj,conn}, view} (a measured dimension between connectors); rename {name}.
 Every object's own parameters are shown as editable dimensions in the 2D views; the user can click one to change it, and mates keep everything attached. Warnings list floating (unmated, not fixed) and orphaned objects — fix them or tell the user.
+Patterns (arrays): {op:'pattern', of: id or [ids], kind:'linear' (count, spacing, direction:[x,y,z], optional count2/spacing2/direction2 for a grid) | 'circular' (count, angle total°, about:{obj, conn} e.g. {obj:'disc', conn:'center'} for a bolt circle) | 'mirror' (plane:'yz'|'xz'|'xy' through the origin, or about:{obj, conn} = that face's plane)}. Copies are live (they follow the original's sizes and boolean role); a hole's countersink comes along. Revolve is the op 'revolve' (a profile around an axis); circular pattern repeats features around one.
+Welds vs fillets — manufacturing logic: a WELD joins two parts that are made separately; they stay separate parts (an assembly) and can be pulled apart. {op:'weld', a, b, near:[x,y,z] (optional: the seam nearest this point; default the longest), size (leg mm), profile:'flat'|'convex'|'concave', all_around:true (every inside seam between them)}. The parts must touch (mate them first); the bead is its own body (material defaults to part a's). A FILLET/CHAMFER blends ONE part: to fillet where two parts meet, first union them ({op:'boolean', target, tool, mode:'add'}) — they are then one piece (cast, printed or machined together).
+Metadata & mass: every part can carry meta {material, density (g/cm³, overrides the material), fill (0–1, e.g. 0.2 for 20% infill), part_no, supplier, notes, quantity}; shorthand material:'aluminium' on add/set; {op:'material', material} sets the model default. model_mass gives mass, centre of gravity, inertia per part and for the assembly, whether it stands, and the parts list. Materials: pla, petg, abs, asa, tpu, nylon, pa_cf, pom, acrylic, polycarbonate, resin, tough_resin, aluminium, steel, stainless, cast_iron, brass, bronze, copper, titanium, oak, pine, plywood, mdf, carbon_fibre, concrete, glass, rubber.
+Add-ons: model_addon lists them. Built-in "gears": shape type 'gear' {module, teeth, width, bore, pressure_angle, style:'spur'|'helical'|'herringbone', helix (° — sign = hand; mating external gears need opposite signs), backlash (mm), clearance (×module), shift, internal (ring gear), rim}; mate kind 'gear' keeps two gears in mesh: {op:'mate', id, to, kind:'gear', around (direction °, world), axial, phase} — centre distance and tooth phase follow the live sizes. Actions: advise {ratio, process: fdm|sla|cnc|laser|injection|hobbed, priority: balanced|strength|quiet|compact|precision, torque N·m, rpm, material, centre_distance, build} (picks module, teeth with a hunting-tooth ratio, form, pressure angle, backlash, clearance, width and explains why), pair {teeth:[z1,z2], module, process, around, driver, ring}, train {teeth:[…] simple chain | stages:[[z1,z2],[z3,z4]] compound}, planetary {sun, planet, planets}, gear {teeth, module, process}. Ask the advisor first when the user names a purpose or a process.
 Workflow: open_model → model_build (one batch per idea, with a clear label, look:true when it helps) → model_view to check → adjust with set/mate. Errors name the valid connectors/objects; the whole batch is rolled back on any error.`;
 function out(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 async function handle(msg) {

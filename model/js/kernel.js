@@ -160,6 +160,25 @@ export class Solid {
     return { min: mn, max: mx };
   }
   volume() { let s = 0; for (const p of this.polys) { const a = p.v[0].p; for (let i = 1; i < p.v.length - 1; i++) s += V.dot(a, V.cross(p.v[i].p, p.v[i + 1].p)); } return s / 6; }
+  /* volume, centroid and inertia tensor about the centroid (unit density), by summing signed tetrahedra from the origin */
+  massProps() {
+    let V0 = 0; const c = [0, 0, 0], C = [0, 0, 0, 0, 0, 0];   /* second moments xx yy zz xy yz zx */
+    for (const p of this.polys) {
+      const a = p.v[0].p;
+      for (let i = 1; i < p.v.length - 1; i++) {
+        const b = p.v[i].p, d = p.v[i + 1].p, v = V.dot(a, V.cross(b, d)) / 6; if (!v) continue;
+        V0 += v; for (let k = 0; k < 3; k++) c[k] += v * (a[k] + b[k] + d[k]) / 4;
+        const s = [a[0] + b[0] + d[0], a[1] + b[1] + d[1], a[2] + b[2] + d[2]], f = v / 20;
+        const sq = (i2, j2) => a[i2] * a[j2] + b[i2] * b[j2] + d[i2] * d[j2] + s[i2] * s[j2];
+        C[0] += f * sq(0, 0); C[1] += f * sq(1, 1); C[2] += f * sq(2, 2); C[3] += f * sq(0, 1); C[4] += f * sq(1, 2); C[5] += f * sq(2, 0);
+      }
+    }
+    if (Math.abs(V0) < 1e-12) return { volume: 0, centroid: [0, 0, 0], inertia: [0, 0, 0, 0, 0, 0] };
+    const g = c.map(x => x / V0);
+    /* about the centroid: shift second moments, then I = trace·1 − C */
+    const xx = C[0] - V0 * g[0] * g[0], yy = C[1] - V0 * g[1] * g[1], zz = C[2] - V0 * g[2] * g[2], xy = C[3] - V0 * g[0] * g[1], yz = C[4] - V0 * g[1] * g[2], zx = C[5] - V0 * g[2] * g[0];
+    return { volume: V0, centroid: g, inertia: [yy + zz, zz + xx, xx + yy, -xy, -yz, -zx] };   /* Ixx Iyy Izz Ixy Iyz Izx per unit density */
+  }
   area() { let s = 0; for (const p of this.polys) { const a = p.v[0].p; for (let i = 1; i < p.v.length - 1; i++) s += V.len(V.cross(V.sub(p.v[i].p, a), V.sub(p.v[i + 1].p, a))) / 2; } return s; }
   /* triangles for rendering / export. Booleans leave T-junctions (a vertex of one polygon in the middle of its
      neighbour's edge) which show as pixel cracks and make STL files leaky; repair them by inserting those vertices
@@ -397,6 +416,61 @@ export function sweep(profile, path, o) {
 }
 /* make sure polygons face outward (positive volume) */
 function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
+
+/* ---------- star-shaped prisms (gears, splines, knobs) ----------
+   outer: closed 2D profile, star-shaped around the origin, any start, counter-clockwise (polar angle never decreasing);
+   inner: optional hole profile of the same kind (a bore, or the teeth of a ring gear), or null;
+   stations: [{ z, rot (radians) }] in increasing z — twist per station gives helical / herringbone forms.
+   Built directly (no booleans), so even a 60-tooth helical gear is instant. */
+export function ringExtrude(outer, inner, stations, o) {
+  o = o || {};
+  const sidO = o.sidOuter || 'side', sidI = o.sidInner || 'bore', polys = [];
+  const push = (pts, sid) => { const q = poly(pts, sid); if (q) polys.push(q); };
+  const place = (pts, st) => { const c = Math.cos(st.rot || 0), sn = Math.sin(st.rot || 0); return pts.map(([x, y]) => [x * c - y * sn, x * sn + y * c, st.z]); };
+  const walls = (pts, sid, rev) => {
+    const n = pts.length;
+    for (let k = 0; k < stations.length - 1; k++) {
+      const r0 = place(pts, stations[k]), r1 = place(pts, stations[k + 1]);
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n, a = r0[i], b = r0[j], c = r1[j], d = r1[i];
+        if (rev) { push([b, a, d], sid); push([b, d, c], sid); } else { push([a, b, c], sid); push([a, c, d], sid); }
+      }
+    }
+  };
+  walls(outer, sidO, false); if (inner) walls(inner, sidI, true);
+  /* caps: a fan from the centre; with a hole, the ring is cut into sectors at every vertex angle of either loop and
+     each sector (two rays, one piece of each loop between them) is a convex quad */
+  const ang = (p) => Math.atan2(p[1], p[0]), TAU = 2 * Math.PI;
+  const tris2 = [];
+  if (!inner) { for (let i = 0; i < outer.length; i++) tris2.push([[0, 0], outer[i], outer[(i + 1) % outer.length]]); }
+  else {
+    const edgesOf = (pts) => pts.map((p, i) => { const q = pts[(i + 1) % pts.length]; let a0 = ang(p), a1 = ang(q); if (a1 < a0 - 1e-12) a1 += TAU; return { p, q, a0, a1 }; }).filter(e => e.a1 - e.a0 > 1e-12);
+    const EO = edgesOf(outer), EI = edgesOf(inner);
+    const cuts = [...new Set([...outer, ...inner].map(p => { const a = ang(p); return Math.round(a * 1e12) / 1e12; }))].sort((x, y) => x - y);
+    const spanning = (E, th) => { for (const e of E) for (const t of [th, th + TAU, th - TAU]) if (e.a0 <= t + 1e-12 && t <= e.a1 + 1e-12) return { e, t }; return null; };
+    const onRay = (e, th) => {
+      const t = th; if (Math.abs(t - e.a0) < 1e-11) return e.p; if (Math.abs(t - e.a1) < 1e-11) return e.q;
+      const dx = Math.cos(t), dy = Math.sin(t), ex = e.q[0] - e.p[0], ey = e.q[1] - e.p[1], den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-15) return e.p;
+      const u = (e.p[0] * dy - e.p[1] * dx) / den; return [e.p[0] + ex * u, e.p[1] + ey * u];
+    };
+    for (let k = 0; k < cuts.length; k++) {
+      const t0 = cuts[k], t1 = k + 1 < cuts.length ? cuts[k + 1] : cuts[0] + TAU, tm = (t0 + t1) / 2; if (t1 - t0 < 1e-12) continue;
+      const so = spanning(EO, tm), si = spanning(EI, tm); if (!so || !si) continue;
+      const d0o = so.t - tm, d0i = si.t - tm;   /* bring the sector's rays into each edge's angle range */
+      const O0 = onRay(so.e, t0 + d0o), O1 = onRay(so.e, t1 + d0o), I0 = onRay(si.e, t0 + d0i), I1 = onRay(si.e, t1 + d0i);
+      tris2.push([I0, O0, O1], [I0, O1, I1]);
+    }
+  }
+  const s0 = stations[0], s1 = stations[stations.length - 1];
+  for (const t of tris2) {
+    const area = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]); if (Math.abs(area) < 1e-12) continue;
+    const ccwT = area > 0 ? t : [t[0], t[2], t[1]];
+    push(place([ccwT[0], ccwT[2], ccwT[1]], s0), o.sidStart || 'start'); push(place(ccwT, s1), o.sidEnd || 'end');
+  }
+  const solid = new Solid(polys); fixOrientation(solid);
+  return solid;
+}
 
 /* ---------- edge pieces: fillet / weld / chamfer along a straight edge ---------- */
 /* m = point on the edge, d = edge direction (unit), u1/u2 = unit directions along each face away from the edge,

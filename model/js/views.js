@@ -2,7 +2,7 @@
    Ortho panes share one scale + centre, so projections line up (third-angle layout). Visible edges solid,
    hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
 import * as K from './kernel.js';
-import { dimsOf, worldConnectors } from './model.js';
+import { dimsOf, worldConnectors, massReport } from './model.js';
 const { V } = K;
 
 const PANES = ['top', '3d', 'front', 'right'];
@@ -43,7 +43,7 @@ export class Views {
     this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
     this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
-    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true;
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true; this.explode = 0; this.showCoG = false; this.offsets = new Map();
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
@@ -115,8 +115,23 @@ export class Views {
     }
     for (const [id, b] of old) if (!keep.has(id)) { gl.deleteBuffer(b.mesh); gl.deleteBuffer(b.nrm); this.freeLines(b.edges); }
     for (const [k, sc] of [...this.silCache]) if (!keep.has(k.split('|')[0])) { this.freeLines(sc.buf); this.silCache.delete(k); }
-    this.O = O; this.ghosts = null;
+    this.O = O; this.ghosts = null; this.computeOffsets();
   }
+  /* exploded view: each part slides away from the assembly centre (view only — the model is untouched) */
+  computeOffsets() {
+    this.offsets = new Map(); if (!this.explode) return;
+    const cs = []; for (const [id, b] of this.buffers) { const bb = b.solid.bbox(); cs.push([id, V.lerp(bb.min, bb.max, 0.5), V.len(V.sub(bb.max, bb.min))]); }
+    if (cs.length < 2) return;
+    let C = [0, 0, 0]; for (const [, c] of cs) C = V.add(C, c); C = V.mul(C, 1 / cs.length);
+    const size = Math.max(...cs.map(x => x[2]));
+    for (const [id, c] of cs) { let d = V.sub(c, C); if (V.len(d) < 1e-6) d = [0, 0, 1]; this.offsets.set(id, V.mul(V.norm(d), this.explode * (0.35 * size + V.len(d) * 0.6))); }
+  }
+  setExplode(target) {
+    const from = this.explode, t0 = performance.now(), dur = 380;
+    const step = () => { const k = Math.min(1, (performance.now() - t0) / dur), e = 1 - Math.pow(1 - k, 3); this.explode = from + (target - from) * e; this.computeOffsets(); this.drawNow(); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  offsetO(id) { const off = this.offsets.get(id); return off ? V.sub(this.O, off) : this.O; }
   upload(solid, body) {
     const gl = this.gl, mesh = solid.toMesh();
     const mb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
@@ -134,7 +149,7 @@ export class Views {
   freeLines(lb) { if (!lb) return; for (const k of ['a', 'b', 's', 't']) if (lb[k]) this.gl.deleteBuffer(lb[k]); }
   silhouettes(id, buf, dir) {
     const key = id + '|' + dir.map(v => v.toFixed(2)).join(','); let s = this.silCache.get(key);
-    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc|rev\d+)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
+    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
     return s;
   }
   /* ---------- drawing ---------- */
@@ -158,7 +173,7 @@ export class Views {
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
         const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
-        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1);
+        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniform3fv(mp.loc.uO, this.offsetO(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -169,11 +184,12 @@ export class Views {
         gl.depthFunc(pass === 'hidden' ? gl.GREATER : gl.LEQUAL); gl.depthMask(false);
         gl.uniform4fv(lp.loc.uC, pass === 'hidden' ? C.hidden : C.edge); gl.uniform1f(lp.loc.uDash, pass === 'hidden' ? 9 * dpr : 0); gl.uniform1f(lp.loc.uW, (pass === 'hidden' ? 0.9 : 1.25) * dpr);
         for (const [id, b] of this.buffers) {
+          gl.uniform3fv(lp.loc.uO, this.offsetO(id));
           this.drawLines(lp, b.edges);
           this.drawLines(lp, this.silhouettes(id, b, cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f).buf);
         }
       }
-      gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniform3fv(lp.loc.uO, this.O);
       /* ghost of a selected tool / consumed object: drawn through everything */
       if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
     }
@@ -196,8 +212,9 @@ export class Views {
       const axLen = cam.persp ? this.cam.dist * 0.06 : 16 / this.ortho.s;
       for (const [x, y, z, col] of ax) { const p = this.project(pane, [x * axLen, y * axLen, z * axLen], cam); if (Math.hypot(p.x - o.x, p.y - o.y) < 2) continue; c.beginPath(); c.moveTo(o.x, o.y); c.lineTo(p.x, p.y); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
       c.beginPath(); c.arc(o.x, o.y, 3, 0, Math.PI * 2); c.fillStyle = C.ink; c.fill();
-      if (pane.id !== '3d' && this.showDims) this.drawDims(c, pane, cam, R, O);
-      if (this.connectorsFor) this.drawConnectors(c, pane, cam);
+      if (pane.id !== '3d' && this.showDims && !this.explode) this.drawDims(c, pane, cam, R, O);
+      if (this.connectorsFor && !this.explode) this.drawConnectors(c, pane, cam);
+      if (this.showCoG && !this.explode) this.drawCoG(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -250,6 +267,21 @@ export class Views {
     if (!ref) return null; if (Array.isArray(ref)) return ref;
     const R = this.model.result; if (ref.obj && ref.conn) { const c = worldConnectors(R, ref.obj).find(x => x.name === ref.conn); return c ? c.o : null; }
     return ref.p || null;
+  }
+  /* centre of gravity: the assembly's (large) and the selected part's (small), as the drafting symbol */
+  drawCoG(c, pane, cam) {
+    let rep; try { rep = massReport(this.model.doc, this.model.result); } catch (e) { return; }
+    const mark = (pt, r, labelText) => {
+      const p = this.project(pane, pt, cam); if (p.behind) return;
+      c.save(); c.lineWidth = 1.4; c.strokeStyle = this.dark ? '#ecebe8' : '#1c1d21';
+      for (let q = 0; q < 4; q++) { c.beginPath(); c.moveTo(p.x, p.y); c.arc(p.x, p.y, r, q * Math.PI / 2 - Math.PI / 2, (q + 1) * Math.PI / 2 - Math.PI / 2); c.closePath(); c.fillStyle = q % 2 ? (this.dark ? '#ecebe8' : '#1c1d21') : (this.dark ? '#141519' : '#ffffff'); c.fill(); }
+      c.beginPath(); c.arc(p.x, p.y, r, 0, Math.PI * 2); c.stroke();
+      if (labelText) { c.font = '700 11px "Figtree", sans-serif'; c.fillStyle = this.dark ? '#ecebe8' : '#1c1d21'; c.fillText(labelText, p.x + r + 5, p.y + 4); }
+      c.restore();
+    };
+    if (rep.cog) mark(rep.cog, 8, pane.id === '3d' ? (rep.total_mass_g >= 1000 ? (rep.total_mass_g / 1000).toFixed(2) + ' kg' : rep.total_mass_g.toFixed(0) + ' g') : 'CoG');
+    const body = this.sel ? this.model.bodyContaining(this.sel) : null, part = body && rep.parts.find(x => x.id === body.id);
+    if (part && rep.parts.length > 1) mark(part.centroid, 5, null);
   }
   drawConnectors(c, pane, cam) {
     const R = this.model.result, ids = this.connectorsFor === 'all' ? [...R.world.keys()] : [this.connectorsFor];
@@ -347,11 +379,11 @@ export class Views {
   pick(pane, px, py) {
     const r = this.ray(pane, px, py); let best = null;
     for (const [id, b] of this.buffers) {
-      const P = b.tris.positions;
+      const P = b.tris.positions, O = this.offsetO(id);
       for (let i = 0; i < P.length; i += 9) {
-        const a = [P[i] - this.O[0], P[i + 1] - this.O[1], P[i + 2] - this.O[2]], bb = [P[i + 3] - this.O[0], P[i + 4] - this.O[1], P[i + 5] - this.O[2]], cc = [P[i + 6] - this.O[0], P[i + 7] - this.O[1], P[i + 8] - this.O[2]];
+        const a = [P[i] - O[0], P[i + 1] - O[1], P[i + 2] - O[2]], bb = [P[i + 3] - O[0], P[i + 4] - O[1], P[i + 5] - O[2]], cc = [P[i + 6] - O[0], P[i + 7] - O[1], P[i + 8] - O[2]];
         const t = rayTri(r.o, r.d, a, bb, cc);
-        if (t != null && (!best || t < best.t)) { const poly = b.tris.polysOfTri[i / 9]; best = { t, id, point: V.add(V.add(r.o, V.mul(r.d, t)), this.O), normal: poly.plane.n, sid: poly.sid }; }
+        if (t != null && (!best || t < best.t)) { const poly = b.tris.polysOfTri[i / 9]; best = { t, id, point: V.add(V.add(r.o, V.mul(r.d, t)), O), normal: poly.plane.n, sid: poly.sid }; }
       }
     }
     return best;

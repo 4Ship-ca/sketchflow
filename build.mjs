@@ -20,10 +20,12 @@ fs.writeFileSync(path.join(ROOT, 'dist', 'artifact.html'), inlined);
 
 /* v2 — the 3D workspace (ES modules) bundled into one classic-scope module script:
  * each module becomes an IIFE that returns its exports; imports become destructuring from the registry. */
-const MODS = ['kernel', 'model', 'views', 'app'];
-function bundleModule(name) {
-  let src = fs.readFileSync(path.join(ROOT, 'model', 'js', name + '.js'), 'utf8');
+const MODS = [['kernel', 'js'], ['model', 'js'], ['views', 'js'], ['gears', 'addons'], ['app', 'js']];
+function bundleModule([name, dir]) {
+  let src = fs.readFileSync(path.join(ROOT, 'model', dir, name + '.js'), 'utf8');
   const names = new Set();
+  src = src.replace(/^export default /m, () => { names.add('default: __default'); return 'const __default = '; });
+  src = src.replace(/^import (\w+) from '\.\.\/addons\/(\w+)\.js';/gm, (_, local, m) => `const ${local} = __sf3.${m}.default;`);
   src = src.replace(/^export \{([^}]+)\};?\s*$/gm, (_, list) => { list.split(',').map(x => x.trim()).filter(Boolean).forEach(n => names.add(n)); return ''; });
   src = src.replace(/^export (const|let|function|class) (\w+)/gm, (_, kw, n) => { names.add(n); return `${kw} ${n}`; });
   src = src.replace(/^import \* as (\w+) from '\.\/(\w+)\.js';/gm, (_, ns, m) => `const ${ns} = __sf3.${m};`);
