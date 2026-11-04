@@ -179,6 +179,25 @@ ok('two driving dimensions hold together (x and y)', near(measureDim(Lk.result, 
 const [dpp] = Lk.apply([{ op: 'dim', a: { obj: 'h', conn: 'top' }, b: { obj: 'plate', conn: 'corner+x+y+z' }, view: 'top' }]);
 Lk.apply([{ op: 'dimaxis', id: dpp.id, axis: 'h' }]);
 ok('point-to-point dimensions can be horizontal / vertical', near(measureDim(Lk.result, Lk.doc.dims[2]).value, 15), measureDim(Lk.result, Lk.doc.dims[2]).value);
+/* history: suppress, rollback, reorder, duplicate */
+const Hs2 = new Model(), hv = () => Hs2.result.bodies.find(b => b.id === 'p').solid.volume();
+Hs2.apply([{ op: 'add', type: 'box', id: 'p', params: { width: 100, depth: 60, height: 10 } }, { op: 'add', type: 'cylinder', id: 'h', params: { diameter: 10, height: 12 }, mate: { to: 'p', a: 'top', b: 'top', flip: false, offset: 1 }, into: 'p', mode: 'subtract' }]);
+const full = hv();
+Hs2.apply([{ op: 'suppress', id: 'h' }]);
+ok('a suppressed hole stops cutting (and comes back)', near(hv(), 60000) && (Hs2.apply([{ op: 'suppress', id: 'h' }]), near(hv(), full)));
+Hs2.apply([{ op: 'rollback', to: 1 }]);
+ok('rolling back hides later features', near(hv(), 60000) && Hs2.describe().objects[1].rolled_back === true);
+Hs2.apply([{ op: 'add', type: 'cylinder', id: 'h2', params: { diameter: 6, height: 12 }, mate: { to: 'p', a: 'top', b: 'top', flip: false, offset: 1, slide: [30, 0] }, into: 'p', mode: 'subtract' }]);
+ok('a feature added while rolled back goes in at the bar', Hs2.doc.objects[1].id === 'h2' && Hs2.doc.rollback === 2);
+Hs2.apply([{ op: 'rollback', to: null }]);
+ok('rolling to the end brings everything back', Hs2.doc.rollback == null && hv() < full);
+let merr2 = ''; try { Hs2.apply([{ op: 'move', id: 'h', to: 0 }]); } catch (e) { merr2 = e.message; }
+ok('reordering refuses to put a hole before the part it cuts', /must come after/.test(merr2), merr2);
+Hs2.apply([{ op: 'move', id: 'h2', after: 'h' }]);
+ok('reordering within the rules works', Hs2.doc.objects.map(o => o.id).join() === 'p,h,h2');
+const [dup] = Hs2.apply([{ op: 'duplicate', id: 'p' }]);
+const dupBody = Hs2.result.bodies.find(b => b.id === dup.id);
+ok('duplicate copies the part with its holes, beside it', dupBody && near(dupBody.solid.volume(), hv()) && Hs2.doc.objects.filter(o => o.into === dup.id).length === 2, { dup });
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

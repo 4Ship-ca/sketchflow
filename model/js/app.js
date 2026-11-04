@@ -73,6 +73,20 @@ function subOf(o) {
   }
 }
 const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
+/* the ⋯ / right-click menu of a feature-list row */
+function rowMenu(o, r) {
+  const m = el('div', { class: 'menu', style: `left:${Math.min(r.left, innerWidth - 230)}px;top:${r.bottom + 4}px` }), idx = model.doc.objects.indexOf(o);
+  const item = (t, fn, disabled) => m.append(el('button', { onclick: () => { m.remove(); fn(); }, disabled: disabled ? true : null }, t));
+  item('Rename', () => { select(o.id); setTimeout(() => { const i = document.querySelector('#pbody input'); if (i) { i.focus(); i.select(); } }, 30); });
+  item(o.suppressed ? 'Unsuppress' : 'Suppress (turn off, keep it)', () => apply([{ op: 'suppress', id: o.id }]));
+  if (!['edge', 'pattern'].includes(o.type)) item(o.hidden ? 'Show' : 'Hide', () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]));
+  if (!['edge', 'pattern', 'weld'].includes(o.type)) { item('Duplicate  (Ctrl D)', () => { const r2 = apply([{ op: 'duplicate', id: o.id }])[0]; select(r2.id); }); item('Pattern…  (P)', () => { select(o.id); patternHint(o.id); }); }
+  item('Roll back to here', () => apply([{ op: 'rollback', to: idx + 1 }]));
+  item('Move up', () => apply([{ op: 'move', id: o.id, to: idx - 1 }]), idx === 0);
+  item('Move down', () => apply([{ op: 'move', id: o.id, to: idx + 2 }]), idx === model.doc.objects.length - 1);
+  item('Delete', () => { apply([{ op: 'delete', id: o.id }]); select(null); });
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function offm(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', offm); } }), 0);
+}
 /* "By part": each part with what shapes it (its tools, edges, patterns, welds); "History": the order things were made */
 function treeOrder() {
   const objs = model.doc.objects;
@@ -95,14 +109,40 @@ function renderTree() {
   const mode = prefs.treeMode || 'part';
   list.append(el('div', { class: 'seg' }, ...[['part', 'By part'], ['history', 'History']].map(([k, t]) => el('button', { class: mode === k ? 'on' : '', onclick: () => { prefs.treeMode = k; savePrefs(); renderTree(); } }, t))));
   if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
-  for (const { o, depth } of treeOrder()) {
+  const off = model.result.off || new Set(), rb = Number.isInteger(model.doc.rollback) ? model.doc.rollback : objs.length;
+  const bar = () => {
+    const b = el('div', { class: 'rollbar', draggable: 'true', title: 'Rollback bar: drag it up to see the model as it was; new features go here. Double-click: roll to the end' }, el('span', null, rb < objs.length ? 'Rolled back — drag down or double-click to roll to the end' : 'Rollback bar'));
+    b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/sf-roll', '1'); e.dataTransfer.effectAllowed = 'move'; });
+    b.addEventListener('dblclick', () => apply([{ op: 'rollback', to: null }]));
+    return b;
+  };
+  const rows = treeOrder();
+  rows.forEach(({ o, depth }, k) => {
     const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '');
-    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
+    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
-      el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, sub)),
-      el('div', { style: 'display:flex;gap:3px' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t))));
+      el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
+      el('div', { style: 'display:flex;gap:3px;align-items:center' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t)), el('button', { class: 'more', title: 'More…', onclick: (e) => { e.stopPropagation(); rowMenu(o, e.currentTarget.getBoundingClientRect()); } }, '⋯')));
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); rowMenu(o, { left: e.clientX, right: e.clientX, bottom: e.clientY }); });
+    if (mode === 'history') {
+      row.draggable = true;
+      row.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/sf-id', o.id); e.dataTransfer.effectAllowed = 'move'; });
+      row.addEventListener('dragover', (e) => { e.preventDefault(); const r = row.getBoundingClientRect(); row.classList.toggle('dropafter', e.clientY > r.top + r.height / 2); row.classList.toggle('dropbefore', e.clientY <= r.top + r.height / 2); });
+      row.addEventListener('dragleave', () => row.classList.remove('dropafter', 'dropbefore'));
+      row.addEventListener('drop', (e) => {
+        e.preventDefault(); const after = row.classList.contains('dropafter'); row.classList.remove('dropafter', 'dropbefore');
+        const idx = objs.indexOf(o) + (after ? 1 : 0);
+        if (e.dataTransfer.getData('text/sf-roll')) { apply([{ op: 'rollback', to: idx }]); return; }
+        const id = e.dataTransfer.getData('text/sf-id'); if (!id || id === o.id) return;
+        try { apply([{ op: 'move', id, to: idx }]); } catch (err) { /* toast shown */ }
+      });
+    }
+    if (mode === 'history' && k === rb) list.append(bar());
     list.append(row);
-  }
+  });
+  if (mode === 'history' && rb >= objs.length && objs.length) list.append(bar());
+  const ban = $('#banner');
+  if (ban) { ban.hidden = !(rb < objs.length); ban.innerHTML = ''; if (rb < objs.length) ban.append(el('span', null, `Rolled back: ${objs.length - rb} feature${objs.length - rb > 1 ? 's are' : ' is'} off; new features go at the bar.`), el('button', { onclick: () => apply([{ op: 'rollback', to: null }]) }, 'Roll to the end')); }
   const w = model.result.warnings, box = $('#warn');
   box.hidden = !w.length; box.innerHTML = '';
   if (w.length) {
@@ -669,6 +709,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? $('#redo').click() : $('#undo').click(); return; }
   if (mod && k === 'y') { e.preventDefault(); $('#redo').click(); return; }
+  if (mod && k === 'd' && selected) { e.preventDefault(); try { const r = apply([{ op: 'duplicate', id: selected }])[0]; select(r.id); } catch (err) { /* toast shown */ } return; }
   if (mod) return;
   if (k === 'escape') { setTool(null); select(null); return; }
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }

@@ -321,6 +321,9 @@ function cachedLocal(o) {
 export function evaluate(doc) {
   const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set(), virtual: new Map() };
   R.warnings.push(...resolveLinks(doc));
+  /* suppressed features, and everything after the rollback bar, are placed but make no geometry */
+  const rb = Number.isInteger(doc.rollback) ? doc.rollback : Infinity, off = new Set(doc.objects.filter((o, i) => o.suppressed || i >= rb).map(o => o.id));
+  R.off = off;
   const byId = new Map(doc.objects.map(o => [o.id, o]));
   const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => !META.has(o.type)) || {}).id;
   R.ground = ground;
@@ -370,7 +373,7 @@ export function evaluate(doc) {
   if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
   R.originRef = og;
   /* floating = not grounded, not fixed, no mate chain to the ground / origin, and not welded to something that is */
-  const welds = doc.objects.filter(o => o.type === 'weld' && Array.isArray(o.joins));
+  const welds = doc.objects.filter(o => o.type === 'weld' && Array.isArray(o.joins) && !off.has(o.id));
   const grounded = (id, seen = new Set()) => {
     if (id === ground) return true; const o = byId.get(id); if (!o || seen.has(id)) return false; seen.add(id);
     if (o.fixed) return true;
@@ -378,11 +381,11 @@ export function evaluate(doc) {
     for (const w of welds) { const k = w.joins.indexOf(id); if (k >= 0 && grounded(w.joins[1 - k], seen)) return true; }
     return false;
   };
-  for (const o of doc.objects) if (!META.has(o.type) && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
+  for (const o of doc.objects) if (!META.has(o.type) && !off.has(o.id) && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
   /* patterns: virtual copies of their source features (live: they follow the source's parameters) */
   const objs = doc.objects.slice();
-  for (const P of doc.objects.filter(o => o.type === 'pattern')) {
-    const srcs = (P.of || []).map(id => byId.get(id)).filter(Boolean);
+  for (const P of doc.objects.filter(o => o.type === 'pattern' && !off.has(o.id))) {
+    const srcs = (P.of || []).map(id => byId.get(id)).filter(x => x && !off.has(x.id));
     if (!srcs.length) { R.warnings.push({ kind: 'orphan', id: P.id, text: `${P.name}: nothing to repeat (its source was deleted)` }); continue; }
     let Ts; try { Ts = patternTransforms(P, R, byId); } catch (e) { R.warnings.push({ kind: 'error', id: P.id, text: `${P.name}: ${e.message}` }); continue; }
     const add = [];
@@ -408,7 +411,7 @@ export function evaluate(doc) {
     });
     objs.splice(objs.indexOf(P) + 1, 0, ...add);
   }
-  const intoOf = new Map(); for (const t of objs) if (t.into) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
+  const intoOf = new Map(); for (const t of objs) if (t.into && !off.has(t.id)) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
   const bodyOf = (id, chain = new Set()) => {
@@ -453,7 +456,7 @@ export function evaluate(doc) {
     return solid;
   };
   for (const o of objs) {
-    if (META.has(o.type) || (o.into && byId.has(o.into))) continue;
+    if (META.has(o.type) || (o.into && byId.has(o.into)) || off.has(o.id)) continue;
     const s = cachedBody(o.id);
     if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
     const mat = MATERIALS[(o.meta || {}).material] || MATERIALS[doc.material];
@@ -779,6 +782,20 @@ export class Model {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
   recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  /* new features go at the rollback bar when it is up (and the bar moves down past them) */
+  insert(ob) {
+    const d = this.doc, rb = Number.isInteger(d.rollback) ? Math.min(d.rollback, d.objects.length) : null;
+    if (rb == null || rb >= d.objects.length) { d.objects.push(ob); if (rb != null) d.rollback = null; return; }
+    d.objects.splice(rb, 0, ob); d.rollback = rb + 1;
+  }
+  /* order rules: a tool after what it cuts / joins, an edge after its part, a pattern after what it repeats */
+  checkOrder() {
+    const idx = new Map(this.doc.objects.map((o, i) => [o.id, i]));
+    for (const o of this.doc.objects) {
+      if (o.into && idx.has(o.into) && idx.get(o.id) < idx.get(o.into)) throw new Error(`${o.name} must come after ${this.get(o.into).name} (it ${o.type === 'edge' ? 'shapes' : o.op === 'add' ? 'joins' : 'cuts'} it)`);
+      if (o.type === 'pattern') for (const s2 of o.of || []) if (idx.has(s2) && idx.get(o.id) < idx.get(s2)) throw new Error(`${o.name} must come after ${this.get(s2).name}, which it repeats`);
+    }
+  }
   /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
   dimMover(md) {
     const A = this.get(md.a.obj), B = this.get(md.b.obj); if (!A || !B) return null;
@@ -834,7 +851,7 @@ export class Model {
         const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
         const sp = splitParams(type, o.params);
         const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
-        d.objects.push(ob);
+        this.insert(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
           /* rapid prototyping default: sit it on top of the ground object */
@@ -896,7 +913,7 @@ export class Model {
         const e = findEdge(body.solid, { m: near, d: o.d || null, tol: o.tol || 5 }); if (!e) throw new Error('No straight edge between two flat faces near that point');
         const Mi = M4.inv(this.result.world.get(body.id));
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('edg'), style = ['fillet', 'weld', 'chamfer'].includes(o.style) ? o.style : 'fillet';
-        d.objects.push({ id, name: o.name || (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' ' + (d.objects.filter(x => x.type === 'edge').length + 1), type: 'edge', params: { style, size: num(o.size, 4), mode: o.mode || 'auto' }, edge: { m: M4.point(Mi, e.m), d: M4.dir(Mi, e.d), faces: e.sids }, into: body.id, op: 'edge', pose: null, mate: null });
+        this.insert({ id, name: o.name || (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' ' + (d.objects.filter(x => x.type === 'edge').length + 1), type: 'edge', params: { style, size: num(o.size, 4), mode: o.mode || 'auto' }, edge: { m: M4.point(Mi, e.m), d: M4.dir(Mi, e.d), faces: e.sids }, into: body.id, op: 'edge', pose: null, mate: null });
         this.recompute();
         return { label: (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' edge', id, convex: e.convex, angle: +e.angle.toFixed(2), mode: o.mode || (e.convex ? 'subtract' : 'add'), round: e.loop ? { diameter: +(e.radius * 2).toFixed(3), closed: e.closed } : undefined };
       }
@@ -917,7 +934,7 @@ export class Model {
         if (!['linear', 'circular', 'mirror'].includes(params.kind)) throw new Error('kind is linear, circular or mirror');
         if (params.about && params.about.obj && params.about.obj !== 'origin') need(params.about.obj);
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('pat');
-        d.objects.push({ id, name: o.name || (params.kind === 'mirror' ? 'Mirror ' : params.kind === 'circular' ? 'Circular array ' : 'Array ') + (d.objects.filter(x => x.type === 'pattern').length + 1), type: 'pattern', params, of, pose: null, mate: null, into: null, op: null });
+        this.insert({ id, name: o.name || (params.kind === 'mirror' ? 'Mirror ' : params.kind === 'circular' ? 'Circular array ' : 'Array ') + (d.objects.filter(x => x.type === 'pattern').length + 1), type: 'pattern', params, of, pose: null, mate: null, into: null, op: null });
         this.recompute();
         const copies = [...this.result.virtual.values()].filter(v => v.pattern === id).length;
         return { label: 'Pattern ' + of.map(i => this.get(i).name).join(', '), id, of, copies };
@@ -934,7 +951,7 @@ export class Model {
         else e = concave.reduce((b2, c) => ((c.loop ? 2 * Math.PI * c.radius : V.len(V.sub(c.b, c.a))) > (b2.loop ? 2 * Math.PI * b2.radius : V.len(V.sub(b2.b, b2.a))) ? c : b2));
         const Wa = this.result.world.get(ba.id), id = o.id && !this.get(o.id) ? String(o.id) : uid('wld');
         const params = defaultParams('weld', o.params); for (const k of ['size', 'profile', 'all_around']) if (o[k] !== undefined) params[k] = o[k];
-        d.objects.push({ id, name: o.name || 'Weld ' + (d.objects.filter(x => x.type === 'weld').length + 1), type: 'weld', params, joins: [A.id, B.id], seam: { m: M4.point(M4.inv(Wa), e.m), faces: e.sids }, color: o.color || null, pose: null, mate: null, into: null, op: null });
+        this.insert({ id, name: o.name || 'Weld ' + (d.objects.filter(x => x.type === 'weld').length + 1), type: 'weld', params, joins: [A.id, B.id], seam: { m: M4.point(M4.inv(Wa), e.m), faces: e.sids }, color: o.color || null, pose: null, mate: null, into: null, op: null });
         this.recompute();
         const r = this.get(id)._resolved || {};
         const mat = (x) => (x.meta && x.meta.material) || d.material || null, advice = weldAdvice(mat(this.get(ba.id) || A), mat(this.get(bb.id) || B));
@@ -949,7 +966,8 @@ export class Model {
         return { label: res.label || `${a.name || a.id}: ${o.action}`, info: res.info, results };
       }
       case 'delete': {
-        const x = need(o.id); d.objects = d.objects.filter(y => y.id !== x.id);
+        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id);
+        if (Number.isInteger(d.rollback) && xi < d.rollback) d.rollback = Math.max(0, d.rollback - 1);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
         if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
         this.recompute(); return { label: 'Delete ' + x.name, id: x.id };
@@ -992,6 +1010,44 @@ export class Model {
         md.drive = value; this.recompute();
         const after = measureDim(this.result, md), other = this.get(mover.id === md.b.obj ? md.a.obj : md.b.obj);
         return { label: `${mover.name}: ${+value.toFixed(3)} from ${other ? other.name : 'it'}`, id: o.id, moved: mover.id, value: after ? +after.value.toFixed(4) : null };
+      }
+      case 'suppress': {
+        const ids = Array.isArray(o.id) ? o.id : [o.id], items = ids.map(need), on = o.on != null ? !!o.on : !items[0].suppressed;
+        for (const x of items) { if (on) x.suppressed = true; else delete x.suppressed; }
+        this.recompute(); return { label: `${on ? 'Suppress' : 'Unsuppress'} ${items.map(x => x.name).join(', ')}`, ids, suppressed: on };
+      }
+      case 'rollback': {
+        /* to: index (features before it stay active), an id (roll back to just after it), or null (roll to the end) */
+        let to = o.to;
+        if (typeof to === 'string') { const i = d.objects.findIndex(x => x.id === to); if (i < 0) throw new Error('No object ' + to); to = i + 1; }
+        d.rollback = to == null || to >= d.objects.length ? null : Math.max(0, Math.round(to));
+        this.recompute(); return { label: d.rollback == null ? 'Roll to the end' : `Roll back to ${d.rollback ? d.objects[d.rollback - 1].name : 'the start'}`, rollback: d.rollback };
+      }
+      case 'move': {
+        const x = need(o.id), from = d.objects.indexOf(x);
+        let to = o.to != null ? Math.round(o.to) : o.before ? d.objects.findIndex(y => y.id === o.before) : o.after ? d.objects.findIndex(y => y.id === o.after) + 1 : -1;
+        if (to < 0 || to > d.objects.length) throw new Error('Give to (index), before or after');
+        d.objects.splice(from, 1); if (to > from) to--; d.objects.splice(to, 0, x);
+        this.checkOrder(); this.recompute(); return { label: `Move ${x.name}`, id: x.id, index: to };
+      }
+      case 'duplicate': {
+        /* a copy of a part with everything that shapes it (tools, edges), placed next to the original */
+        const x = need(o.id); if (['edge', 'weld', 'pattern'].includes(x.type)) throw new Error('Duplicate the part, not its ' + x.type);
+        const sub = []; const walk = (id) => { for (const y of d.objects) if (y.into === id && !sub.includes(y)) { sub.push(y); walk(y.id); } }; walk(x.id);
+        const map = new Map([[x.id, uid(x.type.slice(0, 3))], ...sub.map(y => [y.id, uid(y.type.slice(0, 3))])]);
+        const copy = (y) => {
+          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved;
+          if (y === x) { c.name = (o.name || y.name + ' copy'); c.into = x.into; }
+          else { c.name = y.name; c.into = map.get(y.into) || y.into; }
+          if (c.mate && map.has(c.mate.to)) c.mate.to = map.get(c.mate.to);
+          if (c.edge && c.edge.faces) c.edge.faces = c.edge.faces.map(f => { const i = f.indexOf(':'), pre = f.slice(0, i); return map.has(pre) ? map.get(pre) + f.slice(i) : f; });
+          return c;
+        };
+        const top = copy(x), step = o.offset || [Math.max(10, ((x.params || {}).width || (x.params || {}).diameter || 20) + 10), 0];
+        if (top.mate && !top.mate.kind) top.mate.slide = [(top.mate.slide || [0, 0])[0] + step[0], (top.mate.slide || [0, 0])[1] + step[1]];
+        else if (!top.mate) { const p0 = top.pose || { at: [0, 0, 0], rot: [0, 0, 0] }; top.pose = { at: V.add(p0.at, [step[0], step[1], 0]), rot: p0.rot }; }
+        this.insert(top); for (const y of sub) this.insert(copy(y));
+        this.recompute(); return { label: `Duplicate ${x.name}`, id: top.id, name: top.name };
       }
       case 'var': {
         const name = String(o.name || '').replace(/^#/, ''); if (!/^[A-Za-z_]\w*$/.test(name)) throw new Error('A variable name is letters, digits and _ (e.g. wall)');
@@ -1040,6 +1096,7 @@ export class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+          suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
@@ -1048,6 +1105,7 @@ export class Model {
       assembly: R.bodies.length > 1 ? { parts: R.bodies.filter(b => !b.weld).length, welds: R.bodies.filter(b => b.weld).length } : undefined,
       material: this.doc.material || null,
       vars: this.doc.vars && Object.keys(this.doc.vars).length ? this.doc.vars : undefined,
+      rollback: Number.isInteger(this.doc.rollback) ? this.doc.rollback : undefined,
       dimensions: (this.doc.dims || []).length ? this.doc.dims.map(md => { const m = measureDim(R, md); return { id: md.id, a: md.a, b: md.b, view: md.view, axis: md.axis, value: m ? +m.value.toFixed(3) : null, driving: md.drive != null ? md.drive : undefined }; }) : undefined,
       mass: (() => { try { const m = massReport(this.doc, R); return { total_g: m.total_mass_g, cog: m.cog, inertia_kg_mm2: m.inertia_kg_mm2, balance: m.balance, parts: m.parts.map(p => ({ id: p.id, material: p.material, mass_g: p.mass_g, cog: p.centroid })), unassigned: m.unassigned.length ? m.unassigned : undefined }; } catch (e) { return { error: e.message }; } })(),
       addons: [...ADDONS.keys()],
