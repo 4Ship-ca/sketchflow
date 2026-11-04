@@ -1,0 +1,2029 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SketchFlow 3D</title>
+<meta name="sketchflow-bridge" content="">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: toolbar across the top, feature tree left, four linked viewports centre, properties right. Dark graphite first. */
+:root{
+  --bg:#f1efea; --panel:#ffffff; --panel-2:#f7f6f3; --line:#dcd8d0; --ink:#1d1c1a; --ink-2:#5f5b55; --ink-3:#8f8a82;
+  --accent:#e8672c; --accent-ink:#ffffff; --ai:#14a394; --cool:#3567d6; --warn:#c8372d; --ok:#2f9a5d; --hover:#00000010; --sel:#e8672c22;
+  --f-ui:"Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --f-brand:"Bricolage Grotesque", "Figtree", system-ui, sans-serif; --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#141519; --panel:#1c1e23; --panel-2:#22252b; --line:#30333b; --ink:#ecebe8; --ink-2:#a9a7a2; --ink-3:#73726f; --accent:#ff7b3d; --accent-ink:#1a1206; --ai:#3fd0bf; --cool:#7aa2ff; --warn:#ff6b5e; --ok:#5ad08c; --hover:#ffffff10; --sel:#ff7b3d26; color-scheme: dark; } }
+:root[data-theme="dark"]{ --bg:#141519; --panel:#1c1e23; --panel-2:#22252b; --line:#30333b; --ink:#ecebe8; --ink-2:#a9a7a2; --ink-3:#73726f; --accent:#ff7b3d; --accent-ink:#1a1206; --ai:#3fd0bf; --cool:#7aa2ff; --warn:#ff6b5e; --ok:#5ad08c; --hover:#ffffff10; --sel:#ff7b3d26; color-scheme: dark; }
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:500 13px/1.35 var(--f-ui);-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit}
+#app{display:grid;grid-template-columns:240px 1fr 280px;grid-template-rows:auto 1fr;height:100%}
+#bar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px max(10px, env(safe-area-inset-right,0px)) 8px max(10px, env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;row-gap:6px}
+#bar::-webkit-scrollbar{display:none}
+.brand{font:700 15px/1 var(--f-brand);letter-spacing:-.02em;display:flex;align-items:center;gap:7px;white-space:nowrap;margin-right:4px}
+.brand i{width:12px;height:12px;border-radius:3px;background:var(--accent);transform:rotate(12deg) skewX(-8deg);display:block;box-shadow:3px 3px 0 var(--ai)}
+.grp{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--panel-2);flex:none}
+.grp .lbl{font:700 9.5px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);align-self:center;padding:0 5px}
+.tb{border:0;background:transparent;border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12.5px/1 var(--f-ui);display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink)}
+.tb svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tb:hover{background:var(--hover)} .tb.on{background:var(--accent);color:var(--accent-ink)} .tb[disabled]{opacity:.35;pointer-events:none}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 10px 5px 8px;font:600 11.5px/1 var(--f-ui);color:var(--ink-2);white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)} .chip.live{color:var(--ai);border-color:color-mix(in srgb, var(--ai) 50%, var(--line))} .chip.live i{background:var(--ai)}
+#name{border:0;background:transparent;color:var(--ink-2);font:600 13px var(--f-ui);padding:5px 6px;border-radius:7px;width:140px}
+#name:focus{outline:2px solid var(--accent);background:var(--panel)}
+aside{background:var(--panel);overflow:auto;display:flex;flex-direction:column;min-width:0}
+#tree{border-right:1px solid var(--line)} #props{border-left:1px solid var(--line)}
+aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:flex;align-items:center;justify-content:space-between}
+.row{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:center;padding:6px 10px 6px 12px;cursor:pointer;border-left:3px solid transparent}
+.row:hover{background:var(--hover)} .row.on{background:var(--sel);border-left-color:var(--accent)}
+.row .ic{width:20px;height:20px;display:grid;place-items:center;color:var(--ink-2)} .row .ic svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+.row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.row .sub{font:500 10.5px/1.2 var(--f-mono);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.tool{padding-left:28px} .row.tool .nm{font-weight:500}
+.badge{font:700 10px/1 var(--f-ui);padding:3px 6px;border-radius:6px;background:var(--hover);color:var(--ink-2)}
+.badge.w{background:color-mix(in srgb, var(--warn) 18%, transparent);color:var(--warn)} .badge.sub{background:color-mix(in srgb, var(--cool) 18%, transparent);color:var(--cool)} .badge.add{background:color-mix(in srgb, var(--ok) 18%, transparent);color:var(--ok)}
+#warn{margin:10px;border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));border-radius:10px;padding:10px;font-size:12px;color:var(--ink-2);display:flex;flex-direction:column;gap:6px}
+#warn b{color:var(--warn)}
+#stage{position:relative;overflow:hidden;min-width:0;touch-action:none}
+#gl,#ov{position:absolute;inset:0;display:block}
+#ov{pointer-events:none}
+#hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font:600 12.5px/1.3 var(--f-ui);box-shadow:0 6px 20px #0000003a;display:flex;gap:10px;align-items:center;max-width:90%;z-index:5;flex-wrap:wrap;justify-content:center}
+#hint .hf{display:flex;align-items:center;gap:4px;font:600 11px var(--f-ui);color:var(--ink-2);white-space:nowrap}
+#hint .hf input{width:56px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-mono);-webkit-user-select:text;user-select:text}
+#hint button{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:5px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
+.sec{padding:4px 14px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid var(--line)}
+.sec h4{margin:8px 0 2px;font:700 10px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.f{display:grid;grid-template-columns:86px 1fr;gap:8px;align-items:center;font-size:12px;color:var(--ink-2)}
+.f input,.f select,.f textarea{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font:500 12px var(--f-mono);min-width:0;width:100%;box-sizing:border-box;-webkit-user-select:text;user-select:text}
+.f textarea{min-height:70px;resize:vertical}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:6px 10px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
+.btn:hover{border-color:var(--accent)} .btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .btn.danger:hover{border-color:var(--warn);color:var(--warn)}
+.empty{padding:16px;color:var(--ink-3);font-size:12.5px;line-height:1.5}
+#dimEd{position:absolute;z-index:8;width:90px;font:600 13px var(--f-mono);border:2px solid var(--accent);border-radius:8px;padding:4px 7px;background:var(--panel);color:var(--ink)}
+#toasts{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
+.toast{background:var(--ink);color:var(--bg);padding:8px 13px;border-radius:10px;font:600 12.5px var(--f-ui);box-shadow:0 6px 20px #0000003a}
+.menu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px #0000004a;padding:5px;display:flex;flex-direction:column;min-width:170px}
+.menu button{text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)}
+.menu button:hover{background:var(--hover)}
+@media (max-width: 1640px){ .grp .lbl{display:none} #name{width:110px} }
+@media (max-width: 1380px){ .tb[data-icon]{font-size:0;gap:0;padding:7px} .brand{font-size:0;gap:0} }
+@media (max-width: 900px){ #bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none} #bar::-webkit-scrollbar{display:none} #name{width:90px} #app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto} #tree{display:none} #props{max-height:34vh;border-left:0;border-top:1px solid var(--line)} }
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div id="app">
+  <header id="bar">
+    <div class="brand"><i></i>SketchFlow 3D</div>
+    <input id="name" value="Model" aria-label="Model name" spellcheck="false">
+    <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
+    <div class="grp"><span class="lbl">Add</span>
+      <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
+      <button class="tb" data-add="wedge" title="Wedge / triangle prism (W)" data-icon="wedge">Wedge</button>
+      <button class="tb" data-add="cylinder" title="Cylinder (C)" data-icon="cylinder">Cyl</button>
+      <button class="tb" data-add="cone" title="Cone (K)" data-icon="cone">Cone</button>
+      <button class="tb" data-add="sphere" title="Sphere (O)" data-icon="sphere">Sphere</button>
+      <button class="tb" data-add="fillet" title="Fillet strip (a triangle with an arc hypotenuse)" data-icon="fillet">Fillet</button>
+    </div>
+    <div class="grp"><span class="lbl">Sketch</span>
+      <button class="tb" data-tool="sketch" title="Sketch a profile in a FRONT / TOP / RIGHT view (S)" data-icon="sketch">Profile</button>
+    </div>
+    <div class="grp"><span class="lbl">Relate</span>
+      <button class="tb" data-tool="mate" title="Mate: connector to connector (M)" data-icon="mate">Mate</button>
+      <button class="tb" data-tool="bool-add" title="Union: target, then tool" data-icon="union">Union</button>
+      <button class="tb" data-tool="bool-subtract" title="Subtract: target, then tool" data-icon="subtract">Subtract</button>
+      <button class="tb" data-tool="bool-intersect" title="Intersect: target, then tool" data-icon="intersect">Intersect</button>
+    </div>
+    <div class="grp"><span class="lbl">Edge</span>
+      <button class="tb" data-tool="edge-fillet" title="Fillet an edge (rounds outer edges, fills inner corners)" data-icon="fillet">Fillet</button>
+      <button class="tb" data-tool="edge-weld" title="Weld bead in an inside corner" data-icon="weld">Weld</button>
+      <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
+    </div>
+    <div class="grp"><button class="tb" data-tool="measure" title="Measure / add a dimension between connectors (G)" data-icon="dim">Measure</button></div>
+    <div class="grp">
+      <button class="tb" id="undo" title="Undo (Ctrl Z)" data-icon="undo"></button>
+      <button class="tb" id="redo" title="Redo (Ctrl Shift Z)" data-icon="redo"></button>
+    </div>
+    <div class="grp">
+      <button class="tb" id="layout" title="1 view / 4 views (0–4)" data-icon="grid"></button>
+      <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
+      <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
+      <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="theme" title="Light / dark" data-icon="sun"></button>
+    </div>
+    <div class="grp">
+      <button class="tb" id="fileBtn" title="Open, save, export" data-icon="file">File</button>
+      <a class="tb" href="/" title="2D sketch board (v1)" data-icon="board" style="text-decoration:none">2D</a>
+    </div>
+  </header>
+  <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<input type="file" id="openIn" hidden accept=".json,.sf3d,application/json">
+<script type="module">
+const __sf3 = {};
+__sf3.kernel = (() => {
+/* SketchFlow 3D kernel (v2) — self-contained solid modelling: no third-party code.
+   Solids are closed sets of outward-facing convex polygons; booleans use BSP trees (iterative, no deep recursion).
+   Every polygon carries a surface id (sid) so drawings can find real edges after booleans split faces.
+   Kept behind a narrow interface (Solid + builders + edges) so a different engine can be swapped in later. */
+
+const EPS = 1e-5;
+/* ---------- vectors ---------- */
+const V = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  mul: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  len: (a) => Math.hypot(a[0], a[1], a[2]),
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+  lerp: (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t],
+  neg: (a) => [-a[0], -a[1], -a[2]]
+};
+/* column-major 4x4 (same layout as WebGL) */
+const M4 = {
+  ident: () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  mul(a, b) { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
+  point: (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]],
+  dir: (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2], m[1] * p[0] + m[5] * p[1] + m[9] * p[2], m[2] * p[0] + m[6] * p[1] + m[10] * p[2]],
+  translate: (t) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t[0], t[1], t[2], 1],
+  /* frame from origin + x axis + z axis (y = z × x) */
+  frame(o, x, z) { z = V.norm(z); x = V.norm(V.sub(x, V.mul(z, V.dot(x, z)))); const y = V.cross(z, x); return [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, o[0], o[1], o[2], 1]; },
+  /* rigid inverse */
+  inv(m) { const r = [m[0], m[4], m[8], 0, m[1], m[5], m[9], 0, m[2], m[6], m[10], 0, 0, 0, 0, 1]; const t = M4.dir(r, [m[12], m[13], m[14]]); r[12] = -t[0]; r[13] = -t[1]; r[14] = -t[2]; return r; },
+  /* rotation from Euler degrees, applied X then Y then Z */
+  euler(rx, ry, rz) {
+    const [a, b, c] = [rx, ry, rz].map(d => d * Math.PI / 180);
+    const X = [1, 0, 0, 0, 0, Math.cos(a), Math.sin(a), 0, 0, -Math.sin(a), Math.cos(a), 0, 0, 0, 0, 1];
+    const Y = [Math.cos(b), 0, -Math.sin(b), 0, 0, 1, 0, 0, Math.sin(b), 0, Math.cos(b), 0, 0, 0, 0, 1];
+    const Z = [Math.cos(c), Math.sin(c), 0, 0, -Math.sin(c), Math.cos(c), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    return M4.mul(Z, M4.mul(Y, X));
+  },
+  axisAngle(ax, deg) {
+    const [x, y, z] = V.norm(ax), a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+    return [t * x * x + c, t * x * y + s * z, t * x * z - s * y, 0, t * x * y - s * z, t * y * y + c, t * y * z + s * x, 0, t * x * z + s * y, t * y * z - s * x, t * z * z + c, 0, 0, 0, 0, 1];
+  }
+};
+
+/* ---------- polygons & planes ---------- */
+class Plane {
+  constructor(n, w) { this.n = n; this.w = w; }
+  static from(a, b, c) { const n = V.norm(V.cross(V.sub(b, a), V.sub(c, a))); return new Plane(n, V.dot(n, a)); }
+  clone() { return new Plane(this.n.slice(), this.w); }
+  flip() { this.n = V.neg(this.n); this.w = -this.w; }
+  split(poly, cf, cb, f, b) {
+    const types = [], vs = poly.v; let type = 0;
+    for (const v of vs) { const t = V.dot(this.n, v.p) - this.w, ty = t < -EPS ? 2 : t > EPS ? 1 : 0; type |= ty; types.push(ty); }
+    if (type === 0) { (V.dot(this.n, poly.plane.n) > 0 ? cf : cb).push(poly); return; }
+    if (type === 1) { f.push(poly); return; }
+    if (type === 2) { b.push(poly); return; }
+    const fv = [], bv = [];
+    for (let i = 0; i < vs.length; i++) {
+      const j = (i + 1) % vs.length, ti = types[i], tj = types[j], vi = vs[i], vj = vs[j];
+      if (ti !== 2) fv.push(vi);
+      if (ti !== 1) bv.push(vi);
+      if ((ti | tj) === 3) {
+        const t = (this.w - V.dot(this.n, vi.p)) / V.dot(this.n, V.sub(vj.p, vi.p));
+        const v = { p: V.lerp(vi.p, vj.p, t), n: V.norm(V.lerp(vi.n, vj.n, t)) };
+        fv.push(v); bv.push(v);
+      }
+    }
+    if (fv.length >= 3) f.push(new Poly(fv, poly.sid, poly.plane));
+    if (bv.length >= 3) b.push(new Poly(bv, poly.sid, poly.plane));
+  }
+}
+class Poly {
+  constructor(v, sid, plane) { this.v = v; this.sid = sid; this.plane = plane || Plane.from(v[0].p, v[1].p, v[2].p); }
+  clone() { return new Poly(this.v.map(x => ({ p: x.p.slice(), n: x.n.slice() })), this.sid, this.plane.clone()); }
+  flip() { this.v.reverse(); this.v = this.v.map(x => ({ p: x.p, n: V.neg(x.n) })); this.plane = this.plane.clone(); this.plane.flip(); }
+}
+/* build a polygon from points; flat normal unless per-vertex normals given */
+function poly(pts, sid, normals) {
+  const pl = planeOf(pts); if (!pl) return null;
+  return new Poly(pts.map((p, i) => ({ p, n: normals ? normals[i] : pl.n })), sid, pl);
+}
+function planeOf(pts) {
+  /* Newell's method: robust for any planar polygon */
+  let nx = 0, ny = 0, nz = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]); }
+  const l = Math.hypot(nx, ny, nz); if (l < 1e-12) return null;
+  const n = [nx / l, ny / l, nz / l]; return new Plane(n, V.dot(n, pts[0]));
+}
+
+/* ---------- BSP (iterative) ---------- */
+class Node {
+  constructor() { this.plane = null; this.front = null; this.back = null; this.polys = []; }
+  nodes() { const out = [], st = [this]; while (st.length) { const n = st.pop(); out.push(n); if (n.front) st.push(n.front); if (n.back) st.push(n.back); } return out; }
+  invert() { for (const n of this.nodes()) { for (const p of n.polys) p.flip(); if (n.plane) n.plane.flip(); const t = n.front; n.front = n.back; n.back = t; } }
+  clipPolygons(polys) {
+    const out = [], st = [[this, polys]];
+    while (st.length) {
+      const [n, ps] = st.pop();
+      if (!n.plane) { for (const p of ps) out.push(p); continue; }
+      const f = [], b = [];
+      for (const p of ps) n.plane.split(p, f, b, f, b);
+      if (n.front) st.push([n.front, f]); else for (const p of f) out.push(p);
+      if (n.back) st.push([n.back, b]);
+    }
+    return out;
+  }
+  clipTo(bsp) { for (const n of this.nodes()) n.polys = bsp.clipPolygons(n.polys); }
+  all() { const out = []; for (const n of this.nodes()) for (const p of n.polys) out.push(p); return out; }
+  build(polys) {
+    if (!polys.length) return;
+    const st = [[this, polys]];
+    while (st.length) {
+      const [n, ps] = st.pop();
+      if (!ps.length) continue;
+      if (!n.plane) n.plane = ps[0].plane.clone();
+      const f = [], b = [];
+      for (const p of ps) n.plane.split(p, n.polys, n.polys, f, b);
+      if (f.length) { if (!n.front) n.front = new Node(); st.push([n.front, f]); }
+      if (b.length) { if (!n.back) n.back = new Node(); st.push([n.back, b]); }
+    }
+  }
+}
+
+/* ---------- Solid ---------- */
+class Solid {
+  constructor(polys) { this.polys = polys || []; }
+  clone() { return new Solid(this.polys.map(p => p.clone())); }
+  static empty() { return new Solid([]); }
+  isEmpty() { return this.polys.length === 0; }
+  union(o) {
+    if (this.isEmpty()) return o.clone(); if (o.isEmpty()) return this.clone();
+    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
+    a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert(); a.build(b.all());
+    return new Solid(a.all());
+  }
+  subtract(o) {
+    if (this.isEmpty() || o.isEmpty()) return this.clone();
+    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
+    a.invert(); a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert(); a.build(b.all()); a.invert();
+    return new Solid(a.all());
+  }
+  intersect(o) {
+    if (this.isEmpty() || o.isEmpty()) return Solid.empty();
+    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
+    a.invert(); b.clipTo(a); b.invert(); a.clipTo(b); b.clipTo(a); a.build(b.all()); a.invert();
+    return new Solid(a.all());
+  }
+  transform(m) {
+    const flip = M4det(m) < 0;
+    const polys = this.polys.map(p => {
+      const v = p.v.map(x => ({ p: M4.point(m, x.p), n: V.norm(M4.dir(m, x.n)) }));
+      const q = new Poly(v, p.sid); if (flip) q.flip(); return q;
+    });
+    return new Solid(polys);
+  }
+  /* rename surfaces (sid prefix = owning object) */
+  tag(prefix) { for (const p of this.polys) if (!p.sid.startsWith(prefix + ':')) p.sid = prefix + ':' + p.sid; return this; }
+  bbox() {
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (const p of this.polys) for (const v of p.v) for (let k = 0; k < 3; k++) { if (v.p[k] < mn[k]) mn[k] = v.p[k]; if (v.p[k] > mx[k]) mx[k] = v.p[k]; }
+    return { min: mn, max: mx };
+  }
+  volume() { let s = 0; for (const p of this.polys) { const a = p.v[0].p; for (let i = 1; i < p.v.length - 1; i++) s += V.dot(a, V.cross(p.v[i].p, p.v[i + 1].p)); } return s / 6; }
+  area() { let s = 0; for (const p of this.polys) { const a = p.v[0].p; for (let i = 1; i < p.v.length - 1; i++) s += V.len(V.cross(V.sub(p.v[i].p, a), V.sub(p.v[i + 1].p, a))) / 2; } return s; }
+  /* triangles for rendering / export. Booleans leave T-junctions (a vertex of one polygon in the middle of its
+     neighbour's edge) which show as pixel cracks and make STL files leaky; repair them by inserting those vertices
+     into the neighbour's edge and fanning that polygon from its centre. */
+  toMesh() {
+    const lines = new Map(), info = this.polys.map(p => p.v.map((v, i) => {
+      const a = v.p, b = p.v[(i + 1) % p.v.length].p; if (V.len(V.sub(b, a)) < 1e-9) return null;
+      const lk = lineKey(a, b); let L = lines.get(lk.key); if (!L) { L = { d: lk.d, ts: [] }; lines.set(lk.key, L); }
+      L.ts.push(V.dot(a, L.d), V.dot(b, L.d)); return L;
+    }));
+    for (const L of lines.values()) { L.ts.sort((x, y) => x - y); const u = []; for (const t of L.ts) if (!u.length || t - u[u.length - 1] > 1e-6) u.push(t); L.ts = u; }
+    const pos = [], nrm = [], sids = [], tri = [];
+    const put = (P, N) => { pos.push(P[0], P[1], P[2]); nrm.push(N[0], N[1], N[2]); };
+    this.polys.forEach((p, pi) => {
+      const ring = []; let added = false;
+      p.v.forEach((v, i) => {
+        ring.push(v); const L = info[pi][i]; if (!L) return;
+        const w = p.v[(i + 1) % p.v.length], ta = V.dot(v.p, L.d), tb = V.dot(w.p, L.d), lo = Math.min(ta, tb) + 1e-5, hi = Math.max(ta, tb) - 1e-5;
+        const ts = L.ts; let k0 = 0, k1 = ts.length; while (k0 < k1) { const h = (k0 + k1) >> 1; if (ts[h] <= lo) k0 = h + 1; else k1 = h; }
+        const mid = []; for (let k = k0; k < ts.length && ts[k] < hi; k++) mid.push(ts[k]); if (!mid.length) return;
+        if (tb < ta) mid.reverse();
+        for (const t of mid) { const f = (t - ta) / (tb - ta); ring.push({ p: V.lerp(v.p, w.p, f), n: V.norm(V.lerp(v.n, w.n, f)) }); }
+        added = true;
+      });
+      if (!added) {
+        for (let i = 1; i < ring.length - 1; i++) { for (const v of [ring[0], ring[i], ring[i + 1]]) put(v.p, v.n); sids.push(p.sid); tri.push(p); }
+        return;
+      }
+      let c = [0, 0, 0], cn = [0, 0, 0]; for (const v of p.v) { c = V.add(c, v.p); cn = V.add(cn, v.n); }
+      c = V.mul(c, 1 / p.v.length); cn = V.norm(cn);
+      for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; put(c, cn); put(a.p, a.n); put(b.p, b.n); sids.push(p.sid); tri.push(p); }
+    });
+    return { positions: new Float32Array(pos), normals: new Float32Array(nrm), sids, polysOfTri: tri, count: pos.length / 3 };
+  }
+}
+function M4det(m) { return m[0] * (m[5] * m[10] - m[9] * m[6]) - m[4] * (m[1] * m[10] - m[9] * m[2]) + m[8] * (m[1] * m[6] - m[5] * m[2]); }
+
+/* ---------- 2D helpers ---------- */
+function area2(pts) { let a = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+function ccw(pts) { return area2(pts) < 0 ? pts.slice().reverse() : pts.slice(); }
+function cleanProfile(pts) {
+  const o = []; for (const p of pts) { const l = o[o.length - 1]; if (!l || Math.hypot(p[0] - l[0], p[1] - l[1]) > 1e-7) o.push([+p[0], +p[1]]); }
+  if (o.length > 2 && Math.hypot(o[0][0] - o[o.length - 1][0], o[0][1] - o[o.length - 1][1]) < 1e-7) o.pop();
+  return o;
+}
+/* ear-clipping triangulation of a simple polygon (any orientation) → index triples (CCW) */
+function triangulate(pts) {
+  const n = pts.length; if (n < 3) return [];
+  let idx = [...Array(n).keys()]; if (area2(pts) < 0) idx.reverse();
+  const out = [], cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const inside = (p, a, b, c) => cr(a, b, p) >= -1e-12 && cr(b, c, p) >= -1e-12 && cr(c, a, p) >= -1e-12;
+  let guard = 0;
+  while (idx.length > 3 && guard++ < n * n) {
+    let clipped = false;
+    for (let i = 0; i < idx.length; i++) {
+      const ia = idx[(i + idx.length - 1) % idx.length], ib = idx[i], ic = idx[(i + 1) % idx.length], a = pts[ia], b = pts[ib], c = pts[ic];
+      if (cr(a, b, c) <= 1e-14) continue;
+      let ear = true;
+      for (const j of idx) { if (j === ia || j === ib || j === ic) continue; if (inside(pts[j], a, b, c)) { ear = false; break; } }
+      if (!ear) continue;
+      out.push([ia, ib, ic]); idx.splice(i, 1); clipped = true; break;
+    }
+    if (!clipped) { idx.splice(0, 1); }
+  }
+  if (idx.length === 3) out.push([idx[0], idx[1], idx[2]]);
+  return out;
+}
+/* resample a closed 2D profile to n points by arc length */
+function resample(pts, n) {
+  const L = [0]; for (let i = 1; i <= pts.length; i++) { const a = pts[i - 1], b = pts[i % pts.length]; L.push(L[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const tot = L[L.length - 1], out = []; let k = 0;
+  for (let i = 0; i < n; i++) { const d = tot * i / n; while (k < pts.length - 1 && L[k + 1] < d) k++; const a = pts[k], b = pts[(k + 1) % pts.length], t = (d - L[k]) / ((L[k + 1] - L[k]) || 1); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+  return out;
+}
+
+/* ---------- ring mesher: stacks of 3D rings (same point count) + two triangulated caps ---------- */
+/* rings[k][i] = 3D point; profile2D = the 2D shape used for cap triangulation (same order as rings) */
+function ringSolid(rings, capIdx, sidSide, smooth, sidA, sidB) {
+  const polys = [], n = rings[0].length;
+  const push = (pts, sid, normals) => { const p = poly(pts, sid, normals); if (p) polys.push(p); };
+  for (let k = 0; k < rings.length - 1; k++) {
+    const r0 = rings[k], r1 = rings[k + 1];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, a = r0[i], b = r0[j], c = r1[j], d = r1[i];
+      const quadPlanar = (() => { const pl = planeOf([a, b, c]); return pl && Math.abs(V.dot(pl.n, d) - pl.w) < 1e-6; })();
+      const sid = typeof sidSide === 'function' ? sidSide(i) : sidSide;
+      if (quadPlanar) push([a, b, c, d], sid); else { push([a, b, c], sid); push([a, c, d], sid); }
+    }
+  }
+  const capA = rings[0], capB = rings[rings.length - 1];
+  for (const [i, j, k] of capIdx) { push([capA[i], capA[k], capA[j]], sidA); push([capB[i], capB[j], capB[k]], sidB); }
+  const s = new Solid(polys);
+  if (smooth) smoothNormals(s, typeof sidSide === 'function' ? null : sidSide);
+  return s;
+}
+/* average vertex normals inside a smooth surface (rendering only; geometry stays faceted) */
+function smoothNormals(s, sid) {
+  const key = (p) => p.map(v => Math.round(v * 1e4)).join(','), acc = new Map();
+  for (const p of s.polys) { if (sid && p.sid !== sid) continue; for (const v of p.v) { const k = key(v.p), a = acc.get(k) || [0, 0, 0]; acc.set(k, V.add(a, p.plane.n)); } }
+  for (const p of s.polys) { if (sid && p.sid !== sid) continue; p.v = p.v.map(v => ({ p: v.p, n: V.norm(acc.get(key(v.p))) })); }
+}
+
+/* ---------- primitives (local frames: base centred on the XY plane, Z up) ---------- */
+function box(W, D, H) {
+  const x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2, z0 = 0, z1 = H;
+  const P = (x, y, z) => [x, y, z];
+  return new Solid([
+    poly([P(x0, y0, z0), P(x0, y1, z0), P(x1, y1, z0), P(x1, y0, z0)], 'bottom'),
+    poly([P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1), P(x0, y1, z1)], 'top'),
+    poly([P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1)], 'front'),
+    poly([P(x0, y1, z0), P(x0, y1, z1), P(x1, y1, z1), P(x1, y1, z0)], 'back'),
+    poly([P(x0, y0, z0), P(x0, y0, z1), P(x0, y1, z1), P(x0, y1, z0)], 'left'),
+    poly([P(x1, y0, z0), P(x1, y1, z0), P(x1, y1, z1), P(x1, y0, z1)], 'right')
+  ]);
+}
+/* right-angle wedge: vertical face on the left (x = -W/2), slope from top-left down to the right */
+function wedge(W, D, H) {
+  const x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2;
+  return new Solid([
+    poly([[x0, y0, 0], [x0, y1, 0], [x1, y1, 0], [x1, y0, 0]], 'bottom'),
+    poly([[x0, y0, 0], [x0, y0, H], [x0, y1, H], [x0, y1, 0]], 'left'),
+    poly([[x1, y0, 0], [x1, y1, 0], [x0, y1, H], [x0, y0, H]], 'slope'),
+    poly([[x0, y0, 0], [x1, y0, 0], [x0, y0, H]], 'front'),
+    poly([[x0, y1, 0], [x0, y1, H], [x1, y1, 0]], 'back')
+  ]);
+}
+function cylinder(R1, R2, H, seg) {
+  seg = seg || 40; R2 = R2 == null ? R1 : R2;
+  const ring = (r, z) => { const o = []; for (let i = 0; i < seg; i++) { const t = i / seg * Math.PI * 2; o.push([Math.cos(t) * r, Math.sin(t) * r, z]); } return o; };
+  const b = ring(R1, 0), polys = [];
+  const slope = (R1 - R2) / H;
+  const nAt = (t) => V.norm([Math.cos(t), Math.sin(t), slope]);
+  if (R2 <= 1e-9) {
+    const apex = [0, 0, H];
+    for (let i = 0; i < seg; i++) { const j = (i + 1) % seg, ti = i / seg * Math.PI * 2, tj = j / seg * Math.PI * 2; const p = poly([b[i], b[j], apex], 'side', [nAt(ti), nAt(tj), nAt((ti + tj) / 2)]); if (p) polys.push(p); }
+  } else {
+    const t = ring(R2, H);
+    for (let i = 0; i < seg; i++) { const j = (i + 1) % seg, ti = i / seg * Math.PI * 2, tj = j / seg * Math.PI * 2; const p = poly([b[i], b[j], t[j], t[i]], 'side', [nAt(ti), nAt(tj), nAt(tj), nAt(ti)]); if (p) polys.push(p); }
+    polys.push(poly(t.slice(), 'top'));
+  }
+  polys.push(poly(b.slice().reverse(), 'bottom'));
+  return new Solid(polys);
+}
+function sphere(R, seg) {
+  seg = seg || 32; const rings = Math.max(6, Math.round(seg / 2)), polys = [];
+  const P = (i, j) => { const th = i / seg * Math.PI * 2, ph = j / rings * Math.PI; return [R * Math.sin(ph) * Math.cos(th), R * Math.sin(ph) * Math.sin(th), R - R * Math.cos(ph)]; };
+  const N = (p) => V.norm([p[0], p[1], p[2] - R]);
+  for (let j = 0; j < rings; j++) for (let i = 0; i < seg; i++) {
+    const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+    const pts = (j === 0 ? [a, d, c] : j === rings - 1 ? [a, d, b] : [a, d, c, b]).reverse();
+    const p = poly(pts, 'surface', pts.map(N)); if (p) polys.push(p);
+  }
+  return new Solid(polys);
+}
+/* extrude a 2D profile along local Z: length, twist (deg), end scale [sx, sy], oblique direction (unit vector, z > 0) */
+function extrude(profile, o) {
+  o = o || {}; let pts = ccw(cleanProfile(profile)); const L = +o.length || 10, tw = (+o.twist || 0) * Math.PI / 180;
+  const sc = Array.isArray(o.scale) ? o.scale : [o.scale == null ? 1 : +o.scale, o.scale == null ? 1 : +o.scale];
+  const dir = o.dir ? V.norm(o.dir) : [0, 0, 1], steps = Math.max(1, o.divisions || (tw ? Math.ceil(Math.abs(tw) / (Math.PI / 24)) : 1));
+  const cap = triangulate(pts), rings = [];
+  for (let k = 0; k <= steps; k++) {
+    const t = k / steps, a = tw * t, sx = 1 + (sc[0] - 1) * t, sy = 1 + (sc[1] - 1) * t, c = Math.cos(a), s = Math.sin(a);
+    const off = V.mul(dir, L * t / (dir[2] || 1));
+    rings.push(pts.map(([x, y]) => { const X = x * sx, Y = y * sy; return [X * c - Y * s + off[0], X * s + Y * c + off[1], off[2]]; }));
+  }
+  return ringSolid(rings, cap, (i) => 'side' + i, false, 'start', 'end');
+}
+/* loft between two different closed profiles (resampled to the same count, start points aligned) */
+function loft(profA, profB, o) {
+  o = o || {}; const L = +o.length || 10, tw = (+o.twist || 0) * Math.PI / 180, n = Math.max(profA.length, profB.length, o.samples || 48);
+  const A = resample(ccw(cleanProfile(profA)), n); let B = resample(ccw(cleanProfile(profB)), n);
+  /* align start of B to A (min total distance) */
+  let best = 0, bd = Infinity; for (let s = 0; s < n; s++) { let d = 0; for (let i = 0; i < n; i += Math.max(1, n >> 4)) { const q = B[(i + s) % n]; d += Math.hypot(q[0] - A[i][0], q[1] - A[i][1]); } if (d < bd) { bd = d; best = s; } }
+  B = B.slice(best).concat(B.slice(0, best));
+  const steps = Math.max(1, o.divisions || 8), rings = [], cap = triangulate(A);
+  for (let k = 0; k <= steps; k++) {
+    const t = k / steps, a = tw * t, c = Math.cos(a), s = Math.sin(a);
+    rings.push(A.map((p, i) => { const x = p[0] + (B[i][0] - p[0]) * t, y = p[1] + (B[i][1] - p[1]) * t; return [x * c - y * s, x * s + y * c, L * t]; }));
+  }
+  const capB = triangulate(B);
+  const s = ringSolid(rings, cap, 'side', true, 'start', 'end');
+  /* replace the end cap with B's own triangulation (rings share points so caps stay watertight) */
+  const last = rings[rings.length - 1];
+  s.polys = s.polys.filter(p => p.sid !== 'end');
+  for (const [i, j, k] of capB) { const p = poly([last[i], last[j], last[k]], 'end'); if (p) s.polys.push(p); }
+  return s;
+}
+/* revolve a 2D profile (x = radius ≥ 0, y = height) around local Z */
+function revolve(profile, o) {
+  o = o || {}; const deg = Math.min(360, Math.max(1, +o.degrees || 360)), seg = Math.max(8, o.segments || Math.ceil(48 * deg / 360));
+  let pts = ccw(cleanProfile(profile)).map(([r, z]) => [Math.max(0, r), z]);
+  const full = deg >= 359.999, steps = seg, polys = [];
+  const P = (r, z, a) => [r * Math.cos(a), r * Math.sin(a), z];
+  for (let k = 0; k < steps; k++) {
+    const a0 = deg * Math.PI / 180 * k / steps, a1 = deg * Math.PI / 180 * (k + 1) / steps;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[(i + 1) % pts.length];
+      if (p[0] < 1e-9 && q[0] < 1e-9) continue;
+      const quad = [P(p[0], p[1], a0), P(q[0], q[1], a0), P(q[0], q[1], a1), P(p[0], p[1], a1)];
+      const pts2 = p[0] < 1e-9 ? [quad[0], quad[1], quad[2]] : q[0] < 1e-9 ? [quad[0], quad[1], quad[3]] : quad;
+      const pg = poly(pts2.slice().reverse(), 'rev' + i); if (pg) polys.push(pg);
+    }
+  }
+  if (!full) {
+    const cap = triangulate(pts), a1 = deg * Math.PI / 180;
+    for (const [i, j, k] of cap) {
+      const p0 = poly([P(pts[i][0], pts[i][1], 0), P(pts[k][0], pts[k][1], 0), P(pts[j][0], pts[j][1], 0)].map(v => v), 'start');
+      const p1 = poly([P(pts[i][0], pts[i][1], a1), P(pts[j][0], pts[j][1], a1), P(pts[k][0], pts[k][1], a1)], 'end');
+      if (p0) polys.push(p0); if (p1) polys.push(p1);
+    }
+  }
+  const s = new Solid(polys); fixOrientation(s); return s;
+}
+/* sweep a 2D profile along a 3D polyline path (parallel-transport frames, mitred corners) */
+function sweep(profile, path, o) {
+  o = o || {}; const pts = ccw(cleanProfile(profile)); const P = path.map(p => p.map(Number));
+  if (P.length < 2) throw new Error('A sweep path needs at least 2 points');
+  const T = P.map((p, i) => { const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; return V.norm(V.sub(b, a)); });
+  let up = Math.abs(T[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  let X = V.norm(V.cross(up, T[0])), Y = V.cross(T[0], X);
+  const rings = [];
+  for (let i = 0; i < P.length; i++) {
+    if (i > 0) { /* parallel transport */ const t0 = T[i - 1], t1 = T[i], ax = V.cross(t0, t1), s = V.len(ax); if (s > 1e-9) { const ang = Math.atan2(s, V.dot(t0, t1)) * 180 / Math.PI, R = M4.axisAngle(ax, ang); X = V.norm(M4.dir(R, X)); Y = V.norm(M4.dir(R, Y)); } }
+    let k = 1;
+    if (i > 0 && i < P.length - 1) { const d0 = V.norm(V.sub(P[i], P[i - 1])), d1 = V.norm(V.sub(P[i + 1], P[i])); const c = V.dot(d0, T[i]); k = 1 / Math.max(0.25, c); void d1; }
+    /* mitre: stretch the profile across the corner bisector */
+    const bend = i > 0 && i < P.length - 1 ? V.norm(V.sub(V.norm(V.sub(P[i + 1], P[i])), V.norm(V.sub(P[i], P[i - 1])))) : null;
+    rings.push(pts.map(([x, y]) => {
+      let q = V.add(V.mul(X, x), V.mul(Y, y));
+      if (bend && V.len(bend) > 1e-9) { const along = V.dot(q, bend); q = V.add(q, V.mul(bend, along * (k - 1))); }
+      return V.add(P[i], q);
+    }));
+  }
+  const s = ringSolid(rings, triangulate(pts), 'side', false, 'start', 'end'); fixOrientation(s); return s;
+}
+/* make sure polygons face outward (positive volume) */
+function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
+
+/* ---------- edge pieces: fillet / weld / chamfer along a straight edge ---------- */
+/* m = point on the edge, d = edge direction (unit), u1/u2 = unit directions along each face away from the edge,
+   size = leg length along each face, length = edge length (piece runs from m - d·length/2 to m + d·length/2).
+   fillet = concave arc (indent), weld = convex bead (bulge, arc centred on the corner), chamfer = straight. */
+/* cross-section of an edge treatment: corner O, leg ends P1 = u1·t, P2 = u2·t, and the curve between them */
+function edgeProfile(u1, u2, t, style) {
+  const phi = Math.acos(Math.max(-1, Math.min(1, V.dot(u1, u2))));
+  const P1 = V.mul(u1, t), P2 = V.mul(u2, t), prof = [[0, 0, 0], P1], seg = 12;
+  if (style === 'chamfer') { /* straight */ }
+  else if (style === 'weld') { for (let i = 1; i < seg; i++) { const a = phi * i / seg; prof.push(V.mul(V.add(V.mul(u1, Math.cos(a)), V.mul(V.norm(V.sub(u2, V.mul(u1, Math.cos(phi)))), Math.sin(a))), t)); } }
+  else {
+    const r = t * Math.tan(phi / 2), bis = V.norm(V.add(u1, u2)), c = V.mul(bis, r / Math.sin(phi / 2));
+    const a0 = V.sub(P1, c), a1 = V.sub(P2, c), ang = Math.acos(Math.max(-1, Math.min(1, V.dot(V.norm(a0), V.norm(a1))))), ax = V.norm(V.cross(a0, a1));
+    for (let i = 1; i < seg; i++) { const R = M4.axisAngle(ax, ang * 180 / Math.PI * i / seg); prof.push(V.add(c, M4.dir(R, a0))); }
+  }
+  prof.push(P2);
+  return prof;
+}
+/* 2D profile (ccw) + surface naming: leg1 / leg2 lie on the two faces, one smooth 'arc' (or flat 'chamfer') between them */
+function edgeProfile2D(prof3, x, y, style) {
+  let P2d = prof3.map(p => [V.dot(p, x), V.dot(p, y)]), tags = prof3.map((_, i) => (i === 0 ? 'o' : i === 1 ? 'p1' : i === prof3.length - 1 ? 'p2' : 'a'));
+  if (area2(P2d) < 0) { P2d = P2d.slice().reverse(); tags = tags.slice().reverse(); }
+  const n = P2d.length, curved = style === 'chamfer' ? 'chamfer' : 'arc';
+  const sidOf = (i) => { const a = tags[i], b = tags[(i + 1) % n]; if (a === 'o' || b === 'o') return (a === 'p1' || b === 'p1') ? 'leg1' : 'leg2'; return curved; };
+  return { P2d, sidOf, curved };
+}
+function edgePiece(m, d, u1, u2, size, style, length, ext) {
+  d = V.norm(d); u1 = V.norm(u1); u2 = V.norm(u2);
+  const prof = edgeProfile(u1, u2, size, style);
+  /* build a prism: profile lies in the plane ⟂ d through the origin */
+  const e = ext || 0, half = length / 2 + e, x = u1, z = d, y = V.cross(z, x);
+  const { P2d, sidOf, curved } = edgeProfile2D(prof, x, y, style);
+  const rings = [P2d.map(([px, py]) => [px, py, 0]), P2d.map(([px, py]) => [px, py, half * 2])];
+  const solid = ringSolid(rings, triangulate(P2d), sidOf, false, 'start', 'end');
+  if (curved === 'arc') smoothNormals(solid, 'arc');
+  return solid.transform(M4.frame(V.sub(m, V.mul(d, half)), x, z));
+}
+/* Edge treatment around a circular (faceted) edge: the same cross-section swept around the actual edge loop,
+   so it meets the faceted surfaces exactly. loop = ordered 3D points; c, axis = circle centre and axis;
+   u1, u2 = [radial, axial] directions of the two faces away from the edge. */
+function loopPiece(loop, closed, c, axis, u1, u2, size, style) {
+  axis = V.norm(axis);
+  const prof = edgeProfile(V.norm([u1[0], u1[1], 0]), V.norm([u2[0], u2[1], 0]), size, style);
+  const { P2d, sidOf, curved } = edgeProfile2D(prof, [1, 0, 0], [0, 1, 0], style), n = P2d.length;
+  const rings = loop.map(v => {
+    const w = V.sub(v, c), z = V.dot(w, axis), rv = V.sub(w, V.mul(axis, z)), R = V.len(rv) || 1e-9, rd = V.mul(rv, 1 / R);
+    return P2d.map(([dr, dz]) => V.add(c, V.add(V.mul(rd, R + dr), V.mul(axis, z + dz))));
+  });
+  const polys = [], push = (pts, sid) => { const p = poly(pts, sid); if (p) polys.push(p); }, K = rings.length;
+  for (let k = 0; k < (closed ? K : K - 1); k++) {
+    const r0 = rings[k], r1 = rings[(k + 1) % K];
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n, sid = sidOf(i); push([r0[i], r0[j], r1[j]], sid); push([r0[i], r1[j], r1[i]], sid); }
+  }
+  if (!closed) { for (const [i, j, k] of triangulate(P2d)) { push([rings[0][i], rings[0][k], rings[0][j]], 'start'); push([rings[K - 1][i], rings[K - 1][j], rings[K - 1][k]], 'end'); } }
+  const solid = new Solid(polys); fixOrientation(solid);
+  if (curved === 'arc') smoothNormals(solid, 'arc');
+  return solid;
+}
+
+/* ---------- drawing edges ---------- */
+const q = (v) => Math.round(v * 1e4);
+/* a key shared by all segments on one infinite line (canonical direction + foot point from the origin); allocation-light, it runs per edge */
+const lineKey = (a, b) => {
+  let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2]; const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+  if (dx < -1e-9 || (Math.abs(dx) < 1e-9 && (dy < -1e-9 || (Math.abs(dy) < 1e-9 && dz < 0)))) { dx = -dx; dy = -dy; dz = -dz; }
+  const t = a[0] * dx + a[1] * dy + a[2] * dz, cx = a[0] - dx * t, cy = a[1] - dy * t, cz = a[2] - dz * t;
+  return { key: `${Math.round(dx * 2e3)},${Math.round(dy * 2e3)},${Math.round(dz * 2e3)}|${Math.round(cx * 1e2)},${Math.round(cy * 1e2)},${Math.round(cz * 1e2)}`, d: [dx, dy, dz], c: [cx, cy, cz] };
+};
+/* creases: boundaries between different surfaces (robust to T-junctions created by booleans) */
+function creaseEdges(solid) {
+  const bySid = new Map();
+  for (const p of solid.polys) { if (!bySid.has(p.sid)) bySid.set(p.sid, []); bySid.get(p.sid).push(p); }
+  const buckets = new Map();
+  for (const [sid, ps] of bySid) {
+    const local = new Map();
+    for (const p of ps) for (let i = 0; i < p.v.length; i++) {
+      const a = p.v[i].p, b = p.v[(i + 1) % p.v.length].p; if (V.len(V.sub(b, a)) < 1e-7) continue;
+      const lk = lineKey(a, b); let e = local.get(lk.key); if (!e) { e = { d: lk.d, c: lk.c, iv: [] }; local.set(lk.key, e); }
+      const ta = V.dot(a, lk.d), tb = V.dot(b, lk.d); e.iv.push(ta < tb ? [ta, tb, 1] : [tb, ta, -1]);
+    }
+    for (const [k, e] of local) {
+      /* signed coverage sweep: interior edges cancel (+1 and −1), boundaries remain */
+      const ev = []; for (const [t0, t1, s] of e.iv) { ev.push([t0, s], [t1, -s]); }
+      ev.sort((x, y) => x[0] - y[0]);
+      let cov = 0, start = null;
+      for (let i = 0; i < ev.length; i++) {
+        const prev = cov; cov += ev[i][1];
+        const t = ev[i][0];
+        if (prev === 0 && cov !== 0) start = t;
+        else if (prev !== 0 && cov === 0 && start != null) { if (t - start > 1e-6) { let B = buckets.get(k); if (!B) { B = { d: e.d, c: e.c, iv: [] }; buckets.set(k, B); } B.iv.push([start, t]); } start = null; }
+        else if (prev !== 0 && cov !== 0 && Math.sign(prev) !== Math.sign(cov)) { if (t - start > 1e-6) { let B = buckets.get(k); if (!B) { B = { d: e.d, c: e.c, iv: [] }; buckets.set(k, B); } B.iv.push([start, t]); } start = t; }
+      }
+    }
+  }
+  const segs = [];
+  for (const B of buckets.values()) {
+    B.iv.sort((a, b) => a[0] - b[0]);
+    const merged = []; let cur = null;
+    for (const iv of B.iv) { if (cur && iv[0] <= cur[1] + 1e-6) cur[1] = Math.max(cur[1], iv[1]); else { if (cur) merged.push(cur); cur = iv.slice(); } }
+    if (cur) merged.push(cur);
+    for (const [t0, t1] of merged) segs.push([V.add(B.c, V.mul(B.d, t0)), V.add(B.c, V.mul(B.d, t1))]);
+  }
+  return segs;
+}
+/* silhouettes of curved (smooth) surfaces for a view direction */
+function silhouetteEdges(solid, viewDir, smoothSids) {
+  const edges = new Map(), out = [];
+  for (const p of solid.polys) {
+    if (smoothSids && !smoothSids(p.sid)) continue;
+    for (let i = 0; i < p.v.length; i++) {
+      const a = p.v[i].p, b = p.v[(i + 1) % p.v.length].p, ka = a.map(q).join(','), kb = b.map(q).join(',');
+      const key = ka < kb ? ka + '|' + kb : kb + '|' + ka, e = edges.get(key);
+      if (e) { if (e.sid === p.sid && Math.sign(V.dot(e.n, viewDir)) !== Math.sign(V.dot(p.plane.n, viewDir))) out.push([a, b]); edges.delete(key); }
+      else edges.set(key, { n: p.plane.n, sid: p.sid });
+    }
+  }
+  return out;
+}
+
+return { EPS, V, M4, Poly, poly, Solid, area2, ccw, triangulate, resample, box, wedge, cylinder, sphere, extrude, loft, revolve, sweep, edgePiece, loopPiece, lineKey, creaseEdges, silhouetteEdges };
+})();
+
+__sf3.model = (() => {
+/* SketchFlow v2 parametric model.
+   doc.objects is the feature list (order = history). Each object = shape type + dimensions in its own local frame,
+   placed by a mate (connector → connector) or a pose. Booleans are relations (object "into" a target with an op),
+   evaluated in list order — editable at any time. Edge treatments (fillet / weld / chamfer) are objects too.
+   One API — apply(ops) — serves the UI and the MCP bridge, so an LLM builds with the same JSON a click produces. */
+const K = __sf3.kernel;
+const { V, M4 } = K;
+
+const TYPES = {
+  box: { label: 'Box', params: { width: 40, depth: 30, height: 20 } },
+  wedge: { label: 'Wedge', params: { width: 40, depth: 20, height: 20 } },
+  cylinder: { label: 'Cylinder', params: { diameter: 30, height: 40 } },
+  cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
+  sphere: { label: 'Sphere', params: { diameter: 30 } },
+  fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1] } },
+  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0 } },
+  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360 } },
+  sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
+  edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } }
+};
+const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
+const uid = (p) => p + Math.random().toString(36).slice(2, 8);
+const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+
+/* ---------- connectors (local frames): o = origin, n = normal / axis, u = in-plane reference ---------- */
+function conn(name, o, n, u, kind) { return { name, o, n: V.norm(n), u: V.norm(u), kind: kind || 'face' }; }
+function boxLike(W, D, H, wedge) {
+  const c = [conn('top', [0, 0, H], [0, 0, 1], [1, 0, 0]), conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]),
+    conn('front', [0, -D / 2, H / 2], [0, -1, 0], [1, 0, 0]), conn('back', [0, D / 2, H / 2], [0, 1, 0], [-1, 0, 0]),
+    conn('left', [-W / 2, 0, H / 2], [-1, 0, 0], [0, -1, 0]), conn('right', [W / 2, 0, H / 2], [1, 0, 0], [0, 1, 0]),
+    conn('center', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')];
+  if (wedge) { c.splice(0, 1, conn('slope', [0, 0, H / 2], [H, 0, W], [0, 1, 0])); c.splice(c.findIndex(x => x.name === 'right'), 1); }
+  const xs = [-W / 2, W / 2], ys = [-D / 2, D / 2], zs = [0, H], s = (v) => (v > 0 ? '+' : '-');
+  for (const x of xs) for (const y of ys) for (const z of zs) { if (wedge && x > 0 && z > 0) continue; c.push(conn('corner' + s(x) + 'x' + s(y) + 'y' + s(z - H / 2) + 'z', [x, y, z], [0, 0, 1], [1, 0, 0], 'corner')); }
+  /* edge midpoints: axis along the edge, u pointing out from the body */
+  const E = (name, a, b) => { const m = V.lerp(a, b, 0.5), out = V.sub(m, [0, 0, H / 2]); c.push(conn('edge:' + name, m, V.sub(b, a), V.sub(out, V.mul(V.norm(V.sub(b, a)), V.dot(out, V.norm(V.sub(b, a))))), 'edge')); };
+  if (!wedge) {
+    E('top-front', [-W / 2, -D / 2, H], [W / 2, -D / 2, H]); E('top-back', [-W / 2, D / 2, H], [W / 2, D / 2, H]); E('top-left', [-W / 2, -D / 2, H], [-W / 2, D / 2, H]); E('top-right', [W / 2, -D / 2, H], [W / 2, D / 2, H]);
+    E('bottom-front', [-W / 2, -D / 2, 0], [W / 2, -D / 2, 0]); E('bottom-back', [-W / 2, D / 2, 0], [W / 2, D / 2, 0]); E('bottom-left', [-W / 2, -D / 2, 0], [-W / 2, D / 2, 0]); E('bottom-right', [W / 2, -D / 2, 0], [W / 2, D / 2, 0]);
+    E('front-left', [-W / 2, -D / 2, 0], [-W / 2, -D / 2, H]); E('front-right', [W / 2, -D / 2, 0], [W / 2, -D / 2, H]); E('back-left', [-W / 2, D / 2, 0], [-W / 2, D / 2, H]); E('back-right', [W / 2, D / 2, 0], [W / 2, D / 2, H]);
+  }
+  return c;
+}
+function roundLike(R, H, Rtop) {
+  const c = [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('center', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')];
+  c.push(Rtop > 1e-9 || Rtop == null ? conn('top', [0, 0, H], [0, 0, 1], [1, 0, 0]) : conn('apex', [0, 0, H], [0, 0, 1], [1, 0, 0], 'corner'));
+  const rm = Rtop == null ? R : (R + Rtop) / 2;
+  for (const [nm, x, y] of [['+x', 1, 0], ['-x', -1, 0], ['+y', 0, 1], ['-y', 0, -1]]) c.push(conn('side' + nm, [x * rm, y * rm, H / 2], [x, y, 0], [0, 0, 1], 'side'));
+  return c;
+}
+function connectorsOf(o, solid) {
+  const p = o.params;
+  switch (o.type) {
+    case 'box': return boxLike(p.width, p.depth, p.height);
+    case 'wedge': return boxLike(p.width, p.depth, p.height, true);
+    case 'cylinder': return roundLike(p.diameter / 2, p.height);
+    case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
+    case 'sphere': return roundLike(p.diameter / 2, p.diameter);
+    case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
+      conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
+    default: {
+      /* features: start/end faces + bounding-box faces & centre */
+      const c = [];
+      if (o.type === 'extrude' || o.type === 'loft') {
+        const cen = centroid2(p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
+        const end = o.type === 'extrude' ? V.add([cen[0], cen[1], 0], V.mul(dir, L / (dir[2] || 1))) : [cen[0], cen[1], L];
+        c.push(conn('start', [cen[0], cen[1], 0], [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
+      }
+      if (solid && !solid.isEmpty()) {
+        const b = solid.bbox(), m = V.lerp(b.min, b.max, 0.5);
+        c.push(conn('center', m, [0, 0, 1], [1, 0, 0], 'center'));
+        for (const [nm, k, s] of [['+x', 0, 1], ['-x', 0, -1], ['+y', 1, 1], ['-y', 1, -1], ['+z', 2, 1], ['-z', 2, -1]]) {
+          const o2 = m.slice(); o2[k] = s > 0 ? b.max[k] : b.min[k]; const n = [0, 0, 0]; n[k] = s;
+          c.push(conn('bbox' + nm, o2, n, k === 2 ? [1, 0, 0] : [0, 0, 1]));
+        }
+        if (!c.find(x => x.name === 'bottom')) c.push(conn('bottom', [m[0], m[1], b.min[2]], [0, 0, -1], [1, 0, 0]));
+        if (!c.find(x => x.name === 'top')) c.push(conn('top', [m[0], m[1], b.max[2]], [0, 0, 1], [1, 0, 0]));
+      }
+      return c;
+    }
+  }
+}
+const centroid2 = (pts) => { let x = 0, y = 0; for (const p of pts) { x += p[0]; y += p[1]; } return [x / pts.length, y / pts.length]; };
+const ORIGIN_CONNS = [conn('origin', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center'), conn('xy', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('xz', [0, 0, 0], [0, -1, 0], [1, 0, 0]), conn('yz', [0, 0, 0], [1, 0, 0], [0, 1, 0])];
+const frameOf = (c) => M4.frame(c.o, c.u, c.n);
+
+/* ---------- local geometry ---------- */
+const SEG = 48;
+function buildLocal(o) {
+  const p = o.params;
+  switch (o.type) {
+    case 'box': return K.box(p.width, p.depth, p.height);
+    case 'wedge': return K.wedge(p.width, p.depth, p.height);
+    case 'cylinder': return K.cylinder(p.diameter / 2, p.diameter / 2, p.height, p.segments || SEG);
+    case 'cone': return K.cylinder(p.diameter / 2, Math.max(0, (p.top || 0) / 2), p.height, p.segments || SEG);
+    case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
+    case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
+    case 'extrude': return K.extrude(p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
+    case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
+    case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
+    case 'sweep': return K.sweep(p.profile, p.path);
+  }
+  throw new Error('Unknown shape ' + o.type);
+}
+const localCache = new Map();
+function localSolid(o) {
+  const key = o.type + JSON.stringify(o.params);
+  let s = localCache.get(key);
+  if (!s) { s = buildLocal(o); if (localCache.size > 300) localCache.clear(); localCache.set(key, s); }
+  return s;
+}
+/* carried dimensions: which parameter, measured between which local points, best shown in which view */
+function dimsOf(o) {
+  const p = o.params, D = (param, a, b, view, kind) => ({ param, a, b, view, kind: kind || 'linear' });
+  switch (o.type) {
+    case 'box': case 'wedge': return [D('width', [-p.width / 2, -p.depth / 2, 0], [p.width / 2, -p.depth / 2, 0], 'front'), D('height', [-p.width / 2, -p.depth / 2, 0], [-p.width / 2, -p.depth / 2, p.height], 'front'), D('depth', [p.width / 2, -p.depth / 2, p.height], [p.width / 2, p.depth / 2, p.height], 'top')];
+    case 'cylinder': return [D('diameter', [-p.diameter / 2, 0, p.height], [p.diameter / 2, 0, p.height], 'top', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')];
+    case 'cone': { const o2 = [D('diameter', [-p.diameter / 2, 0, 0], [p.diameter / 2, 0, 0], 'front', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')]; if (p.top > 0) o2.push(D('top', [-p.top / 2, 0, p.height], [p.top / 2, 0, p.height], 'front', 'diameter')); return o2; }
+    case 'sphere': return [D('diameter', [-p.diameter / 2, 0, p.diameter / 2], [p.diameter / 2, 0, p.diameter / 2], 'front', 'diameter')];
+    case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
+    case 'extrude': { const c = centroid2(p.profile), dir = V.norm(p.direction || [0, 0, 1]); return [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')]; }
+    case 'loft': { const c = centroid2(p.profile); return [D('length', [c[0], c[1], 0], [c[0], c[1], p.length], 'auto')]; }
+    default: return [];
+  }
+}
+
+/* ---------- document ---------- */
+function newDoc(name) { return { v: 2, name: name || 'Model', units: 'mm', objects: [], origin: null, ground: null, dims: [], created: Date.now(), updated: Date.now() }; }
+function defaultParams(type, given) {
+  const base = JSON.parse(JSON.stringify(TYPES[type].params)), out = Object.assign(base, given || {});
+  for (const k of Object.keys(out)) if (typeof base[k] === 'number' && typeof out[k] === 'string' && out[k] !== '' && isFinite(+out[k])) out[k] = +out[k];
+  if (type === 'loft' && !out.profile2) out.profile2 = out.profile;
+  return out;
+}
+
+/* ---------- evaluation ---------- */
+const BODY_CACHE = new Map(), LOCAL_CACHE = new Map();
+function cachedLocal(o) {
+  const key = o.type + '|' + JSON.stringify(o.params); let s = LOCAL_CACHE.get(key);
+  if (!s) { s = localSolid(o); LOCAL_CACHE.set(key, s); if (LOCAL_CACHE.size > 200) LOCAL_CACHE.delete(LOCAL_CACHE.keys().next().value); }
+  return s;
+}
+function evaluate(doc) {
+  const R = { world: new Map(), local: new Map(), conns: new Map(), bodies: [], errors: new Map(), warnings: [], roots: [], originPoint: [0, 0, 0], consumed: new Set() };
+  const byId = new Map(doc.objects.map(o => [o.id, o]));
+  const ground = byId.get(doc.ground) ? doc.ground : (doc.objects.find(o => o.type !== 'edge') || {}).id;
+  R.ground = ground;
+  /* local solids + connectors */
+  for (const o of doc.objects) {
+    if (o.type === 'edge') continue;
+    try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
+    catch (e) { R.errors.set(o.id, e.message); R.conns.set(o.id, connectorsOf(o, null)); }
+  }
+  /* world transforms: mates resolved from the ground outward */
+  const state = new Map();
+  const poseM = (o) => { const p = o.pose || {}; return M4.mul(M4.translate(p.at || [0, 0, 0]), M4.euler(...(p.rot || [0, 0, 0]))); };
+  const worldOf = (id) => {
+    if (R.world.has(id)) return R.world.get(id);
+    const o = byId.get(id); if (!o) return M4.ident();
+    if (state.get(id) === 'busy') { R.warnings.push({ kind: 'cycle', id, text: `${o.name}: its mates form a loop` }); return poseM(o); }
+    state.set(id, 'busy');
+    let M = poseM(o);
+    const m = o.mate;
+    if (m && id !== ground) {
+      const target = m.to === 'origin' ? null : byId.get(m.to);
+      if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
+      else {
+        const tConns = m.to === 'origin' ? ORIGIN_CONNS : (R.conns.get(m.to) || []), tc = tConns.find(c => c.name === m.a), sc = (R.conns.get(id) || []).find(c => c.name === m.b);
+        if (!tc || !sc) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate connector “${!tc ? m.a : m.b}” no longer exists` });
+        else {
+          const Mt = m.to === 'origin' ? M4.ident() : worldOf(m.to);
+          const Fa = M4.mul(Mt, frameOf(tc)), slide = m.slide || [0, 0];
+          const T = M4.translate([slide[0] || 0, slide[1] || 0, m.offset || 0]);
+          const flip = m.flip ? [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1] : M4.ident();
+          const Rz = M4.axisAngle([0, 0, 1], m.angle || 0);
+          M = M4.mul(Fa, M4.mul(T, M4.mul(flip, M4.mul(Rz, M4.inv(frameOf(sc))))));
+        }
+      }
+    }
+    state.set(id, 'done'); R.world.set(id, M); return M;
+  };
+  for (const o of doc.objects) if (o.type !== 'edge') worldOf(o.id);
+  /* floating = not grounded, not fixed, and no mate chain to the ground / origin */
+  const grounded = (id, seen = new Set()) => { if (id === ground) return true; const o = byId.get(id); if (!o || seen.has(id)) return false; seen.add(id); if (o.fixed) return true; if (!o.mate) return false; return o.mate.to === 'origin' || grounded(o.mate.to, seen); };
+  for (const o of doc.objects) if (o.type !== 'edge' && !grounded(o.id)) R.warnings.push({ kind: 'floating', id: o.id, text: `${o.name} is floating — not mated to anything` });
+  /* bodies: booleans in feature-list order */
+  const memo = new Map();
+  const bodyOf = (id, chain = new Set()) => {
+    if (memo.has(id)) return memo.get(id);
+    const o = byId.get(id); if (!o || chain.has(id)) return K.Solid.empty();
+    chain.add(id);
+    let s = R.local.has(id) ? R.local.get(id).transform(R.world.get(id)).tag(id) : K.Solid.empty();
+    for (const t of doc.objects) {
+      if (t.into !== id) continue;
+      R.consumed.add(t.id);
+      try {
+        if (t.type === 'edge') { s = applyEdge(s, t, o, R); continue; }
+        const tool = bodyOf(t.id, chain);
+        const op = t.op || 'subtract';
+        s = op === 'add' || op === 'union' ? s.union(tool) : op === 'intersect' ? s.intersect(tool) : s.subtract(tool);
+      } catch (e) { R.errors.set(t.id, e.message); }
+    }
+    chain.delete(id);
+    memo.set(id, s); return s;
+  };
+  for (const o of doc.objects) {
+    if (o.into && !byId.has(o.into)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: its boolean target was deleted` });
+  }
+  /* body cache: a body is rebuilt only when something it is made of changed (shape, size, place, booleans, edges) */
+  const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
+  const sig = (id, seen = new Set()) => {
+    const o = byId.get(id); if (!o || seen.has(id)) return null; seen.add(id);
+    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, doc.objects.filter(t => t.into === id).map(t => sig(t.id, seen))];
+  };
+  const subtree = (id, out = []) => { for (const t of doc.objects) if (t.into === id && !out.includes(t.id)) { out.push(t.id); subtree(t.id, out); } return out; };
+  const cachedBody = (id) => {
+    const key = JSON.stringify(sig(id)), hit = BODY_CACHE.get(id + '|' + key);
+    if (hit) {
+      for (const c of hit.consumed) R.consumed.add(c);
+      R.warnings.push(...hit.warnings); for (const [k, v] of hit.errors) R.errors.set(k, v);
+      for (const [k, v] of hit.resolved) { const t = byId.get(k); if (t) t._resolved = v; }
+      return hit.solid;
+    }
+    const w0 = R.warnings.length, e0 = new Set(R.errors.keys()), solid = bodyOf(id), ids = subtree(id);
+    const entry = { solid, consumed: ids, warnings: R.warnings.slice(w0), errors: [...R.errors].filter(([k]) => !e0.has(k)), resolved: ids.map(k => [k, byId.get(k)._resolved]).filter(([, v]) => v) };
+    BODY_CACHE.set(id + '|' + key, entry); if (BODY_CACHE.size > 120) BODY_CACHE.delete(BODY_CACHE.keys().next().value);
+    return solid;
+  };
+  for (const o of doc.objects) {
+    if (o.type === 'edge' || (o.into && byId.has(o.into))) continue;
+    const s = cachedBody(o.id);
+    if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
+    R.bodies.push({ id: o.id, solid: s, color: o.color, name: o.name, hidden: !!o.hidden });
+    R.roots.push(o.id);
+  }
+  /* ephemeral world origin: a connector the user (or the first object) chose; display coordinates are relative to it */
+  const og = doc.origin && byId.get(doc.origin.obj) ? doc.origin : (ground ? { obj: ground, conn: 'bottom' } : null);
+  if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
+  R.originRef = og;
+  for (const [id, msg] of R.errors) { const o = byId.get(id); R.warnings.push({ kind: 'error', id, text: `${o ? o.name : id}: ${msg}` }); }
+  return R;
+}
+/* world-space connectors of an object */
+function worldConnectors(R, id) {
+  const M = id === 'origin' ? M4.ident() : R.world.get(id); if (!M) return [];
+  return (id === 'origin' ? ORIGIN_CONNS : (R.conns.get(id) || [])).map(c => ({ name: c.name, kind: c.kind, o: M4.point(M, c.o), n: V.norm(M4.dir(M, c.n)), u: V.norm(M4.dir(M, c.u)) }));
+}
+
+/* ---------- edge treatments ---------- */
+function pointInPoly3(p, poly, tol) {
+  const n = poly.plane.n, vs = poly.v;
+  if (Math.abs(V.dot(n, p) - poly.plane.w) > tol) return false;
+  for (let i = 0; i < vs.length; i++) { const a = vs[i].p, b = vs[(i + 1) % vs.length].p; if (V.dot(V.cross(V.sub(b, a), V.sub(p, a)), n) < -tol) return false; }
+  return true;
+}
+/* find the straight crease nearest to a reference and the two faces meeting there */
+/* the two faces meeting along a crease at m (direction d): outward normals n, in-face directions u pointing away from the edge, surface ids */
+/* polygons indexed by the lines their edges lie on (a crease is always made of polygon edges, so only these can touch it) */
+const lineIndexCache = new WeakMap(), creaseCache = new WeakMap();
+function lineIndex(s) {
+  let ix = lineIndexCache.get(s); if (ix) return ix;
+  ix = new Map();
+  for (const p of s.polys) for (let i = 0; i < p.v.length; i++) {
+    const a = p.v[i].p, b = p.v[(i + 1) % p.v.length].p; if (V.len(V.sub(b, a)) < 1e-9) continue;
+    const k = K.lineKey(a, b).key; let L = ix.get(k); if (!L) ix.set(k, (L = new Set())); L.add(p);
+  }
+  lineIndexCache.set(s, ix); return ix;
+}
+const creasesOf = (s) => { let c = creaseCache.get(s); if (!c) creaseCache.set(s, (c = K.creaseEdges(s))); return c; };
+function edgeFacesAt(s, m, d, a, b) {
+  const faces = [], cand = a && b ? lineIndex(s).get(K.lineKey(a, b).key) : null;
+  for (const p of cand || s.polys) {
+    if (Math.abs(V.dot(p.plane.n, m) - p.plane.w) > 1e-3) continue;
+    const u = V.norm(V.cross(p.plane.n, d));
+    for (const sgn of [1, -1]) { const uu = V.mul(u, sgn), probe = V.add(m, V.mul(uu, 1e-2)); if (pointInPoly3(probe, p, 1e-4)) { if (!faces.some(f => V.len(V.sub(f.n, p.plane.n)) < 1e-3)) faces.push({ n: p.plane.n, u: uu, sid: p.sid }); break; } }
+    if (faces.length === 2) break;
+  }
+  return faces;
+}
+const segDist = (m, a, b) => { const ab = V.sub(b, a), t = Math.max(0, Math.min(1, V.dot(V.sub(m, a), ab) / (V.dot(ab, ab) || 1))); return V.len(V.sub(m, V.add(a, V.mul(ab, t)))); };
+/* Find a straight edge on a finished body.
+   ref.faces = the two surface ids it was created between (topological reference: survives size changes);
+   otherwise / as a fallback: the crease nearest ref.m (optionally parallel to ref.d) within ref.tol. */
+function findEdge(s, ref) {
+  const segs = creasesOf(s); let best = null, bd = Infinity;
+  if (ref.faces && ref.faces.length === 2) {
+    const want = ref.faces.slice().sort().join('|');
+    for (const [a, b] of segs) {
+      const ix = lineIndex(s).get(K.lineKey(a, b).key); if (!ix || ![...ix].some(p => ref.faces.includes(p.sid))) continue;
+      const d = V.norm(V.sub(b, a)), f = edgeFacesAt(s, V.lerp(a, b, 0.5), d, a, b);
+      if (f.length < 2 || [f[0].sid, f[1].sid].sort().join('|') !== want) continue;
+      const dist = segDist(ref.m, a, b); if (dist < bd) { bd = dist; best = { a, b, d, faces: f }; }
+    }
+  }
+  if (!best) {
+    for (const [a, b] of segs) {
+      const d = V.norm(V.sub(b, a)); if (ref.d && V.len(V.cross(d, V.norm(ref.d))) > 0.05) continue;
+      const dist = segDist(ref.m, a, b); if (dist < bd) { bd = dist; best = { a, b, d }; }
+    }
+    if (!best || bd > (ref.tol || 2)) return null;
+    best.faces = edgeFacesAt(s, V.lerp(best.a, best.b, 0.5), best.d, best.a, best.b);
+  }
+  const faces = best.faces; if (faces.length < 2) return null;
+  const m = V.lerp(best.a, best.b, 0.5), convex = V.dot(faces[0].u, faces[1].n) < 0;
+  const e = { a: best.a, b: best.b, d: best.d, m, u1: faces[0].u, u2: faces[1].u, n1: faces[0].n, n2: faces[1].n, sids: [faces[0].sid, faces[1].sid], convex, angle: Math.acos(Math.max(-1, Math.min(1, V.dot(faces[0].u, faces[1].u)))) * 180 / Math.PI };
+  /* a round edge (flat face meets a surface of revolution): treat the whole loop, not one facet */
+  const sm = faces.map(f => SMOOTH.test(f.sid));
+  if (sm[0] !== sm[1]) {
+    const L = edgeLoop(s, segs, e.sids);
+    if (L && L.pts.length >= 3) {
+      const flat = sm[0] ? faces[1] : faces[0], axis = flat.n, ring = circleFit(L.pts, axis);
+      if (ring) {
+        const rd = V.norm(V.sub(V.sub(m, ring.c), V.mul(axis, V.dot(V.sub(m, ring.c), axis))));
+        const to2 = (u) => [V.dot(u, rd), V.dot(u, axis)];
+        Object.assign(e, { loop: L.pts, closed: L.closed, c: ring.c, axis, radius: ring.r, uu1: to2(e.u1), uu2: to2(e.u2) });
+      }
+    }
+  }
+  return e;
+}
+const SMOOTH = /:(side|surface|rev\d+|arc)$/;
+/* all crease segments between the same two surfaces, chained into an ordered loop / polyline */
+function edgeLoop(s, segs, sids) {
+  const want = sids.slice().sort().join('|'), mine = [];
+  for (const [a, b] of segs) {
+    const ix = lineIndex(s).get(K.lineKey(a, b).key); if (!ix || ![...ix].some(p => sids.includes(p.sid))) continue;
+    const f = edgeFacesAt(s, V.lerp(a, b, 0.5), V.norm(V.sub(b, a)), a, b); if (f.length === 2 && [f[0].sid, f[1].sid].sort().join('|') === want) mine.push([a, b]);
+  }
+  if (!mine.length) return null;
+  const key = (p) => p.map(v => Math.round(v * 1e3)).join(','), adj = new Map();
+  const link = (p, q) => { const k = key(p); if (!adj.has(k)) adj.set(k, { p, next: [] }); adj.get(k).next.push(q); };
+  for (const [a, b] of mine) { link(a, b); link(b, a); }
+  /* start at an open end if there is one */
+  let start = [...adj.values()].find(n => n.next.length === 1) || adj.values().next().value;
+  const pts = [start.p], seen = new Set([key(start.p)]); let cur = start;
+  for (;;) { const nx = cur.next.find(q => !seen.has(key(q))); if (!nx) break; pts.push(nx); seen.add(key(nx)); cur = adj.get(key(nx)); if (!cur) break; }
+  const closed = pts.length > 2 && cur.next.some(q => key(q) === key(pts[0]));
+  return { pts, closed };
+}
+/* least-squares circle (Kåsa) of points in the plane ⟂ axis */
+function circleFit(pts, axis) {
+  const e1 = V.norm(Math.abs(axis[0]) < 0.9 ? V.cross(axis, [1, 0, 0]) : V.cross(axis, [0, 1, 0])), e2 = V.cross(axis, e1), o = pts[0];
+  let Sxx = 0, Sxy = 0, Syy = 0, Sx = 0, Sy = 0, Sxz = 0, Syz = 0, Sz = 0, h = 0; const n = pts.length;
+  for (const p of pts) { const w = V.sub(p, o), x = V.dot(w, e1), y = V.dot(w, e2), z = x * x + y * y; Sxx += x * x; Sxy += x * y; Syy += y * y; Sx += x; Sy += y; Sxz += x * z; Syz += y * z; Sz += z; h += V.dot(w, axis); }
+  /* solve [Sxx Sxy Sx; Sxy Syy Sy; Sx Sy n]·[D E F] = -[Sxz Syz Sz] */
+  const A = [[Sxx, Sxy, Sx], [Sxy, Syy, Sy], [Sx, Sy, n]], bv = [-Sxz, -Syz, -Sz];
+  const det = (M) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+  const D0 = det(A); if (Math.abs(D0) < 1e-12) return null;
+  const col = (k) => A.map((row, i) => row.map((v, j) => (j === k ? bv[i] : v)));
+  const D = det(col(0)) / D0, E = det(col(1)) / D0, F = det(col(2)) / D0, cx = -D / 2, cy = -E / 2, r2 = cx * cx + cy * cy - F;
+  if (!(r2 > 0)) return null;
+  return { c: V.add(o, V.add(V.add(V.mul(e1, cx), V.mul(e2, cy)), V.mul(axis, h / n))), r: Math.sqrt(r2) };
+}
+function applyEdge(s, t, target, R) {
+  const M = R.world.get(target.id), ref = t.edge || {};
+  const wm = M4.point(M, ref.m || [0, 0, 0]), wd = ref.d ? M4.dir(M, ref.d) : null;
+  const e = findEdge(s, { m: wm, d: wd, faces: ref.faces, tol: Math.max(2, (t.params.size || 1) * 1.5) });
+  if (!e) { R.warnings.push({ kind: 'edge', id: t.id, text: `${t.name}: its edge can no longer be found` }); return s; }
+  const mode = t.params.mode === 'add' || t.params.mode === 'subtract' ? t.params.mode : (e.convex ? 'subtract' : 'add');
+  let style = t.params.style || 'fillet';
+  if (style === 'weld' && mode === 'subtract') style = 'fillet';
+  let piece;
+  if (e.loop) {
+    if (mode === 'subtract' && t.params.size >= e.radius - 1e-6 && e.uu1[0] < 0 && e.uu2[0] < 0) { R.warnings.push({ kind: 'edge', id: t.id, text: `${t.name}: size ${t.params.size} is too big for a Ø${(e.radius * 2).toFixed(1)} edge` }); return s; }
+    piece = K.loopPiece(e.loop, e.closed, e.c, e.axis, e.uu1, e.uu2, t.params.size, style).tag(t.id);
+  } else piece = K.edgePiece(e.m, e.d, e.u1, e.u2, t.params.size, style, V.len(V.sub(e.b, e.a)), mode === 'subtract' ? 0.5 : 0).tag(t.id);
+  t._resolved = { convex: e.convex, mode, angle: +e.angle.toFixed(2), round: !!e.loop };
+  return mode === 'subtract' ? s.subtract(piece) : s.union(piece);
+}
+
+/* ---------- the API ---------- */
+class Model {
+  constructor(doc) { this.doc = doc || newDoc(); this.undoStack = []; this.redoStack = []; this.listeners = new Set(); this.result = null; this.recompute(); }
+  on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+  emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
+  recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.result.ms = performance.now() - t0; return this.result; }
+  get(id) { return this.doc.objects.find(o => o.id === id); }
+  snapshot() { return JSON.stringify(this.doc); }
+  commit(label, before, t0) { this.undoStack.push({ label, json: before }); if (this.undoStack.length > 150) this.undoStack.shift(); this.redoStack = []; this.doc.updated = Date.now(); this.recompute(); if (t0 != null) this.result.ms = (typeof performance !== 'undefined' ? performance : Date).now() - t0; this.emit(); }
+  undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
+  redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); this.doc = JSON.parse(s.json); this.recompute(); this.emit(); return s.label; }
+  load(doc) { const before = this.snapshot(); this.doc = doc; this.commit('Open model', before); }
+  /* apply a batch of operations atomically (one undo step). Returns per-op results. */
+  /* opts.relative: positions (at, near) are measured from the ephemeral world origin, the same frame describe() reports */
+  apply(ops, label, opts = {}) {
+    const before = this.snapshot(), out = [], t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+    this.rel = !!opts.relative;
+    try { (Array.isArray(ops) ? ops : [ops]).forEach((op, i) => { try { out.push(this.op(op)); } catch (e) { e.message = `op ${i + 1} (${op && op.op}): ${e.message}`; throw e; } }); }
+    catch (e) { this.doc = JSON.parse(before); this.recompute(); throw e; }
+    finally { this.rel = false; }
+    this.commit(label || (out.length === 1 ? out[0].label : out.length + ' changes'), before, t0);   /* ms = the whole batch, what the user waited for */
+    return out.map(r => { delete r.label; return r; });
+  }
+  op(o) {
+    const d = this.doc, need = (id) => { const x = this.get(id); if (!x) throw new Error('No object “' + id + '”. Objects: ' + (d.objects.map(y => y.id).join(', ') || 'none yet')); return x; };
+    const W = (p) => (Array.isArray(p) && this.rel ? V.add(p.map(Number), this.result.originPoint) : p);
+    switch (o.op) {
+      case 'add': {
+        const type = o.type || o.shape; if (!TYPES[type] || type === 'edge') throw new Error('Unknown shape “' + type + '”. Use ' + Object.keys(TYPES).filter(t => t !== 'edge').join(', '));
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
+        const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, o.params), pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed };
+        d.objects.push(ob);
+        if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
+        else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
+          /* rapid prototyping default: sit it on top of the ground object */
+          const g = this.result.ground && this.get(this.result.ground); if (g) ob.mate = { to: g.id, a: 'top', b: 'bottom', flip: true, offset: 0, angle: 0, slide: [0, 0] };
+        }
+        if (o.into) this.op({ op: 'boolean', target: o.into, tool: id, mode: o.mode || 'subtract' });
+        this.recompute();
+        return { label: 'Add ' + ob.name, id, name: ob.name };
+      }
+      case 'set': {
+        const x = need(o.id);
+        if (o.params) { x.params = Object.assign({}, x.params, o.params); for (const k of Object.keys(o.params)) if (typeof TYPES[x.type].params[k] === 'number') x.params[k] = num(+x.params[k], TYPES[x.type].params[k]); }
+        if (o.name) x.name = String(o.name); if (o.color !== undefined) x.color = o.color; if (o.hidden !== undefined) x.hidden = !!o.hidden;
+        if (o.at || o.rot) { x.pose = { at: W(o.at) || (x.pose || {}).at || [0, 0, 0], rot: o.rot || (x.pose || {}).rot || [0, 0, 0] }; }
+        if (o.fixed !== undefined) x.fixed = !!o.fixed;
+        this.recompute(); return { label: 'Edit ' + x.name, id: x.id };
+      }
+      case 'mate': {
+        const x = need(o.id); if (o.to !== 'origin') need(o.to);
+        if (o.to === x.id) throw new Error('An object cannot mate to itself');
+        const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
+        const sconns = this.result.conns.get(x.id) || connectorsOf(x, null);
+        const a = o.a || 'top', b = o.b || 'bottom';
+        if (!tconns.find(c => c.name === a)) throw new Error(`No connector “${a}” on the target. Try: ${tconns.map(c => c.name).join(', ')}`);
+        if (!sconns.find(c => c.name === b)) throw new Error(`No connector “${b}” on ${x.name}. Try: ${sconns.map(c => c.name).join(', ')}`);
+        const kindA = tconns.find(c => c.name === a).kind, kindB = sconns.find(c => c.name === b).kind;
+        const flip = o.flip != null ? !!o.flip : (kindA === 'face' && kindB === 'face') || (kindA === 'side' && kindB === 'side');
+        x.mate = { to: o.to, a, b, flip, offset: num(o.offset, 0), angle: num(o.angle, 0), slide: o.slide || [0, 0] };
+        this.recompute(); return { label: 'Mate ' + x.name, id: x.id };
+      }
+      case 'unmate': { const x = need(o.id); const M = this.result.world.get(x.id); x.mate = null; if (M) x.pose = poseFromMatrix(M); this.recompute(); return { label: 'Unmate ' + x.name, id: x.id }; }
+      case 'boolean': {
+        const t = need(o.target), tool = need(o.tool); if (t.id === tool.id) throw new Error('Pick two different objects');
+        let cur = t; const seen = new Set(); while (cur && cur.into) { if (cur.into === tool.id || seen.has(cur.id)) throw new Error('That would make a loop of booleans'); seen.add(cur.id); cur = this.get(cur.into); }
+        tool.into = t.id; tool.op = o.mode === 'add' || o.mode === 'union' ? 'add' : o.mode === 'intersect' ? 'intersect' : 'subtract';
+        /* keep history order: tools after their target */
+        const ti = d.objects.indexOf(t), xi = d.objects.indexOf(tool); if (xi < ti) { d.objects.splice(xi, 1); d.objects.splice(d.objects.indexOf(t) + 1, 0, tool); }
+        this.recompute(); return { label: (tool.op === 'add' ? 'Union ' : tool.op === 'intersect' ? 'Intersect ' : 'Subtract ') + tool.name, id: tool.id };
+      }
+      case 'separate': { const x = need(o.id); x.into = null; x.op = null; this.recompute(); return { label: 'Separate ' + x.name, id: x.id }; }
+      case 'edge': {
+        const t = need(o.target), M = this.result.world.get(t.id); if (!M) throw new Error('Target has no geometry');
+        const body = this.bodyContaining(t.id); if (!body) throw new Error('Target body not found');
+        const near = W(o.near || (o.m ? o.m : null)); if (!near) throw new Error('Give near:[x,y,z] (a point on the edge)');
+        const e = findEdge(body.solid, { m: near, d: o.d || null, tol: o.tol || 5 }); if (!e) throw new Error('No straight edge between two flat faces near that point');
+        const Mi = M4.inv(this.result.world.get(body.id));
+        const id = o.id && !this.get(o.id) ? String(o.id) : uid('edg'), style = ['fillet', 'weld', 'chamfer'].includes(o.style) ? o.style : 'fillet';
+        d.objects.push({ id, name: o.name || (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' ' + (d.objects.filter(x => x.type === 'edge').length + 1), type: 'edge', params: { style, size: num(o.size, 4), mode: o.mode || 'auto' }, edge: { m: M4.point(Mi, e.m), d: M4.dir(Mi, e.d), faces: e.sids }, into: body.id, op: 'edge', pose: null, mate: null });
+        this.recompute();
+        return { label: (style === 'chamfer' ? 'Chamfer' : style === 'weld' ? 'Weld' : 'Fillet') + ' edge', id, convex: e.convex, angle: +e.angle.toFixed(2), mode: o.mode || (e.convex ? 'subtract' : 'add'), round: e.loop ? { diameter: +(e.radius * 2).toFixed(3), closed: e.closed } : undefined };
+      }
+      case 'extrude': case 'loft': case 'revolve': case 'sweep': {
+        const params = {}; for (const k of Object.keys(TYPES[o.op].params)) if (o[k] !== undefined) params[k] = o[k];
+        if (o.params) Object.assign(params, o.params);
+        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false };
+        /* sketch on a face: the feature starts on that face and follows it */
+        if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
+        return this.op(add);
+      }
+      case 'delete': {
+        const x = need(o.id); d.objects = d.objects.filter(y => y.id !== x.id);
+        for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
+        if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
+        this.recompute(); return { label: 'Delete ' + x.name, id: x.id };
+      }
+      case 'origin': { if (o.obj) need(o.obj); d.origin = o.obj ? { obj: o.obj, conn: o.conn || 'bottom' } : null; this.recompute(); return { label: 'Set world origin', origin: d.origin }; }
+      case 'ground': { const x = need(o.id); d.ground = x.id; if (x.mate) this.op({ op: 'unmate', id: x.id }); this.recompute(); return { label: 'Ground ' + x.name, id: x.id }; }
+      case 'fix': { const x = need(o.id); const M = this.result.world.get(x.id); if (M) x.pose = poseFromMatrix(M); x.mate = null; x.fixed = true; this.recompute(); return { label: 'Fix ' + x.name + ' in place', id: x.id }; }
+      case 'cleanup': {
+        let n = 0; const ids = new Set(d.objects.map(y => y.id));
+        d.objects = d.objects.filter(y => { if (y.type === 'edge' && !ids.has(y.into)) { n++; return false; } return true; });
+        for (const y of d.objects) {
+          if (y.into && !ids.has(y.into)) { y.into = null; y.op = null; n++; }
+          if (y.mate && y.mate.to !== 'origin' && !ids.has(y.mate.to)) { const M = this.result.world.get(y.id); y.mate = null; if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; }
+        }
+        for (const w of this.result.warnings) if (w.kind === 'floating') { const y = this.get(w.id); if (y && o.fixFloating) { const M = this.result.world.get(y.id); if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; } }
+        this.recompute(); return { label: 'Clean up (' + n + ' fixes)', fixes: n };
+      }
+      case 'dim': { const id = uid('dim'); d.dims.push({ id, a: o.a, b: o.b, view: o.view || 'front' }); return { label: 'Add dimension', id }; }
+      case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); return { label: 'Remove dimension', id: o.id }; }
+      case 'rename': { d.name = String(o.name || d.name); return { label: 'Rename model', name: d.name }; }
+    }
+    throw new Error('Unknown op “' + o.op + '”');
+  }
+  bodyContaining(id) {
+    let cur = this.get(id); const seen = new Set();
+    while (cur && cur.into && !seen.has(cur.id)) { seen.add(cur.id); cur = this.get(cur.into); }
+    return cur ? this.result.bodies.find(b => b.id === cur.id) : null;
+  }
+  /* summary for the AI and the tree */
+  describe() {
+    const R = this.result;
+    return {
+      name: this.doc.name, units: this.doc.units, ground: R.ground, origin: R.originRef, origin_point: R.originPoint.map(v => +v.toFixed(3)),
+      objects: this.doc.objects.map(o => {
+        const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
+        return { id: o.id, name: o.name, type: o.type, params: o.params, at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+          connectors: o.type === 'edge' ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
+      }),
+      bodies: R.bodies.map(b => ({ id: b.id, name: b.name, volume: +b.solid.volume().toFixed(3), bbox: (() => { const bb = b.solid.bbox(); return b.solid.isEmpty() ? null : { min: bb.min.map((v, k) => +(v - R.originPoint[k]).toFixed(3)), max: bb.max.map((v, k) => +(v - R.originPoint[k]).toFixed(3)) }; })() })),
+      warnings: R.warnings.map(w => w.text), eval_ms: +R.ms.toFixed(1)
+    };
+  }
+}
+function poseFromMatrix(M) {
+  /* XYZ Euler (degrees) for R = Rz·Ry·Rx */
+  const ry = Math.asin(Math.max(-1, Math.min(1, -M[2]))), cy = Math.cos(ry);
+  let rx, rz;
+  if (Math.abs(cy) > 1e-6) { rx = Math.atan2(M[6], M[10]); rz = Math.atan2(M[1], M[0]); } else { rx = Math.atan2(-M[9], M[5]); rz = 0; }
+  const d = (r) => +(r * 180 / Math.PI).toFixed(6);
+  return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
+}
+
+return { K, TYPES, SHAPES, dimsOf, newDoc, evaluate, worldConnectors, findEdge, Model, poseFromMatrix };
+})();
+
+__sf3.views = (() => {
+/* SketchFlow v2 views: four linked viewports (TOP · 3D / FRONT · RIGHT) on plain WebGL2.
+   Ortho panes share one scale + centre, so projections line up (third-angle layout). Visible edges solid,
+   hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
+const K = __sf3.kernel;
+const { dimsOf, worldConnectors } = __sf3.model;
+const { V } = K;
+
+const PANES = ['top', '3d', 'front', 'right'];
+/* ortho bases: right, up, toward-viewer */
+/* in-face reading directions for the view-cube labels, as seen from outside each face */
+const CUBE_FACE_AXES = { FRONT: { r: [1, 0, 0], u: [0, 0, 1] }, BACK: { r: [-1, 0, 0], u: [0, 0, 1] }, RIGHT: { r: [0, 1, 0], u: [0, 0, 1] }, LEFT: { r: [0, -1, 0], u: [0, 0, 1] }, TOP: { r: [1, 0, 0], u: [0, 1, 0] }, BOTTOM: { r: [1, 0, 0], u: [0, -1, 0] } };
+const BASIS = { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } };
+const LABEL = { top: 'TOP', front: 'FRONT', right: 'RIGHT', '3d': '3D' };
+
+function mat4mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
+function viewMat(r, u, f, eye) { return new Float32Array([r[0], u[0], f[0], 0, r[1], u[1], f[1], 0, r[2], u[2], f[2], 0, -V.dot(r, eye), -V.dot(u, eye), -V.dot(f, eye), 1]); }
+function ortho(hw, hh, n, f) { return new Float32Array([1 / hw, 0, 0, 0, 0, 1 / hh, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
+function persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); }
+
+const MESH_VS = `#version 300 es
+in vec3 aP; in vec3 aN; uniform mat4 uVP; uniform vec3 uO; out vec3 vN;
+void main(){ vN = aN; gl_Position = uVP * vec4(aP - uO, 1.0); }`;
+const MESH_FS = `#version 300 es
+precision highp float; in vec3 vN; uniform vec3 uC; uniform vec3 uL; uniform float uA; uniform float uFlat; out vec4 o;
+void main(){ vec3 n = normalize(vN); float d = max(dot(n, uL), 0.0); float h = 0.5 + 0.5 * n.z;
+  vec3 c = uC * (mix(0.42 + 0.58 * d + 0.12 * h, 0.94 + 0.06 * d, uFlat)); o = vec4(c, uA); }`;
+/* thick lines: each segment is a screen-space quad */
+const LINE_VS = `#version 300 es
+in vec3 aA; in vec3 aB; in float aS; in float aT; uniform mat4 uVP; uniform vec3 uO; uniform vec2 uVp; uniform float uW; out float vD;
+void main(){ vec4 a = uVP * vec4(aA - uO, 1.0), b = uVP * vec4(aB - uO, 1.0); vec2 sa = a.xy / a.w * uVp, sb = b.xy / b.w * uVp;
+  vec2 d = normalize(sb - sa + vec2(1e-6)); vec2 n = vec2(-d.y, d.x); vec4 p = aT < 0.5 ? a : b;
+  vec2 off = n * aS * uW / uVp; p.xy += off * p.w; vD = (aT < 0.5 ? 0.0 : length(sb - sa)); gl_Position = p; }`;
+const LINE_FS = `#version 300 es
+precision highp float; in float vD; uniform vec4 uC; uniform float uDash; out vec4 o;
+void main(){ if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard; o = uC; }`;
+
+class Views {
+  constructor(canvas, overlay, model) {
+    this.cv = canvas; this.ov = overlay; this.model = model;
+    const gl = this.gl = canvas.getContext('webgl2', { antialias: true, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 is not available in this browser');
+    this.meshProg = this.prog(MESH_VS, MESH_FS); this.lineProg = this.prog(LINE_VS, LINE_FS);
+    this.layout = '4'; this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.ortho = { s: 3, c: [0, 0, 0] };            /* px per mm, shared centre (display coords) */
+    this.cam = { yaw: -35, pitch: 28, dist: 400, target: [0, 0, 0], fov: 38 };
+    this.buffers = new Map(); this.sel = null; this.hover = null; this.overlayHits = []; this.showDims = true; this.showHidden = true;
+    this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
+    this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
+    this.resize(); this.rebuild(); this.fitAll();
+    new ResizeObserver(() => { this.resize(); this.draw(); }).observe(canvas.parentElement);
+  }
+  setTheme(dark) {
+    this.dark = dark;
+    this.colors = dark ? { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' }
+      : { bg: [0.965, 0.965, 0.955], grid: 'rgba(0,0,0,0.06)', edge: [0.12, 0.13, 0.16, 1], hidden: [0.35, 0.38, 0.45, 0.8], sel: [0.91, 0.4, 0.17], ink: '#1d1c1a', dim: '#d2551f', label: '#6b6862' };
+    this.draw();
+  }
+  prog(vs, fs) {
+    const gl = this.gl, mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+    const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const loc = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const u = gl.getActiveUniform(p, i); loc[u.name] = gl.getUniformLocation(p, u.name); }
+    const na = gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES); for (let i = 0; i < na; i++) { const a = gl.getActiveAttrib(p, i); loc[a.name] = gl.getAttribLocation(p, a.name); }
+    return { p, loc };
+  }
+  resize() {
+    const r = this.cv.parentElement.getBoundingClientRect(); this.W = Math.max(1, r.width); this.H = Math.max(1, r.height);
+    this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr); this.cv.style.width = this.W + 'px'; this.cv.style.height = this.H + 'px';
+    this.ov.width = this.cv.width; this.ov.height = this.cv.height; this.ov.style.width = this.W + 'px'; this.ov.style.height = this.H + 'px';
+  }
+  panes() {
+    const W = this.W, H = this.H, g = 2;
+    if (this.layout !== '4') return [{ id: this.layout, x: 0, y: 0, w: W, h: H }];
+    const hw = Math.floor(W / 2), hh = Math.floor(H / 2);
+    return [{ id: 'top', x: 0, y: 0, w: hw - g / 2, h: hh - g / 2 }, { id: '3d', x: hw + g / 2, y: 0, w: W - hw - g / 2, h: hh - g / 2 }, { id: 'front', x: 0, y: hh + g / 2, w: hw - g / 2, h: H - hh - g / 2 }, { id: 'right', x: hw + g / 2, y: hh + g / 2, w: W - hw - g / 2, h: H - hh - g / 2 }];
+  }
+  paneAt(x, y) { return this.panes().find(p => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h) || null; }
+  /* ---------- cameras ---------- */
+  camDir3d() { const y = this.cam.yaw * Math.PI / 180, p = this.cam.pitch * Math.PI / 180; return [Math.cos(p) * Math.sin(y), -Math.cos(p) * Math.cos(y), Math.sin(p)]; }  /* from target toward eye */
+  vp(pane) {
+    const asp = pane.w / pane.h;
+    if (pane.id === '3d') {
+      const f = this.camDir3d(), eye = V.add(this.cam.target, V.mul(f, this.cam.dist)), up0 = Math.abs(f[2]) > 0.999 ? [0, 1, 0] : [0, 0, 1];
+      const r = V.norm(V.cross(up0, f)), u = V.cross(f, r);
+      return { M: mat4mul(persp(this.cam.fov * Math.PI / 180, asp, this.cam.dist * 0.02, this.cam.dist * 20), viewMat(r, u, f, eye)), r, u, f, eye, persp: true };
+    }
+    const B = BASIS[pane.id], s = this.ortho.s, c = this.ortho.c, eye = V.add(c, V.mul(B.f, 5000));
+    return { M: mat4mul(ortho(pane.w / 2 / s, pane.h / 2 / s, 1, 10000), viewMat(B.r, B.u, B.f, eye)), r: B.r, u: B.u, f: B.f, eye, persp: false };
+  }
+  /* display coords → pane pixel */
+  project(pane, p, cam) {
+    cam = cam || this.vp(pane); const M = cam.M, x = M[0] * p[0] + M[4] * p[1] + M[8] * p[2] + M[12], y = M[1] * p[0] + M[5] * p[1] + M[9] * p[2] + M[13], w = M[3] * p[0] + M[7] * p[1] + M[11] * p[2] + M[15];
+    return { x: pane.x + (x / w * 0.5 + 0.5) * pane.w, y: pane.y + (1 - (y / w * 0.5 + 0.5)) * pane.h, behind: w <= 0 };
+  }
+  /* pane pixel → ray in display coords */
+  ray(pane, px, py) {
+    const cam = this.vp(pane), nx = ((px - pane.x) / pane.w) * 2 - 1, ny = 1 - ((py - pane.y) / pane.h) * 2;
+    if (!cam.persp) { const s = this.ortho.s, o = V.add(V.add(cam.eye, V.mul(cam.r, nx * pane.w / 2 / s)), V.mul(cam.u, ny * pane.h / 2 / s)); return { o, d: V.neg(cam.f), cam }; }
+    const t = Math.tan(this.cam.fov * Math.PI / 360), asp = pane.w / pane.h;
+    const d = V.norm(V.add(V.add(V.neg(cam.f), V.mul(cam.r, nx * t * asp)), V.mul(cam.u, ny * t)));
+    return { o: cam.eye, d, cam };
+  }
+  /* point on the pane's base plane (through the world origin) under the cursor — for sketching */
+  planePoint(pane, px, py) { if (pane.id === '3d') return null; const r = this.ray(pane, px, py), B = BASIS[pane.id]; const t = -V.dot(r.o, B.f) / V.dot(r.d, B.f); const p = V.add(r.o, V.mul(r.d, t)); return { p, x: V.dot(p, B.r), y: V.dot(p, B.u), basis: B }; }
+  /* ---------- geometry upload ---------- */
+  rebuild() {
+    const gl = this.gl, R = this.model.result, O = R.originPoint;
+    /* bodies whose solid did not change (the model caches them) keep their GPU buffers and silhouettes */
+    const old = this.buffers, keep = new Set(); this.buffers = new Map(); this.silCache = this.silCache || new Map();
+    for (const body of R.bodies) {
+      if (body.hidden || body.solid.isEmpty()) continue;
+      const prev = old.get(body.id);
+      if (prev && prev.solid === body.solid) { prev.body = body; prev.color = hex3(body.color); this.buffers.set(body.id, prev); keep.add(body.id); }
+      else this.buffers.set(body.id, this.upload(body.solid, body));
+    }
+    for (const [id, b] of old) if (!keep.has(id)) { gl.deleteBuffer(b.mesh); gl.deleteBuffer(b.nrm); this.freeLines(b.edges); }
+    for (const [k, sc] of [...this.silCache]) if (!keep.has(k.split('|')[0])) { this.freeLines(sc.buf); this.silCache.delete(k); }
+    this.O = O; this.ghosts = null;
+  }
+  upload(solid, body) {
+    const gl = this.gl, mesh = solid.toMesh();
+    const mb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
+    const nb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, nb); gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.STATIC_DRAW);
+    const creases = K.creaseEdges(solid);
+    return { mesh: mb, nrm: nb, count: mesh.count, tris: mesh, creases, edges: this.lineBuf(creases), solid, body, color: hex3(body && body.color) };
+  }
+  lineBuf(segs) {
+    const gl = this.gl, n = segs.length, A = new Float32Array(n * 6 * 3), B = new Float32Array(n * 6 * 3), S = new Float32Array(n * 6), T = new Float32Array(n * 6);
+    const pat = [[-1, 0], [1, 0], [1, 1], [-1, 0], [1, 1], [-1, 1]];
+    segs.forEach(([a, b], i) => { pat.forEach(([s, t], k) => { const j = i * 6 + k; A.set(a, j * 3); B.set(b, j * 3); S[j] = s; T[j] = t; }); });
+    const mk = (arr) => { const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); return bf; };
+    return { a: mk(A), b: mk(B), s: mk(S), t: mk(T), count: n * 6 };
+  }
+  freeLines(lb) { if (!lb) return; for (const k of ['a', 'b', 's', 't']) if (lb[k]) this.gl.deleteBuffer(lb[k]); }
+  silhouettes(id, buf, dir) {
+    const key = id + '|' + dir.map(v => v.toFixed(2)).join(','); let s = this.silCache.get(key);
+    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc|rev\d+)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
+    return s;
+  }
+  /* ---------- drawing ---------- */
+  draw() {
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => { this._raf = 0; this.drawNow(); });
+  }
+  drawNow() {
+    const gl = this.gl, dpr = this.dpr, C = this.colors;
+    gl.enable(gl.SCISSOR_TEST); gl.enable(gl.DEPTH_TEST);
+    gl.clearColor(...C.bg.map(v => v * 0.85), 1); gl.viewport(0, 0, this.cv.width, this.cv.height); gl.scissor(0, 0, this.cv.width, this.cv.height); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    for (const pane of this.panes()) {
+      const x = Math.round(pane.x * dpr), y = Math.round((this.H - pane.y - pane.h) * dpr), w = Math.round(pane.w * dpr), h = Math.round(pane.h * dpr);
+      gl.viewport(x, y, w, h); gl.scissor(x, y, w, h);
+      gl.clearColor(...C.bg, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      const cam = this.vp(pane), ortho = pane.id !== '3d';
+      /* faces */
+      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O);
+      gl.uniform3fv(mp.loc.uL, V.norm(V.add(V.mul(cam.f, 0.6), [0.3, 0.2, 0.75])));
+      gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
+      const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
+      for (const [id, b] of this.buffers) {
+        const col = selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
+        gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1);
+        this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
+      }
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      /* edges: visible solid, hidden dashed (drawings) */
+      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]);
+      const passes = ortho && this.showHidden ? ['hidden', 'visible'] : ['visible'];
+      for (const pass of passes) {
+        gl.depthFunc(pass === 'hidden' ? gl.GREATER : gl.LEQUAL); gl.depthMask(false);
+        gl.uniform4fv(lp.loc.uC, pass === 'hidden' ? C.hidden : C.edge); gl.uniform1f(lp.loc.uDash, pass === 'hidden' ? 9 * dpr : 0); gl.uniform1f(lp.loc.uW, (pass === 'hidden' ? 0.9 : 1.25) * dpr);
+        for (const [id, b] of this.buffers) {
+          this.drawLines(lp, b.edges);
+          this.drawLines(lp, this.silhouettes(id, b, cam.persp ? V.norm(V.sub(cam.eye, this.cam.target)) : cam.f).buf);
+        }
+      }
+      gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+      /* ghost of a selected tool / consumed object: drawn through everything */
+      if (this.ghost) { gl.disable(gl.DEPTH_TEST); gl.uniform4fv(lp.loc.uC, [...C.sel, 0.95]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.4 * dpr); this.drawLines(lp, this.ghost.edges); gl.enable(gl.DEPTH_TEST); }
+    }
+    this.drawOverlay();
+  }
+  bindAttr(loc, buf, size) { const gl = this.gl; if (loc < 0 || loc == null) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
+  drawLines(lp, L) { if (!L || !L.count) return; const gl = this.gl; this.bindAttr(lp.loc.aA, L.a, 3); this.bindAttr(lp.loc.aB, L.b, 3); this.bindAttr(lp.loc.aS, L.s, 1); this.bindAttr(lp.loc.aT, L.t, 1); gl.drawArrays(gl.TRIANGLES, 0, L.count); }
+  setGhost(solid) { if (this.ghost) this.freeLines(this.ghost.edges); this.ghost = solid && !solid.isEmpty() ? { edges: this.lineBuf(K.creaseEdges(solid)) } : null; this.draw(); }
+  /* ---------- overlay: labels, origin, dims, connectors, cube, tool previews ---------- */
+  drawOverlay() {
+    const c = this.ov.getContext('2d'), dpr = this.dpr, C = this.colors; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, this.W, this.H);
+    this.overlayHits = [];
+    const R = this.model.result, O = this.O;
+    for (const pane of this.panes()) {
+      c.save(); c.beginPath(); c.rect(pane.x, pane.y, pane.w, pane.h); c.clip();
+      const cam = this.vp(pane);
+      c.font = '700 11px "Figtree", system-ui, sans-serif'; c.fillStyle = C.label; c.fillText(LABEL[pane.id], pane.x + 10, pane.y + 18);
+      /* origin triad */
+      const o = this.project(pane, [0, 0, 0], cam), ax = [[1, 0, 0, '#e5484d'], [0, 1, 0, '#2fa86b'], [0, 0, 1, '#3e7bfa']];
+      const axLen = cam.persp ? this.cam.dist * 0.06 : 16 / this.ortho.s;
+      for (const [x, y, z, col] of ax) { const p = this.project(pane, [x * axLen, y * axLen, z * axLen], cam); if (Math.hypot(p.x - o.x, p.y - o.y) < 2) continue; c.beginPath(); c.moveTo(o.x, o.y); c.lineTo(p.x, p.y); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
+      c.beginPath(); c.arc(o.x, o.y, 3, 0, Math.PI * 2); c.fillStyle = C.ink; c.fill();
+      if (pane.id !== '3d' && this.showDims) this.drawDims(c, pane, cam, R, O);
+      if (this.connectorsFor) this.drawConnectors(c, pane, cam);
+      if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
+      if (pane.id === '3d') this.drawCube(c, pane, cam);
+      c.restore();
+      c.strokeStyle = C.grid; c.lineWidth = 1; c.strokeRect(pane.x + 0.5, pane.y + 0.5, pane.w - 1, pane.h - 1);
+    }
+    if (this.onOverlay) this.onOverlay(c);
+  }
+  drawDims(c, pane, cam, R, O) {
+    const C = this.colors, doc = this.model.doc, list = [];
+    for (const ob of doc.objects) {
+      if (ob.type === 'edge' || !R.world.has(ob.id)) continue;
+      const M = R.world.get(ob.id);
+      for (const d of dimsOf(ob)) {
+        const a = V.sub(K.M4.point(M, d.a), O), b = V.sub(K.M4.point(M, d.b), O), dir = V.norm(V.sub(b, a));
+        let view = d.view;
+        if (view === 'auto') { let best = 'front', bs = -1; for (const v of ['front', 'top', 'right']) { const f = BASIS[v].f, s = 1 - Math.abs(V.dot(dir, f)); if (s > bs) { bs = s; best = v; } } view = best; }
+        if (view !== pane.id) continue;
+        if (Math.abs(V.dot(dir, BASIS[pane.id].f)) > 0.2) continue;
+        list.push({ ob, d, a, b, value: ob.params[d.param] });
+      }
+    }
+    for (const md of doc.dims || []) {
+      if ((md.view || 'front') !== pane.id) continue;
+      const pa = this.resolveRef(md.a), pb = this.resolveRef(md.b); if (!pa || !pb) continue;
+      const B = BASIS[pane.id], a = V.sub(pa, O), b = V.sub(pb, O), delta = V.sub(b, a), inPlane = Math.hypot(V.dot(delta, B.r), V.dot(delta, B.u));
+      list.push({ measure: md, a, b, value: inPlane });
+    }
+    const counts = new Map();
+    for (const it of list) {
+      const A = this.project(pane, it.a, cam), Bp = this.project(pane, it.b, cam), L = Math.hypot(Bp.x - A.x, Bp.y - A.y); if (L < 6) continue;
+      const ux = (Bp.x - A.x) / L, uy = (Bp.y - A.y) / L; let nx = -uy, ny = ux;
+      const bc = it.ob ? this.project(pane, V.sub(K.M4.point(R.world.get(it.ob.id), [0, 0, 0]), O), cam) : { x: pane.x + pane.w / 2, y: pane.y + pane.h / 2 };
+      const mid = { x: (A.x + Bp.x) / 2, y: (A.y + Bp.y) / 2 }; if ((mid.x - bc.x) * nx + (mid.y - bc.y) * ny < 0) { nx = -nx; ny = -ny; }
+      const key = (it.ob ? it.ob.id : 'm') + ':' + Math.round(nx * 2) + Math.round(ny * 2), k = counts.get(key) || 0; counts.set(key, k + 1);
+      const off = 18 + k * 16, a2 = { x: A.x + nx * off, y: A.y + ny * off }, b2 = { x: Bp.x + nx * off, y: Bp.y + ny * off };
+      const col = it.measure ? '#3e9bfa' : C.dim;
+      c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1;
+      c.globalAlpha = 0.6; c.beginPath(); c.moveTo(A.x + nx * 3, A.y + ny * 3); c.lineTo(a2.x + nx * 4, a2.y + ny * 4); c.moveTo(Bp.x + nx * 3, Bp.y + ny * 3); c.lineTo(b2.x + nx * 4, b2.y + ny * 4); c.stroke(); c.globalAlpha = 1;
+      c.beginPath(); c.moveTo(a2.x, a2.y); c.lineTo(b2.x, b2.y); c.stroke();
+      const head = (p, s) => { c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + s * ux * 7 - uy * 2.6, p.y + s * uy * 7 + ux * 2.6); c.lineTo(p.x + s * ux * 7 + uy * 2.6, p.y + s * uy * 7 - ux * 2.6); c.closePath(); c.fill(); };
+      head(a2, 1); head(b2, -1);
+      const txt = (it.d && it.d.kind === 'diameter' ? 'Ø' : '') + fmt(it.value), lx = (a2.x + b2.x) / 2 + nx * 9, ly = (a2.y + b2.y) / 2 + ny * 9;
+      c.font = '600 11.5px "JetBrains Mono", ui-monospace, monospace'; const tw = c.measureText(txt).width;
+      c.fillStyle = this.dark ? 'rgba(20,21,25,0.85)' : 'rgba(255,255,255,0.88)'; c.fillRect(lx - tw / 2 - 4, ly - 8, tw + 8, 16);
+      c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, lx, ly); c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+      this.overlayHits.push({ kind: it.measure ? 'measure' : 'dim', x: lx - tw / 2 - 4, y: ly - 8, w: tw + 8, h: 16, ob: it.ob, param: it.d && it.d.param, measure: it.measure, value: it.value, pane: pane.id });
+    }
+  }
+  resolveRef(ref) {
+    if (!ref) return null; if (Array.isArray(ref)) return ref;
+    const R = this.model.result; if (ref.obj && ref.conn) { const c = worldConnectors(R, ref.obj).find(x => x.name === ref.conn); return c ? c.o : null; }
+    return ref.p || null;
+  }
+  drawConnectors(c, pane, cam) {
+    const R = this.model.result, ids = this.connectorsFor === 'all' ? [...R.world.keys()] : [this.connectorsFor];
+    for (const id of ids) {
+      for (const cn of worldConnectors(R, id)) {
+        const p = this.project(pane, V.sub(cn.o, this.O), cam); if (p.behind) continue;
+        const hot = this.hover && this.hover.conn && this.hover.conn.id === id && this.hover.conn.name === cn.name;
+        c.beginPath();
+        if (cn.kind === 'corner') c.rect(p.x - 3.5, p.y - 3.5, 7, 7); else if (cn.kind === 'edge') { c.moveTo(p.x, p.y - 5); c.lineTo(p.x + 5, p.y); c.lineTo(p.x, p.y + 5); c.lineTo(p.x - 5, p.y); c.closePath(); } else c.arc(p.x, p.y, cn.kind === 'center' ? 5 : 4, 0, Math.PI * 2);
+        c.fillStyle = hot ? '#ff7b3d' : cn.kind === 'face' ? '#3fd0bf' : cn.kind === 'center' ? '#f2c94c' : '#7aa2ff'; c.fill();
+        c.strokeStyle = this.dark ? '#0b0c0e' : '#ffffff'; c.lineWidth = 1.2; c.stroke();
+        if (hot) { c.font = '700 11px "Figtree", sans-serif'; c.fillStyle = '#ff7b3d'; c.fillText(cn.name, p.x + 8, p.y - 8); }
+        /* several connectors can land on one pixel in a flat view (left face + its two edges…): rank them for clicks */
+        const facing = V.dot(cn.n, cam.f), rank = cn.kind === 'face' ? (facing > 0.5 ? 0 : facing > -0.5 ? 0.5 : 2) : cn.kind === 'side' ? 0.5 : cn.kind === 'center' ? 1 : cn.kind === 'edge' ? 3 : 4;
+        this.overlayHits.push({ kind: 'conn', x: p.x - 7, y: p.y - 7, w: 14, h: 14, cx: p.x, cy: p.y, rank, depth: V.dot(V.sub(cn.o, this.O), cam.f), conn: { id, name: cn.name, kind: cn.kind }, pane: pane.id });
+      }
+    }
+  }
+  drawPreview(c, pane, cam) {
+    const pv = this.preview; c.save(); c.strokeStyle = '#ff7b3d'; c.fillStyle = 'rgba(255,123,61,0.15)'; c.lineWidth = 2;
+    if (pv.points && pv.points.length) {
+      c.beginPath(); pv.points.forEach((p, i) => { const q = this.project(pane, p, cam); i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y); });
+      if (pv.cursor) { const q = this.project(pane, pv.cursor, cam); c.lineTo(q.x, q.y); }
+      if (pv.closed) c.closePath(); c.fill(); c.stroke();
+      pv.points.forEach((p, i) => { const q = this.project(pane, p, cam); c.beginPath(); c.arc(q.x, q.y, i === 0 ? 6 : 3.5, 0, Math.PI * 2); c.fillStyle = i === 0 ? '#ff7b3d' : '#ffffff'; c.fill(); c.stroke(); });
+    }
+    if (pv.measureA) { const a = this.project(pane, V.sub(pv.measureA, this.O), cam); c.beginPath(); c.arc(a.x, a.y, 5, 0, Math.PI * 2); c.stroke(); }
+    c.restore();
+  }
+  /* corner cube: faces, edges and corners are all clickable views */
+  cubeGeom(pane, cam) {
+    const S = 34, cx = pane.x + pane.w - 58, cy = pane.y + 58, P = (x, y, z) => { const v = [x, y, z]; return { x: cx + V.dot(v, cam.r) * S, y: cy - V.dot(v, cam.u) * S, z: V.dot(v, cam.f) }; };
+    const faces = [['TOP', [0, 0, 1]], ['BOTTOM', [0, 0, -1]], ['FRONT', [0, -1, 0]], ['BACK', [0, 1, 0]], ['RIGHT', [1, 0, 0]], ['LEFT', [-1, 0, 0]]];
+    return { cx, cy, S, P, faces };
+  }
+  drawCube(c, pane, cam) {
+    const g = this.cubeGeom(pane, cam), C = this.colors;
+    const quads = g.faces.map(([name, n]) => {
+      const a = n.findIndex(v => v !== 0), s = n[a], idx = [0, 1, 2].filter(i => i !== a);
+      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([p, q]) => { const v = [0, 0, 0]; v[a] = s * 0.5; v[idx[0]] = p * 0.5; v[idx[1]] = q * 0.5; return g.P(...v); });
+      return { name, n, corners, z: V.dot(n, cam.f) };
+    }).filter(q => q.z > 0).sort((p, q) => p.z - q.z);
+    for (const q of quads) {
+      c.beginPath(); q.corners.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); c.closePath();
+      const hot = this.hover && this.hover.cube === q.name;
+      c.fillStyle = hot ? '#ff7b3d' : (this.dark ? 'rgba(40,43,52,0.92)' : 'rgba(255,255,255,0.92)'); c.fill(); c.strokeStyle = this.dark ? '#5b6170' : '#b4b0a8'; c.lineWidth = 1; c.stroke();
+      /* label painted onto the face plane (foreshortens with it, never collides with its neighbours) */
+      if (q.z > 0.22) {
+        const F = CUBE_FACE_AXES[q.name], h = (v) => g.P(v[0] * 0.5, v[1] * 0.5, v[2] * 0.5);
+        const O = h(q.n), Rr = h(V.add(q.n, F.r)), Uu = h(V.add(q.n, F.u)), k = 20;
+        c.save(); c.transform((Rr.x - O.x) / k, (Rr.y - O.y) / k, (O.x - Uu.x) / k, (O.y - Uu.y) / k, O.x, O.y);
+        c.font = '800 10px "Figtree", sans-serif'; const w = c.measureText(q.name).width, fs = Math.min(10, 10 * 33 / w);
+        c.font = `800 ${fs.toFixed(2)}px "Figtree", sans-serif`; c.fillStyle = hot ? '#1a1206' : C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(q.name, 0, 0.5);
+        c.restore();
+      }
+    }
+    /* edge + corner hot spots */
+    const hs = [];
+    for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+      const nz = (x !== 0) + (y !== 0) + (z !== 0); if (nz < 2) continue;
+      const v = [x, y, z], p = g.P(x * 0.5, y * 0.5, z * 0.5); if (V.dot(V.norm(v), this.vp(pane).f) < 0.15) continue;
+      hs.push({ v, p });
+      c.beginPath(); c.arc(p.x, p.y, nz === 3 ? 4 : 3, 0, Math.PI * 2); c.fillStyle = this.hover && this.hover.cubeDir && this.hover.cubeDir.join() === v.join() ? '#ff7b3d' : (this.dark ? '#8d93a3' : '#8f8a82'); c.fill();
+    }
+    for (const q of quads) this.overlayHits.push({ kind: 'cube', poly: q.corners, name: q.name, dir: q.n, pane: pane.id });
+    for (const h of hs) this.overlayHits.push({ kind: 'cube', x: h.p.x - 6, y: h.p.y - 6, w: 12, h: 12, dir: h.v, pane: pane.id });
+    this.overlayHits.push({ kind: 'cubeZone', x: g.cx - 46, y: g.cy - 46, w: 92, h: 92, pane: pane.id });
+  }
+  hitOverlay(x, y) {
+    let best = null, bs = Infinity;
+    for (let i = this.overlayHits.length - 1; i >= 0; i--) {
+      const h = this.overlayHits[i];
+      if (h.kind === 'cubeZone') continue;
+      if (h.poly) { if (pointInPoly2(x, y, h.poly)) { if (!best) return h; } continue; }
+      if (!(x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h)) continue;
+      if (h.kind !== 'conn') { if (!best) return h; continue; }
+      /* connectors: nearest dot wins, then the most useful kind (a face toward you > centre > edge > corner), then the one nearest the eye */
+      const sc = Math.hypot(x - h.cx, y - h.cy) / 3 + h.rank - h.depth * 1e-6;
+      if (sc < bs) { bs = sc; best = h; }
+    }
+    return best;
+  }
+  inCube(x, y) { return this.overlayHits.some(h => h.kind === 'cubeZone' && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h); }
+  setCubeView(dir) {
+    const d = V.norm(dir), pitch = Math.asin(Math.max(-1, Math.min(1, d[2]))) * 180 / Math.PI;
+    let yaw = Math.atan2(d[0], -d[1]) * 180 / Math.PI; if (Math.abs(d[0]) < 1e-6 && Math.abs(d[1]) < 1e-6) yaw = this.cam.yaw;
+    this.animateCam(yaw, Math.max(-89.9, Math.min(89.9, pitch)));
+  }
+  animateCam(yaw, pitch) {
+    const y0 = this.cam.yaw, p0 = this.cam.pitch; let dy = ((yaw - y0 + 540) % 360) - 180; const t0 = performance.now();
+    const step = (t) => { const k = Math.min(1, (t - t0) / 280), e = k * (2 - k); this.cam.yaw = y0 + dy * e; this.cam.pitch = p0 + (pitch - p0) * e; this.draw(); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  /* ---------- picking ---------- */
+  pick(pane, px, py) {
+    const r = this.ray(pane, px, py); let best = null;
+    for (const [id, b] of this.buffers) {
+      const P = b.tris.positions;
+      for (let i = 0; i < P.length; i += 9) {
+        const a = [P[i] - this.O[0], P[i + 1] - this.O[1], P[i + 2] - this.O[2]], bb = [P[i + 3] - this.O[0], P[i + 4] - this.O[1], P[i + 5] - this.O[2]], cc = [P[i + 6] - this.O[0], P[i + 7] - this.O[1], P[i + 8] - this.O[2]];
+        const t = rayTri(r.o, r.d, a, bb, cc);
+        if (t != null && (!best || t < best.t)) { const poly = b.tris.polysOfTri[i / 9]; best = { t, id, point: V.add(V.add(r.o, V.mul(r.d, t)), this.O), normal: poly.plane.n, sid: poly.sid }; }
+      }
+    }
+    return best;
+  }
+  /* ---------- view control ---------- */
+  fitAll() {
+    const R = this.model.result; let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (const b of R.bodies) { if (b.solid.isEmpty() || b.hidden) continue; const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k]); mx[k] = Math.max(mx[k], bb.max[k]); } }
+    if (!isFinite(mn[0])) { mn = [-50, -50, 0]; mx = [50, 50, 50]; }
+    const O = R.originPoint, c = V.sub(V.lerp(mn, mx, 0.5), O), size = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 20);
+    const p = this.panes().find(q => q.id === 'front') || this.panes()[0];
+    this.ortho.c = c; this.ortho.s = Math.min(p.w, p.h) * 0.7 / size;
+    this.cam.target = c; this.cam.dist = size * 2.6;
+    this.draw();
+  }
+  zoomOrtho(pane, px, py, k) {
+    const B = BASIS[pane.id], before = this.planeXY(pane, px, py);
+    this.ortho.s = Math.max(0.02, Math.min(200, this.ortho.s * k));
+    const after = this.planeXY(pane, px, py);
+    this.ortho.c = V.add(this.ortho.c, V.add(V.mul(B.r, before.x - after.x), V.mul(B.u, before.y - after.y)));
+    this.draw();
+  }
+  planeXY(pane, px, py) { const B = BASIS[pane.id], s = this.ortho.s; return { x: V.dot(this.ortho.c, B.r) + (px - pane.x - pane.w / 2) / s, y: V.dot(this.ortho.c, B.u) - (py - pane.y - pane.h / 2) / s }; }
+  panOrtho(pane, dx, dy) { const B = BASIS[pane.id], s = this.ortho.s; this.ortho.c = V.add(this.ortho.c, V.add(V.mul(B.r, -dx / s), V.mul(B.u, dy / s))); this.draw(); }
+  orbit(dx, dy) { this.cam.yaw += dx * 0.4; this.cam.pitch = Math.max(-89.9, Math.min(89.9, this.cam.pitch + dy * 0.4)); this.draw(); }
+  pan3d(pane, dx, dy) { const cam = this.vp(pane), s = this.cam.dist * Math.tan(this.cam.fov * Math.PI / 360) * 2 / pane.h; this.cam.target = V.add(this.cam.target, V.add(V.mul(cam.r, -dx * s), V.mul(cam.u, dy * s))); this.draw(); }
+  zoom3d(k) { this.cam.dist = Math.max(5, Math.min(1e5, this.cam.dist / k)); this.draw(); }
+  snapshot() { this.drawNow(); const c = document.createElement('canvas'); c.width = this.cv.width; c.height = this.cv.height; const g = c.getContext('2d'); g.drawImage(this.cv, 0, 0); g.drawImage(this.ov, 0, 0); return c; }
+}
+function rayTri(o, d, a, b, c) {
+  const e1 = V.sub(b, a), e2 = V.sub(c, a), p = V.cross(d, e2), det = V.dot(e1, p); if (Math.abs(det) < 1e-12) return null;
+  const inv = 1 / det, t0 = V.sub(o, a), u = V.dot(t0, p) * inv; if (u < 0 || u > 1) return null;
+  const qv = V.cross(t0, e1), v = V.dot(d, qv) * inv; if (v < 0 || u + v > 1) return null;
+  const t = V.dot(e2, qv) * inv; return t > 1e-6 ? t : null;
+}
+function pointInPoly2(x, y, ps) { let ins = false; for (let i = 0, j = ps.length - 1; i < ps.length; j = i++) { const a = ps[i], b = ps[j]; if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) ins = !ins; } return ins; }
+function hex3(h) { if (!h) return [0.78, 0.8, 0.85]; const n = parseInt(String(h).replace('#', ''), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
+
+return { Views, fmt };
+})();
+
+__sf3.app = (() => {
+/* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
+   edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
+const { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K } = __sf3.model;
+const { Views, fmt } = __sf3.views;
+const { V, M4 } = K;
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
+const toast = (t, ms) => { const d = el('div', { class: 'toast' }, t); $('#toasts').append(d); setTimeout(() => d.remove(), ms || 2200); };
+
+const ICON = {
+  box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5', wedge: 'M4 18h16L4 6zM4 6l4-2 12 12', cylinder: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6',
+  cone: 'M12 3L5 18M12 3l7 15M5 18c0 1.7 3.1 3 7 3s7-1.3 7-3-3.1-3-7-3-7 1.3-7 3z', sphere: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12c0 1.9 4 3.5 9 3.5s9-1.6 9-3.5',
+  fillet: 'M4 20V4M4 20h16M4 8c0 7 5 12 12 12', weld: 'M4 20V4M4 20h16M4 12a8 8 0 0 0 8 8', chamfer: 'M4 20V4M4 20h16M4 10l10 10', sketch: 'M4 18l5-12 6 8 5-6M4 18h16',
+  mate: 'M7 7h4v4H7zM13 13h4v4h-4zM11 11l2 2', union: 'M9 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12M15 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12', subtract: 'M9 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12M15 6a6 6 0 0 1 0 12',
+  intersect: 'M12 7.5a6 6 0 0 1 0 9a6 6 0 0 1 0-9M9 6a6 6 0 1 0 0 12M15 6a6 6 0 1 1 0 12', dim: 'M4 7v10M20 7v10M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3', undo: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3', redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', hidden: 'M3 12h3M9 12h3M15 12h3M21 12h0M4 6h16M4 18h16', sun: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
+  file: 'M6 3h8l5 5v13H6zM14 3v5h5', board: 'M4 5h16v12H4zM8 21h8M12 17v4', extrude: 'M6 18h8l4-4H10zM6 18V8l4-4v10M14 18V8l4-4', revolve: 'M12 3v18M8 6a4 9 0 1 0 8 0', loft: 'M5 19h10l4-4M7 7h6l2-2M5 19L7 7M15 19l-2-12', sweep: 'M5 19c4 0 4-14 14-14'
+};
+const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', ICON[n] || ICON.box); s.append(p); return s; };
+document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.icon)));
+
+/* ---------- model + persistence ---------- */
+const load = () => { try { const s = localStorage.getItem('sf3.model'); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
+const model = new Model(load() || newDoc('Model'));
+const save = debounce(() => { try { localStorage.setItem('sf3.model', JSON.stringify(model.doc)); } catch (e) { /* storage blocked */ } }, 400);
+const views = new Views($('#gl'), $('#ov'), model);
+let selected = null;
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('sf3.prefs') || '{}'); } catch (e) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify(prefs)); } catch (e) { /* blocked */ } };
+if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
+const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
+views.setTheme(isDark());
+model.on(() => { views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); });
+function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
+
+/* ---------- tree ---------- */
+function statusOf(o) {
+  const w = model.result.warnings.filter(x => x.id === o.id), b = [];
+  if (w.some(x => x.kind === 'floating')) b.push(['floating', 'w']); if (w.some(x => x.kind === 'orphan')) b.push(['orphan', 'w']);
+  if (w.some(x => x.kind === 'error' || x.kind === 'edge' || x.kind === 'empty' || x.kind === 'cycle')) b.push(['error', 'w']);
+  if (o.into) b.push([o.type === 'edge' ? (o._resolved ? o._resolved.mode : 'edge') : o.op === 'add' ? 'union' : o.op, o.op === 'add' || (o._resolved && o._resolved.mode === 'add') ? 'add' : 'sub']);
+  if (o.id === model.result.ground) b.push(['ground', '']);
+  return b;
+}
+function renderTree() {
+  const list = $('#list'); list.innerHTML = '';
+  const objs = model.doc.objects; $('#count').textContent = objs.length;
+  if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
+  for (const o of objs) {
+    const p = o.params, sub = o.type === 'box' || o.type === 'wedge' ? `${fmt(p.width)} × ${fmt(p.depth)} × ${fmt(p.height)}` : o.type === 'cylinder' ? `Ø${fmt(p.diameter)} × ${fmt(p.height)}` : o.type === 'cone' ? `Ø${fmt(p.diameter)}→${fmt(p.top || 0)} × ${fmt(p.height)}` : o.type === 'sphere' ? `Ø${fmt(p.diameter)}` : o.type === 'edge' ? `${p.style} ${fmt(p.size)}` : o.type === 'fillet' ? `${p.style} ${fmt(p.size)} × ${fmt(p.length)}` : o.type === 'extrude' || o.type === 'loft' ? `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}` : o.type === 'revolve' ? `${p.degrees}°` : '';
+    const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (o.into ? ' tool' : ''), onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
+      el('span', { class: 'ic' }, icon(o.type === 'edge' ? o.params.style : o.type)),
+      el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, sub)),
+      el('div', { style: 'display:flex;gap:3px' }, ...statusOf(o).map(([t, c]) => el('span', { class: 'badge ' + c }, t))));
+    list.append(row);
+  }
+  const w = model.result.warnings, box = $('#warn');
+  box.hidden = !w.length; box.innerHTML = '';
+  if (w.length) {
+    box.append(el('b', null, w.length + (w.length === 1 ? ' thing needs attention' : ' things need attention')));
+    w.slice(0, 8).forEach(x => box.append(el('div', { style: 'cursor:pointer', onclick: () => select(x.id) }, '• ' + x.text)));
+    box.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: false }]) }, 'Fix orphans'), el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: true }]) }, 'Fix all in place')));
+  }
+}
+/* ---------- properties ---------- */
+function field(label, input) { return el('label', { class: 'f' }, label, input); }
+function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
+function renderProps() {
+  const body = $('#pbody'); body.innerHTML = '';
+  const o = selected && model.get(selected);
+  if (!o) {
+    const R = model.result, s = el('div', { class: 'sec' });
+    s.append(el('h4', null, 'Model'), field('Name', (() => { const i = el('input', { value: model.doc.name }); i.addEventListener('change', () => apply([{ op: 'rename', name: i.value }])); i.addEventListener('keydown', e => e.stopPropagation()); return i; })()));
+    s.append(el('div', { class: 'f' }, 'Bodies', el('span', null, R.bodies.length + ' · ' + model.doc.objects.length + ' features · ' + R.ms.toFixed(0) + ' ms')));
+    const og = R.originRef; s.append(el('div', { class: 'f' }, 'World origin', el('span', null, og ? (model.get(og.obj) || {}).name + ' · ' + og.conn : 'board 0,0,0')));
+    s.append(el('div', { class: 'empty', style: 'padding:6px 0' }, 'Tip: every object has its own frame. The world origin is just a reference point; pick any connector as origin from an object’s properties.'));
+    body.append(s); return;
+  }
+  const R = model.result, sec = (t) => { const s = el('div', { class: 'sec' }, el('h4', null, t)); body.append(s); return s; };
+  const s1 = sec(TYPES[o.type].label);
+  const nm = el('input', { value: o.name }); nm.addEventListener('change', () => apply([{ op: 'set', id: o.id, name: nm.value }])); nm.addEventListener('keydown', e => e.stopPropagation());
+  s1.append(field('Name', nm));
+  for (const [k, v] of Object.entries(o.params)) {
+    if (k === 'segments') continue;
+    if (typeof v === 'number') s1.append(field(k, numInput(v, (nv) => apply([{ op: 'set', id: o.id, params: { [k]: nv } }]))));
+    else if (k === 'style') { const sl = el('select', null, ...['fillet', 'weld', 'chamfer'].map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => apply([{ op: 'set', id: o.id, params: { style: sl.value } }]); s1.append(field('style', sl)); }
+    else if (k === 'mode') { const sl = el('select', null, ...['auto', 'add', 'subtract'].map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => apply([{ op: 'set', id: o.id, params: { mode: sl.value } }]); s1.append(field('add / remove', sl)); }
+    else if (Array.isArray(v) || v === null) { const ta = el('textarea', null, JSON.stringify(v)); ta.addEventListener('keydown', e => e.stopPropagation()); ta.addEventListener('change', () => { try { apply([{ op: 'set', id: o.id, params: { [k]: JSON.parse(ta.value) } }]); } catch (e) { toast('Not valid JSON: ' + e.message); } }); s1.append(field(k, ta)); }
+  }
+  if (o.type === 'edge' && o._resolved) s1.append(el('div', { class: 'f' }, 'edge', el('span', null, (o._resolved.convex ? 'outer (convex) → removes' : 'inner (concave) → adds') + ' · ' + o._resolved.angle + '°')));
+  /* placement */
+  if (o.type !== 'edge') {
+    const s2 = sec('Placement');
+    if (o.mate) {
+      const m = o.mate, targets = [['origin', 'World origin']].concat(model.doc.objects.filter(x => x.id !== o.id && x.type !== 'edge').map(x => [x.id, x.name]));
+      const to = el('select', null, ...targets.map(([id, n]) => el('option', { value: id, selected: m.to === id }, n))); to.onchange = () => apply([{ op: 'mate', id: o.id, to: to.value, a: m.a, b: m.b }]);
+      const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
+      const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
+      const mate = (patch) => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }, patch)]);
+      const fl = el('input', { type: 'checkbox' }); fl.checked = !!m.flip; fl.onchange = () => mate({ flip: fl.checked });
+      s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', numInput(m.offset || 0, v => mate({ offset: v }))), field('angle °', numInput(m.angle || 0, v => mate({ angle: v }))),
+        field('slide x', numInput((m.slide || [0, 0])[0], v => mate({ slide: [v, (m.slide || [0, 0])[1]] }))), field('slide y', numInput((m.slide || [0, 0])[1], v => mate({ slide: [(m.slide || [0, 0])[0], v] }))), field('face to face', fl));
+      s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
+    } else {
+      const p = o.pose || { at: [0, 0, 0], rot: [0, 0, 0] }, setPose = (at, rot) => apply([{ op: 'set', id: o.id, at, rot }]);
+      ['x', 'y', 'z'].forEach((ax, k) => s2.append(field(ax, numInput(+(p.at[k] - (k < 3 ? R.originPoint[k] : 0)).toFixed(3), v => { const at = p.at.slice(); at[k] = v + R.originPoint[k]; setPose(at, p.rot); }))));
+      ['rx', 'ry', 'rz'].forEach((ax, k) => s2.append(field(ax + ' °', numInput(p.rot[k], v => { const rot = p.rot.slice(); rot[k] = v; setPose(p.at, rot); }))));
+      s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => setTool('mate', o.id) }, 'Mate…'), o.id !== R.ground ? el('button', { class: 'btn', onclick: () => apply([{ op: 'ground', id: o.id }]) }, 'Make ground') : null, !o.fixed && o.id !== R.ground ? el('button', { class: 'btn', onclick: () => apply([{ op: 'fix', id: o.id }]) }, 'Fix in place') : null));
+    }
+    const og = el('select', null, el('option', { value: '' }, '— set as world origin —'), ...worldConnectors(R, o.id).map(c => el('option', { value: c.name }, c.name)));
+    og.onchange = () => { if (og.value) apply([{ op: 'origin', obj: o.id, conn: og.value }]); };
+    s2.append(field('origin', og));
+  }
+  /* boolean role */
+  if (o.into && o.type !== 'edge') {
+    const s3 = sec('Boolean'), mode = el('select', null, ...[['subtract', 'Subtract from'], ['add', 'Union with'], ['intersect', 'Intersect with']].map(([v, n]) => el('option', { value: v, selected: o.op === v }, n)));
+    mode.onchange = () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: mode.value }]);
+    s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')), el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
+  }
+  const s4 = sec('Object');
+  if (o.type !== 'edge') { const col = el('input', { type: 'color', value: o.color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
+  s4.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'), el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
+}
+function select(id) { selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); }
+function refreshGhost() {
+  const o = selected && model.get(selected), R = model.result;
+  if (o && (o.into || o.hidden) && R.local.has(o.id)) views.setGhost(R.local.get(o.id).transform(M4.mul(M4.translate(V.neg(R.originPoint)), R.world.get(o.id))).transform(M4.translate(R.originPoint)));
+  else views.setGhost(null);
+}
+
+/* ---------- toolbar ---------- */
+function syncBar() {
+  $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
+  $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
+  if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
+}
+document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addShape(b.dataset.add)));
+function addShape(type) {
+  const g = model.result.ground, first = !g;
+  const r = apply([{ op: 'add', type, mate: first ? { to: 'origin', a: 'xy', b: 'bottom' } : undefined }])[0];
+  select(r.id); if (first) setTimeout(() => views.fitAll(), 0);
+  toast(first ? `${r.name} placed on the origin — it’s the ground` : `${r.name} sits on ${model.get(g).name} — Mate to move it`, 1800);
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(tool && tool.name === b.dataset.tool ? null : b.dataset.tool)));
+$('#undo').onclick = () => { const l = model.undo(); if (l) toast('Undo · ' + l, 900); };
+$('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l, 900); };
+$('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
+$('#fit').onclick = () => views.fitAll();
+$('#hiddenBtn').onclick = () => { views.showHidden = !views.showHidden; syncBar(); views.draw(); };
+$('#dimsBtn').onclick = () => { views.showDims = !views.showDims; syncBar(); views.draw(); };
+$('#theme').onclick = () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); };
+$('#name').addEventListener('change', () => apply([{ op: 'rename', name: $('#name').value }]));
+$('#name').addEventListener('keydown', e => e.stopPropagation());
+$('#fileBtn').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
+  const item = (t, fn) => m.append(el('button', { onclick: () => { m.remove(); fn(); } }, t));
+  item('New model', () => { if (model.doc.objects.length) model.load(newDoc('Model')); select(null); });
+  item('Open model file…', () => $('#openIn').click());
+  item('Save model file (.json)', () => download(new Blob([JSON.stringify(model.doc, null, 1)], { type: 'application/json' }), slug() + '.sf3d.json'));
+  item('Export STL (3D print)', () => download(new Blob([exportSTL()], { type: 'model/stl' }), slug() + '.stl'));
+  item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
+  item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
+  item('Load the demo model', demo);
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+};
+$('#openIn').addEventListener('change', async (e) => { const f = e.target.files[0]; if (!f) return; try { model.load(JSON.parse(await f.text())); select(null); views.fitAll(); toast('Opened ' + f.name); } catch (err) { toast('Could not open: ' + err.message); } e.target.value = ''; });
+const slug = () => (model.doc.name || 'model').replace(/[^\w-]+/g, '-');
+function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000); toast('Saved ' + name); }
+/* exports use the repaired (T-junction free) mesh, so STL/OBJ are watertight; coordinates are mm from the model origin */
+function meshTris(b, O) {
+  const m = b.solid.toMesh(), P = m.positions, tris = [], weld = new Map();
+  /* weld: points within 0.1 µm become one vertex with one spelling, so text files stay watertight */
+  const pt = (i) => {
+    const v = [P[i * 3] - O[0], P[i * 3 + 1] - O[1], P[i * 3 + 2] - O[2]].map(x => (Math.abs(x) < 5e-6 ? 0 : x)), k = v.map(x => Math.round(x * 1e4)).join(',');
+    let c = weld.get(k); if (!c) weld.set(k, (c = v)); return c;
+  };
+  for (let i = 0; i < m.count; i += 3) {
+    const a = pt(i), q = pt(i + 1), r = pt(i + 2); if (a === q || q === r || a === r) continue;
+    const n = V.cross(V.sub(q, a), V.sub(r, a)), l = V.len(n); if (l < 1e-12) continue;
+    tris.push([a, q, r, V.mul(n, 1 / l)]);
+  }
+  return tris;
+}
+function exportSTL() {
+  const R = model.result, out = ['solid ' + slug()], f = (v) => v.map(x => x.toFixed(5)).join(' ');
+  for (const b of R.bodies) { if (b.hidden) continue; for (const [a, q, r, n] of meshTris(b, R.originPoint)) out.push(`facet normal ${f(n)}`, ' outer loop', `  vertex ${f(a)}`, `  vertex ${f(q)}`, `  vertex ${f(r)}`, ' endloop', 'endfacet'); }
+  out.push('endsolid ' + slug()); return out.join('\n');
+}
+function exportOBJ() {
+  const R = model.result, out = ['# SketchFlow 3D · ' + model.doc.name, '# units: mm, origin: ' + (R.originRef ? R.originRef.obj + ' · ' + R.originRef.conn : 'world')]; let count = 0;
+  for (const b of R.bodies) {
+    if (b.hidden) continue; out.push('o ' + b.name.replace(/\s+/g, '_'));
+    const index = new Map(), face = [];
+    const vid = (v) => { const k = v.map(x => x.toFixed(5)).join(' '); let i = index.get(k); if (!i) { i = ++count; index.set(k, i); out.push('v ' + k); } return i; };
+    for (const [a, q, r] of meshTris(b, R.originPoint)) face.push(`f ${vid(a)} ${vid(q)} ${vid(r)}`);
+    out.push(...face);
+  }
+  return out.join('\n');
+}
+
+/* ---------- tools ---------- */
+let tool = null;
+/* the hint bar doubles as a tiny inline form: fields = [[key, label, value]], actions get the current values */
+const hint = (t, actions, fields) => {
+  const h = $('#hint'); if (!t) { h.hidden = true; return; } h.hidden = false; h.innerHTML = '';
+  const inputs = (fields || []).map(([k, label, v]) => { const i = el('input', { type: 'number', step: 'any', value: v, 'data-k': k, 'aria-label': label }); i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && actions && actions[0]) actions[0][1](vals()); if (e.key === 'Escape') setTool(null); }); return [k, label, i]; });
+  const vals = () => Object.fromEntries(inputs.map(([k, , i]) => [k, parseFloat(String(i.value).replace(',', '.'))]));
+  h.append(el('span', null, t), ...inputs.map(([, label, i]) => el('label', { class: 'hf' }, label, i)), ...(actions || []).map(([l, f]) => el('button', { onclick: () => f(vals()) }, l)), el('button', { onclick: () => setTool(null) }, 'Esc'));
+  if (inputs[0]) setTimeout(() => { inputs[0][2].focus(); inputs[0][2].select(); }, 0);
+};
+let pendingLoft = null;
+function setTool(name, arg) {
+  tool = name ? { name, step: 0, data: {} } : null; views.connectorsFor = null; views.preview = null;
+  if (!name) hint(null);
+  else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
+  else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
+  else if (name.startsWith('edge-')) {
+    hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near a straight edge — outer edges are trimmed, inner corners are filled`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
+    const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
+  }
+  else if (name === 'measure') { views.connectorsFor = 'all'; hint('Measure: click two connectors in a FRONT / TOP / RIGHT view'); }
+  else if (name === 'sketch') { tool.data.points = []; if (!arg) pendingLoft = null; hint(pendingLoft ? 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)' : 'Sketch: click points in FRONT, TOP or RIGHT · click the first point (or Enter) to close · Shift = straight'); }
+  syncBar(); views.draw();
+}
+function finishSketch() {
+  const d = tool.data; if (!d.points || d.points.length < 3) { toast('A profile needs at least 3 points'); return; }
+  const B = d.basis, pts2 = d.points.map(p => [V.dot(p, B.r), V.dot(p, B.u)]);
+  views.preview = { pane: d.pane, points: d.points.slice(), closed: true }; views.draw();
+  const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
+  const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
+  const make = (op, extra) => { const r = apply([Object.assign({ op, profile: pts2, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
+  if (pendingLoft) {
+    if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');
+    const first = pendingLoft;
+    hint('Loft between the two profiles (' + first.pts2.length + ' → ' + pts2.length + ' points):', [
+      ['Loft', (v) => { const L = ok(v.length, 30); if (L) { const r = apply([{ op: 'loft', profile: first.pts2, profile2: pts2, length: L, twist: ok(v.twist, 0), at: first.pose.at, rot: first.pose.rot, fixed: true }])[0]; pendingLoft = null; select(r.id); setTool(null); } }]
+    ], [['length', 'length', 30], ['twist', 'twist °', 0]]);
+    tool.step = 9; return;
+  }
+  hint('Profile closed (' + pts2.length + ' points) — make it 3D:', [
+    ['Extrude', (v) => { const L = ok(v.length, 20); if (L) make('extrude', { length: L, twist: ok(v.twist, 0), scale: ok(v.scale, 1) || 1 }); }],
+    ['Revolve', (v) => { const dg = ok(v.degrees, 360); if (dg) make('revolve', { profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: dg }); }],
+    ['Loft → end profile', (v) => { pendingLoft = { pts2, pose, pane: d.pane }; const keep = pendingLoft; setTool('sketch', true); pendingLoft = keep; hint('Loft: now sketch the END profile in the ' + keep.pane.toUpperCase() + ' view (any number of points)'); }]
+  ], [['length', 'length', 20], ['twist', 'twist °', 0], ['scale', 'end scale', 1], ['degrees', 'revolve °', 360]]);
+  tool.step = 9;
+}
+
+/* ---------- pointer ---------- */
+const stage = $('#stage');
+let drag = null;
+stage.addEventListener('contextmenu', e => e.preventDefault());
+stage.addEventListener('pointerdown', (e) => {
+  if (e.target !== $('#gl') && e.target !== stage) return;
+  const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, pane = views.paneAt(x, y); if (!pane) return;
+  stage.setPointerCapture(e.pointerId);
+  const hit = views.hitOverlay(x, y);
+  if (hit && hit.kind === 'cube') { views.setCubeView(hit.dir); return; }
+  drag = { x, y, x0: x, y0: y, pane, button: e.button, moved: false, orbit: pane.id === '3d' && e.button === 0 && !e.shiftKey && !(tool && tool.name !== 'mate' && !tool.name.startsWith('bool') ) };
+});
+stage.addEventListener('pointermove', (e) => {
+  const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (drag) {
+    const dx = x - drag.x, dy = y - drag.y; drag.x = x; drag.y = y; if (Math.hypot(x - drag.x0, y - drag.y0) > 4) drag.moved = true;
+    if (!drag.moved) return;
+    if (drag.pane.id === '3d') { if (drag.button === 2 || drag.button === 1 || e.shiftKey) views.pan3d(drag.pane, dx, dy); else views.orbit(dx, dy); }
+    else views.panOrtho(drag.pane, dx, dy);
+    return;
+  }
+  const pane = views.paneAt(x, y); if (!pane) return;
+  const h = views.hitOverlay(x, y);
+  views.hover = h ? { conn: h.kind === 'conn' ? h.conn : null, cube: h.kind === 'cube' && h.name ? h.name : null, cubeDir: h.kind === 'cube' && !h.name ? h.dir : null } : null;
+  if (tool && tool.name === 'sketch' && pane.id !== '3d' && tool.step < 9) {
+    let pp = views.planePoint(pane, x, y); if (!pp) return;
+    if (tool.data.pane && tool.data.pane !== pane.id) { views.draw(); return; }
+    let p = snapSketch(pane, pp, e.shiftKey);
+    views.preview = { pane: pane.id, points: tool.data.points, cursor: p };
+  }
+  stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube') ? 'pointer' : tool ? 'crosshair' : 'default';
+  views.draw();
+});
+stage.addEventListener('pointerup', (e) => {
+  const d = drag; drag = null; if (!d || d.moved) return;
+  const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, pane = d.pane;
+  const hit = views.hitOverlay(x, y);
+  if (hit && hit.kind === 'dim' && !tool) { editDim(hit, x, y); return; }
+  if (hit && hit.kind === 'measure' && !tool) { if (confirmRemove(hit)) return; }
+  if (!tool) { const pk = views.pick(pane, x, y); select(pk ? pk.id : null); return; }
+  clickTool(pane, x, y, hit, e);
+});
+stage.addEventListener('wheel', (e) => {
+  e.preventDefault(); const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, pane = views.paneAt(x, y); if (!pane) return;
+  const k = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015));
+  if (pane.id === '3d') views.zoom3d(k); else views.zoomOrtho(pane, x, y, k);
+}, { passive: false });
+stage.addEventListener('dblclick', (e) => { const r = stage.getBoundingClientRect(), pane = views.paneAt(e.clientX - r.left, e.clientY - r.top); if (!pane || tool) return; views.layout = views.layout === '4' ? pane.id : '4'; views.draw(); });
+function confirmRemove(hit) { if (!hit.measure) return false; apply([{ op: 'undim', id: hit.measure.id }]); toast('Measurement removed (Undo to restore)'); return true; }
+function snapSketch(pane, pp, straight) {
+  const B = BASISof(pane.id), pts = tool.data.points; let x = pp.x, y = pp.y;
+  const grid = prefs.grid || 5; x = Math.round(x / grid) * grid; y = Math.round(y / grid) * grid;
+  if (straight && pts.length) { const l = pts[pts.length - 1], lx = V.dot(l, B.r), ly = V.dot(l, B.u); if (Math.abs(x - lx) > Math.abs(y - ly)) y = ly; else x = lx; }
+  return V.add(V.mul(B.r, x), V.mul(B.u, y));
+}
+function BASISof(id) { return { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } }[id]; }
+function clickTool(pane, x, y, hit, e) {
+  const t = tool, R = model.result;
+  if (t.name === 'sketch') {
+    if (pane.id === '3d' || t.step >= 9) return;
+    if (t.data.pane && t.data.pane !== pane.id) { toast('Keep the whole profile in one view'); return; }
+    const pp = views.planePoint(pane, x, y), p = snapSketch(pane, pp, e.shiftKey);
+    t.data.pane = pane.id; t.data.basis = BASISof(pane.id);
+    if (t.data.points.length >= 3) { const f = views.project(pane, t.data.points[0]); if (Math.hypot(f.x - x, f.y - y) < 10) { finishSketch(); return; } }
+    t.data.points.push(p); views.preview = { pane: pane.id, points: t.data.points }; views.draw(); return;
+  }
+  if (t.name === 'mate') {
+    if (t.step === 0) { const pk = views.pick(pane, x, y); if (!pk) return; const id = rootOrSelf(pk.id); t.data.moving = id; t.step = 1; views.connectorsFor = id; hint('Mate: click the connector on ' + model.get(id).name + ' to attach'); views.draw(); return; }
+    if (!hit || hit.kind !== 'conn') { toast('Click one of the coloured connector dots'); return; }
+    if (t.step === 1) { if (hit.conn.id !== t.data.moving) return; t.data.b = hit.conn.name; t.step = 2; views.connectorsFor = 'all'; hint(`Mate: now click where ${model.get(t.data.moving).name} · ${hit.conn.name} should go`); views.draw(); return; }
+    if (t.step === 2) { if (hit.conn.id === t.data.moving) return; const r = apply([{ op: 'mate', id: t.data.moving, to: hit.conn.id, a: hit.conn.name, b: t.data.b }]); select(t.data.moving); setTool(null); toast('Mated · adjust gap / angle / slide in Properties', 1800); void r; return; }
+  }
+  if (t.name.startsWith('bool-')) {
+    const pk = views.pick(pane, x, y); if (!pk) return; const id = pk.id;
+    if (t.step === 0) { t.data.target = id; t.step = 1; select(id); hint('Now click the tool body (it will be ' + (t.name === 'bool-add' ? 'merged into' : t.name === 'bool-subtract' ? 'cut from' : 'intersected with') + ' ' + model.get(id).name + ')'); return; }
+    if (id === t.data.target) return;
+    apply([{ op: 'boolean', target: t.data.target, tool: id, mode: t.name.slice(5) }]); select(t.data.target); setTool(null); return;
+  }
+  if (t.name.startsWith('edge-')) {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a body, close to the edge'); return; }
+    try { const r = apply([{ op: 'edge', target: pk.id, near: nearestEdgePoint(pk), style: t.name.slice(5), size: prefs.edgeSize || 4 }])[0]; toast(`${r.convex ? 'Outer edge → trimmed' : 'Inner corner → filled'} (${r.angle}°)${r.round ? ' · all the way round Ø' + fmt(r.round.diameter) : ''}`, 2000); select(r.id); }
+    catch (err) { /* toast shown */ }
+    return;
+  }
+  if (t.name === 'measure') {
+    if (pane.id === '3d') { toast('Measure in FRONT, TOP or RIGHT'); return; }
+    if (!hit || hit.kind !== 'conn') { toast('Click a connector dot'); return; }
+    if (!t.data.a) { t.data.a = hit.conn; views.preview = { pane: pane.id, measureA: worldConnectors(R, hit.conn.id).find(c => c.name === hit.conn.name).o }; hint('Measure: now the second connector'); views.draw(); return; }
+    apply([{ op: 'dim', a: { obj: t.data.a.id, conn: t.data.a.name }, b: { obj: hit.conn.id, conn: hit.conn.name }, view: pane.id }]); setTool(null);
+  }
+}
+const rootOrSelf = (id) => id;
+function nearestEdgePoint(pk) {
+  const body = model.bodyContaining(pk.id); if (!body) return pk.point;
+  let best = pk.point, bd = Infinity;
+  for (const [a, b] of K.creaseEdges(body.solid)) { const ab = V.sub(b, a), t = Math.max(0, Math.min(1, V.dot(V.sub(pk.point, a), ab) / (V.dot(ab, ab) || 1))), q = V.add(a, V.mul(ab, t)), dd = V.len(V.sub(q, pk.point)); if (dd < bd) { bd = dd; best = q; } }
+  return best;
+}
+function editDim(hit, x, y) {
+  const ed = $('#dimEd'); ed.hidden = false; ed.value = fmt(hit.value); ed.style.left = (x - 45) + 'px'; ed.style.top = (y - 14) + 'px'; ed.focus(); ed.select();
+  const done = (ok) => { ed.hidden = true; ed.onkeydown = null; ed.onblur = null; if (ok) { const v = parseFloat(ed.value.replace(',', '.')); if (v > 0 && v !== hit.value) apply([{ op: 'set', id: hit.ob.id, params: { [hit.param]: v } }], `${hit.ob.name} ${hit.param} = ${fmt(v)}`); } };
+  ed.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+  ed.onblur = () => done(true);
+}
+window.addEventListener('keydown', (e) => {
+  const a = document.activeElement; if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? $('#redo').click() : $('#undo').click(); return; }
+  if (mod && k === 'y') { e.preventDefault(); $('#redo').click(); return; }
+  if (mod) return;
+  if (k === 'escape') { setTool(null); select(null); return; }
+  if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
+  if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
+  const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure');
+  if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
+});
+
+/* ---------- demo ---------- */
+function demo() {
+  model.load(newDoc('Bracket demo'));
+  apply([
+    { op: 'add', type: 'box', id: 'plate', name: 'Base plate', params: { width: 120, depth: 70, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' }, color: '#c7cbd8' },
+    { op: 'add', type: 'box', id: 'web', name: 'Upright', params: { width: 12, depth: 70, height: 60 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-54, 0] }, into: 'plate', mode: 'add' },
+    { op: 'add', type: 'cylinder', id: 'hole1', name: 'Bolt hole', params: { diameter: 10, height: 12 }, mate: { to: 'plate', a: 'top', b: 'top', flip: false, offset: 1, slide: [40, 22] }, into: 'plate', mode: 'subtract' },
+    { op: 'add', type: 'cylinder', id: 'hole2', name: 'Bolt hole 2', params: { diameter: 10, height: 12 }, mate: { to: 'plate', a: 'top', b: 'top', flip: false, offset: 1, slide: [40, -22] }, into: 'plate', mode: 'subtract' },
+    { op: 'add', type: 'cylinder', id: 'boss', name: 'Boss', params: { diameter: 26, height: 18 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [5, 0] }, color: '#7aa2ff' },
+    { op: 'add', type: 'cone', id: 'tip', name: 'Cap', params: { diameter: 26, top: 8, height: 14 }, mate: { to: 'boss', a: 'top', b: 'bottom' }, color: '#ff7b3d' }
+  ], 'Demo bracket');
+  apply([{ op: 'edge', target: 'plate', near: [-48, 0, 10], style: 'fillet', size: 8 }], 'Fillet inside corner');
+  apply([{ op: 'edge', target: 'plate', near: [60, -35, 5], style: 'chamfer', size: 3 }, { op: 'edge', target: 'plate', near: [-60, 0, 70], d: [0, 1, 0], style: 'fillet', size: 5 }, { op: 'edge', target: 'plate', near: [45, 22, 10], style: 'chamfer', size: 1.5 }], 'Round edges + countersink');
+  select(null); views.fitAll(); toast('Demo: union, holes, mates, an auto-filled inner fillet, trimmed outer edges and a countersink', 2600);
+}
+
+/* ---------- AI bridge (MCP) ---------- */
+const bridge = { token: (document.querySelector('meta[name="sketchflow-bridge"]') || {}).content || '', cid: 'm' + Math.random().toString(36).slice(2, 9) };
+async function post(path, body) { const r = await fetch(path + '?t=' + encodeURIComponent(bridge.token), { method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': bridge.token }, body: JSON.stringify(body) }); if (!r.ok) throw new Error('bridge ' + r.status); return r.json().catch(() => ({})); }
+function chip(on, t) { const c = $('#aiChip'); c.classList.toggle('live', on); c.querySelector('span').textContent = t; }
+function connectBridge() {
+  if (!bridge.token || !/^https?:$/.test(location.protocol)) { chip(false, 'AI off'); return; }
+  const es = new EventSource('/bridge/events?t=' + encodeURIComponent(bridge.token) + '&cid=' + bridge.cid + '&kind=model');
+  es.addEventListener('hello', () => chip(true, 'AI linked'));
+  es.addEventListener('role', (e) => { const d = JSON.parse(e.data); chip(true, d.primary ? 'AI linked' : 'AI on other tab'); });
+  es.addEventListener('cmd', async (e) => { const { id, cmd, args } = JSON.parse(e.data); try { await post('/bridge/reply', { id, ok: true, result: await runCmd(cmd, args || {}) }); } catch (err) { await post('/bridge/reply', { id, ok: false, error: String(err && err.message || err) }).catch(() => {}); } });
+  es.onerror = () => { chip(false, 'AI reconnecting'); es.close(); setTimeout(async () => { try { const h = await (await fetch(location.pathname, { cache: 'no-store' })).text(); const m = h.match(/name="sketchflow-bridge" content="([a-f0-9]+)"/); if (m) bridge.token = m[1]; } catch (err) { /* down */ } connectBridge(); }, 1500); };
+}
+const b64 = async (canvas) => { const blob = await new Promise(r => canvas.toBlob(r, 'image/png')); const u = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const r3 = (p) => p.map(v => +v.toFixed(3));
+function connectorReport(id) {
+  const O = model.result.originPoint;
+  if (id !== 'origin' && !model.result.world.has(id)) throw new Error('No placed object “' + id + '”');
+  return worldConnectors(model.result, id).map(c => ({ name: c.name, kind: c.kind, at: r3(V.sub(c.o, O)), normal: r3(c.n), u: r3(c.u), v: r3(V.cross(c.n, c.u)) }));
+}
+async function snapshotFor(a) {
+  const keep = { layout: views.layout, yaw: views.cam.yaw, pitch: views.cam.pitch, hidden: views.showHidden, dims: views.showDims };
+  const dirs = { front: [0, -1, 0], top: [0, 0, 1], right: [1, 0, 0], iso: [1, -1, 1], back: [0, 1, 0], left: [-1, 0, 0], bottom: [0, 0, -1] };
+  try {
+    if (a.layout) views.layout = a.layout;
+    if (a.view && dirs[a.view]) { const d = V.norm(dirs[a.view]); views.cam.yaw = Math.atan2(d[0], -d[1]) * 180 / Math.PI; views.cam.pitch = Math.asin(d[2]) * 180 / Math.PI; }
+    if (a.hidden_lines !== undefined) views.showHidden = !!a.hidden_lines;
+    if (a.dimensions !== undefined) views.showDims = !!a.dimensions;
+    if (a.fit !== false) views.fitAll();
+    views.draw(); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
+    const c = views.snapshot();
+    return { png: await b64(c), width: c.width, height: c.height };
+  } finally {
+    if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); views.draw(); }
+  }
+}
+async function runCmd(cmd, a) {
+  switch (cmd) {
+    case 'ping': return { ok: true };
+    case 'model.describe': { const d = model.describe(); if (a.connectors_of) d.connectors_detail = { [a.connectors_of]: connectorReport(a.connectors_of) }; return d; }
+    case 'model.connectors': return { id: a.id, connectors: connectorReport(a.id) };
+    case 'model.apply': {
+      const res = model.apply(a.ops || [], a.label || 'AI build', { relative: a.relative !== false });
+      if (a.select !== false) { const last = [...res].reverse().find(r => r && r.id && model.get(r.id)); if (last) select(last.id); }
+      if (a.fit !== false) views.fitAll();
+      toast('🤖 ' + (a.label || res.length + ' change' + (res.length === 1 ? '' : 's')), 1800);
+      const out = { results: res, model: model.describe() };
+      if (a.look) Object.assign(out, await snapshotFor(a));
+      return out;
+    }
+    case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
+    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : JSON.stringify(model.doc, null, 1) }; }
+    case 'model.select': select(a.id || null); return { selected };
+    case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
+    case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }
+    case 'model.new': model.load(newDoc(a.name || 'Untitled model')); select(null); views.fitAll(); return { model: model.describe() };
+    case 'model.load': { const doc = typeof a.doc === 'string' ? JSON.parse(a.doc) : a.doc; if (!doc || !Array.isArray(doc.objects)) throw new Error('Not a SketchFlow 3D model (needs objects[])'); model.load(Object.assign(newDoc(doc.name || 'Model'), doc)); select(null); views.fitAll(); return { model: model.describe() }; }
+    case 'model.demo': demo(); return { model: model.describe() };
+    case 'model.say': toast('🤖 ' + String(a.text || ''), Math.max(1500, (a.seconds || 6) * 1000)); return { ok: true };
+  }
+  throw new Error('Unknown command ' + cmd);
+}
+window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, demo, exportSTL, exportOBJ, runCmd };
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+/* the 2D board link only makes sense when both are served by the SketchFlow server */
+if (!bridge.token || !/^https?:$/.test(location.protocol)) { const a = document.querySelector('a[href="/"]'); if (a) a.remove(); }
+renderTree(); renderProps(); syncBar(); connectBridge();
+if (!model.doc.objects.length) demo();
+
+return { exportSTL, exportOBJ };
+})();
+
+</script>
+
+</html>

@@ -22,7 +22,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
 const ARGS = process.argv.slice(2);
 const SERVE_ONLY = ARGS.includes('--serve');
 const NO_OPEN = process.env.SKETCHFLOW_NO_OPEN === '1' || ARGS.includes('--no-open');
@@ -33,18 +33,19 @@ const PAIR = crypto.randomBytes(3).toString('hex');
 const log = (...a) => process.stderr.write('[sketchflow] ' + a.join(' ') + '\n');
 
 let PORT = 0;
-const clients = new Map();      /* cid -> {res, at} */
-let primary = null;
+const clients = new Map();      /* cid -> {res, at, kind} ; kind = 'board' (2D) | 'model' (3D) */
+const primaries = { board: null, model: null };
+const kindOf = (k) => (k === 'model' ? 'model' : 'board');
+const live = (kind) => { const p = primaries[kind]; return p && clients.has(p) ? p : null; };
 const pending = new Map();      /* request id -> {resolve, reject, timer} */
 let inbox = null;               /* last sketch the user pressed Send on */
 const sketchWaiters = new Set();
-let lastOpen = 0;
 
 /* ======================= HTTP + SSE bridge ======================= */
 const isLoop = (addr) => !addr || addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
 const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
 const sse = (c, event, data) => { try { c.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ } };
-const broadcastRoles = () => { for (const [cid, c] of clients) sse(c, 'role', { primary: cid === primary }); };
+const broadcastRoles = (kind) => { for (const [cid, c] of clients) if (c.kind === kind) sse(c, 'role', { primary: cid === primaries[kind] }); };
 function readBody(req, limit = 300 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []; let n = 0;
@@ -55,8 +56,8 @@ function readBody(req, limit = 300 * 1024 * 1024) {
 }
 const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 
-async function pageHtml() {
-  let html = await fsp.readFile(path.join(ROOT, 'index.html'), 'utf8');
+async function pageHtml(file = 'index.html') {
+  let html = await fsp.readFile(path.join(ROOT, file), 'utf8');
   html = html.replace('<meta name="sketchflow-bridge" content="">', `<meta name="sketchflow-bridge" content="${TOKEN}">`);
   /* index.html starts with head elements (title/meta/style), so the parser keeps them in <head> */
   return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n${html}\n</html>\n`;
@@ -75,9 +76,14 @@ const server = http.createServer(async (req, res) => {
       if (!local && url.searchParams.get('k') !== PAIR) return send(res, 403, `<p style="font:16px system-ui;padding:2em">Add the pairing code: <code>?k=…</code> (ask Claude to call <b>open_board</b> to see it).</p>`, 'text/html; charset=utf-8');
       return send(res, 200, await pageHtml(), 'text/html; charset=utf-8');
     }
-    const js = url.pathname.match(/^\/js\/([\w-]+\.js)$/);
+    if (req.method === 'GET' && url.pathname === '/3d') { res.writeHead(302, { location: '/3d/' + url.search }); return res.end(); }
+    if (req.method === 'GET' && (url.pathname === '/3d/' || url.pathname === '/3d/index.html')) {
+      if (!local && url.searchParams.get('k') !== PAIR) return send(res, 403, `<p style="font:16px system-ui;padding:2em">Add the pairing code: <code>?k=…</code> (ask Claude to call <b>open_model</b> to see it).</p>`, 'text/html; charset=utf-8');
+      return send(res, 200, await pageHtml(path.join('model', 'index.html')), 'text/html; charset=utf-8');
+    }
+    const js = url.pathname.match(/^\/(3d\/)?js\/([\w-]+\.js)$/);
     if (req.method === 'GET' && js) {
-      const f = path.join(ROOT, 'js', js[1]);
+      const f = path.join(ROOT, js[1] ? path.join('model', 'js') : 'js', js[2]);
       if (!fs.existsSync(f)) return send(res, 404, 'not found', 'text/plain');
       return send(res, 200, await fsp.readFile(f), 'text/javascript; charset=utf-8');
     }
@@ -88,11 +94,15 @@ const server = http.createServer(async (req, res) => {
         const cid = String(url.searchParams.get('cid') || crypto.randomUUID());
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
         res.write(': hi\n\n');
-        const c = { res, at: Date.now() }; clients.set(cid, c); primary = cid;
-        sse(c, 'hello', { primary: true, version: VERSION }); broadcastRoles();
+        const kind = kindOf(url.searchParams.get('kind'));
+        const c = { res, at: Date.now(), kind }; clients.set(cid, c); primaries[kind] = cid;
+        sse(c, 'hello', { primary: true, version: VERSION, kind }); broadcastRoles(kind);
         const ka = setInterval(() => { try { res.write(': ka\n\n'); } catch { /* closed */ } }, 20000);
-        req.on('close', () => { clearInterval(ka); clients.delete(cid); if (primary === cid) { primary = [...clients.keys()].pop() || null; broadcastRoles(); } });
-        log('board connected', cid);
+        req.on('close', () => {
+          clearInterval(ka); clients.delete(cid);
+          if (primaries[kind] === cid) { primaries[kind] = [...clients].filter(([, v]) => v.kind === kind).map(([k]) => k).pop() || null; broadcastRoles(kind); }
+        });
+        log(kind === 'model' ? '3D workspace connected' : 'board connected', cid);
         return;
       }
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -107,7 +117,7 @@ const server = http.createServer(async (req, res) => {
         for (const w of sketchWaiters) w(inbox); sketchWaiters.clear();
         return send(res, 200, { ok: true });
       }
-      if (url.pathname === '/bridge/claim') { if (clients.has(body.cid)) { primary = body.cid; broadcastRoles(); } return send(res, 200, { ok: true }); }
+      if (url.pathname === '/bridge/claim') { const c = clients.get(body.cid); if (c) { primaries[c.kind] = body.cid; broadcastRoles(c.kind); } return send(res, 200, { ok: true }); }
       return send(res, 404, { error: 'unknown bridge route' });
     }
     send(res, 404, 'not found', 'text/plain');
@@ -123,7 +133,8 @@ function listen(port, tries = 0) {
   });
 }
 const boardUrl = () => `http://localhost:${PORT}/`;
-const lanUrls = () => (LAN ? lanIPs().map(ip => `http://${ip}:${PORT}/?k=${PAIR}`) : []);
+const modelUrl = () => `http://localhost:${PORT}/3d/`;
+const lanUrls = (p = '/') => (LAN ? lanIPs().map(ip => `http://${ip}:${PORT}${p}?k=${PAIR}`) : []);
 
 function openBrowser(url) {
   if (NO_OPEN) return false;
@@ -135,22 +146,29 @@ function openBrowser(url) {
     child.on('error', () => { /* no browser launcher */ }); child.unref(); return true;
   } catch { return false; }
 }
-async function ensureBoard(waitMs = 20000) {
-  if (primary && clients.has(primary)) return;
-  if (Date.now() - lastOpen > 25000) { lastOpen = Date.now(); openBrowser(boardUrl()); }
+const lastOpenAt = { board: 0, model: 0 };
+async function ensureClient(kind, waitMs = 20000) {
+  if (live(kind)) return;
+  const url = kind === 'model' ? modelUrl() : boardUrl();
+  if (Date.now() - lastOpenAt[kind] > 25000) { lastOpenAt[kind] = Date.now(); openBrowser(url); }
   const t0 = Date.now();
-  while (Date.now() - t0 < waitMs) { if (primary && clients.has(primary)) return; await new Promise(r => setTimeout(r, 250)); }
-  throw new Error(`The SketchFlow board isn't open. Ask the user to open ${boardUrl()} in a browser${LAN ? ' (or on a tablet: ' + lanUrls().join(' , ') + ')' : ''}, then try again.`);
+  while (Date.now() - t0 < waitMs) { if (live(kind)) return; await new Promise(r => setTimeout(r, 250)); }
+  const what = kind === 'model' ? 'SketchFlow 3D workspace' : 'SketchFlow board';
+  throw new Error(`The ${what} isn't open. Ask the user to open ${url} in a browser${LAN ? ' (or on a tablet: ' + lanUrls(kind === 'model' ? '/3d/' : '/').join(' , ') + ')' : ''}, then try again.`);
 }
-async function board(cmd, args = {}, timeoutMs = 60000) {
-  await ensureBoard();
+const ensureBoard = (w) => ensureClient('board', w);
+const ensureModel = (w) => ensureClient('model', w);
+async function call(kind, cmd, args = {}, timeoutMs = 60000) {
+  await ensureClient(kind);
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`The board did not answer "${cmd}" in time.`)); }, timeoutMs);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`The ${kind === 'model' ? '3D workspace' : 'board'} did not answer "${cmd}" in time.`)); }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
-    sse(clients.get(primary), 'cmd', { id, cmd, args });
+    sse(clients.get(live(kind)), 'cmd', { id, cmd, args });
   });
 }
+const board = (cmd, args, t) => call('board', cmd, args, t);
+const model = (cmd, args, t) => call('model', 'model.' + cmd, args, t);
 
 /* ======================= MCP tools ======================= */
 const S = (props, req = []) => ({ type: 'object', properties: props, required: req, additionalProperties: false });
@@ -194,7 +212,7 @@ const itemSchema = {
 const TOOLS = [
   { name: 'open_board', description: 'Open the SketchFlow sketch board in the user\'s browser (if it is not already open) and report its address and status. Call this first.', inputSchema: S({}),
     run: async () => {
-      if (!(primary && clients.has(primary))) { lastOpen = Date.now(); openBrowser(boardUrl()); }
+      if (!live('board')) { lastOpenAt.board = Date.now(); openBrowser(boardUrl()); }
       try { await ensureBoard(15000); } catch (e) { return text(e.message + '\nBoard URL: ' + boardUrl()); }
       const i = await board('info');
       return text(`SketchFlow board is open at ${boardUrl()}${LAN ? '\nTablet/phone: ' + lanUrls().join('  ') : ''}\n` + JSON.stringify(i, null, 1));
@@ -248,6 +266,62 @@ const TOOLS = [
     } },
   { name: 'mechanism', description: 'Kinematics / linkages: every drawn item on the active layer is a rigid link; joints shared by two items are pin joints. Pin joints to ground, put a motor on a link (rotating about a pivot joint), trace joints, then simulate (returns joint paths and whether it locks) and/or play the animation for the user. Build the links with draw first (exact shared coordinates = pin joints).', inputSchema: S({ pins: { type: 'array', items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] } }, motors: { type: 'array', items: { type: 'object', properties: { item: { type: 'string', description: 'id of the link that is driven' }, pivot_x: { type: 'number' }, pivot_y: { type: 'number' }, rpm: { type: 'number' } }, required: ['item', 'pivot_x', 'pivot_y'] } }, traces: { type: 'array', items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] } }, watch: { type: 'array', description: 'joints whose paths to return', items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] } }, steps: { type: 'integer', description: 'samples per motor turn (default 72)' }, simulate: { type: 'boolean' }, play: { type: 'boolean' }, clear: { type: 'boolean' } }),
     run: async (a) => json(await board('mechanism', a)) },
+  /* ---------------- 3D parametric model workspace (/3d/) ---------------- */
+  { name: 'open_model', description: 'Open the SketchFlow 3D workspace (parametric solids shown in 4 linked views: TOP | 3D / FRONT | RIGHT) in the user\'s browser and describe the current model. Call this before the other model_* tools.', inputSchema: S({}),
+    run: async () => {
+      if (!live('model')) { lastOpenAt.model = Date.now(); openBrowser(modelUrl()); }
+      try { await ensureModel(15000); } catch (e) { return text(e.message + '\n3D workspace URL: ' + modelUrl()); }
+      const d = await model('describe');
+      return text(`SketchFlow 3D is open at ${modelUrl()}${LAN ? '\nTablet/phone: ' + lanUrls('/3d/').join('  ') : ''}\n` + JSON.stringify(d, null, 1));
+    } },
+  { name: 'model_build', description: 'Build or change the 3D model with a batch of operations (atomic: all apply or none, one undo step for the user). Same operations the UI uses. Returns per-op results (new ids, edge convexity) and the model summary; look:true also returns a picture of the 4 views. See the server instructions for the op list, connector names and mate rules.', inputSchema: S({
+      ops: { type: 'array', description: 'Operations, applied in order. Each is an object with "op": add | set | mate | unmate | boolean | separate | edge | extrude | loft | revolve | sweep | delete | origin | ground | fix | cleanup | dim | undim | rename.', items: { type: 'object', additionalProperties: true, properties: { op: { type: 'string', enum: ['add', 'set', 'mate', 'unmate', 'boolean', 'separate', 'edge', 'extrude', 'loft', 'revolve', 'sweep', 'delete', 'origin', 'ground', 'fix', 'cleanup', 'dim', 'undim', 'rename'] } }, required: ['op'] } },
+      label: { type: 'string', description: 'Undo-history label the user sees, e.g. "Add mounting holes"' },
+      look: { type: 'boolean', description: 'also return a PNG of the views after building (default false)' },
+      layout: { type: 'string', enum: ['4', '3d', 'top', 'front', 'right'], description: 'with look: which view(s) to picture' },
+      relative: { type: 'boolean', description: 'positions (at, near) are measured from the model origin, like model_describe reports them (default true)' },
+      fit: { type: 'boolean', description: 'zoom the user\'s views to fit afterwards (default true)' }
+    }, ['ops']),
+    run: async (a) => {
+      const r = await model('apply', { ops: a.ops, label: a.label, look: !!a.look, layout: a.layout, relative: a.relative, fit: a.fit });
+      const summary = text(JSON.stringify({ results: r.results, model: r.model }, null, 1));
+      if (r.png) summary.content.unshift({ type: 'image', data: r.png, mimeType: 'image/png' });
+      return summary;
+    } },
+  { name: 'model_describe', description: 'Read the 3D model: objects (id, type, parameters, position from the origin, mate, boolean role, connector names), bodies (volume, bounding box), warnings (floating / orphaned / empty / errors). connectors_of gives one object\'s connectors with positions and outward normals — use it to pick mate targets and edge points.', inputSchema: S({ connectors_of: { type: 'string', description: 'object id (or "origin")' } }),
+    run: async (a) => json(await model('describe', a)) },
+  { name: 'model_view', description: 'See the 3D model: returns a PNG of the linked views (default all four: TOP top-left, 3D top-right, FRONT bottom-left, RIGHT bottom-right, third-angle) with carried dimensions and dashed hidden edges, plus the model summary. The user\'s own view is restored afterwards.', inputSchema: S({
+      layout: { type: 'string', enum: ['4', '3d', 'top', 'front', 'right'], description: 'default 4' },
+      view: { type: 'string', enum: ['iso', 'front', 'top', 'right', 'back', 'left', 'bottom'], description: 'direction of the 3D pane camera' },
+      hidden_lines: { type: 'boolean' }, dimensions: { type: 'boolean' },
+      keep: { type: 'boolean', description: 'leave the user\'s screen on this view (default false)' }
+    }),
+    run: async (a) => {
+      const r = await model('snapshot', a);
+      return { content: [{ type: 'image', data: r.png, mimeType: 'image/png' }, { type: 'text', text: `Image ${r.width}x${r.height}.\n` + JSON.stringify(r.model) }] };
+    } },
+  { name: 'model_session', description: 'Model-level actions: undo / redo (steps), new (name), demo (load the bracket example), load (a .sf3d.json file path or a doc object), select (id, highlights it for the user), say (short message shown to the user).', inputSchema: S({ action: { type: 'string', enum: ['undo', 'redo', 'new', 'demo', 'load', 'select', 'say'] }, steps: { type: 'integer' }, name: { type: 'string' }, path: { type: 'string' }, doc: { type: 'object' }, id: { type: 'string' }, text: { type: 'string' }, seconds: { type: 'integer' } }, ['action']),
+    run: async (a) => {
+      if (a.action === 'load') {
+        let doc = a.doc;
+        if (a.path) doc = JSON.parse(await fsp.readFile(a.path.replace(/^~(?=$|\/|\\)/, os.homedir()), 'utf8'));
+        if (!doc) throw new Error('Give path or doc');
+        return json(await model('load', { doc }));
+      }
+      return json(await model(a.action, a));
+    } },
+  { name: 'model_export', description: 'Save the 3D model to disk: stl (mesh for printing/slicers), obj (mesh, one object per body), json (.sf3d.json, the editable parametric model). Coordinates are mm from the model origin. Returns the file paths.', inputSchema: S({ formats: { type: 'array', items: { type: 'string', enum: ['stl', 'obj', 'json'] } }, dir: { type: 'string', description: 'folder (default ~/Pictures/SketchFlow)' } }),
+    run: async (a) => {
+      const base = a.dir ? a.dir.replace(/^~(?=$|\/|\\)/, os.homedir()) : defaultExportDir();
+      await fsp.mkdir(base, { recursive: true });
+      const written = [];
+      for (const f of (a.formats && a.formats.length ? a.formats : ['stl', 'json'])) {
+        const r = await model('export', { format: f }, 120000);
+        const out = path.join(base, r.name.replace(/(\.[\w.]+)$/, '-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '$1'));
+        await fsp.writeFile(out, r.text, 'utf8'); written.push(out);
+      }
+      return text('Saved ' + written.length + ' file(s):\n' + written.join('\n'));
+    } },
   { name: 'say', description: 'Show a short speech bubble from you on the board (does not draw).', inputSchema: S({ text: { type: 'string' }, seconds: { type: 'integer', description: '0 = until dismissed (default 20)' } }, ['text']),
     run: async (a) => json(await board('say', a)) }
 ];
@@ -275,7 +349,19 @@ const INSTRUCTIONS = `SketchFlow is a live vector sketch board the user draws on
 - drawing_space sets isometric, 1/2/3-point perspective, 3-view or 4-view layouts; draw along those directions.
 - Dimensions are parametric: edit_items set_dimension changes geometry to match.
 - For "make this move like this": build links with draw (shared endpoints = pin joints), then mechanism with pins + a motor, simulate to check the joint paths, and play to show the user.
-- Everything you do is undoable by the user (board undo).`;
+- Everything you do is undoable by the user (board undo).
+
+3D PARAMETRIC MODEL (open_model, model_build, model_describe, model_view, model_session, model_export) — a separate page at /3d/ with 4 linked views (TOP | 3D / FRONT | RIGHT). Units mm. Z is up, X right, -Y towards the viewer (front).
+Every object is a shape + its own parameters in its own local frame; its place comes from a mate to another object's connector (or a fixed pose). The world origin is ephemeral: by default the bottom of the ground object (the first one); "origin" can move it. All positions you send/receive are measured from it.
+Shapes (op add, type + params): box {width,depth,height} (base-centred, sits on z=0), wedge {width,depth,height} (slope falls toward +x), cylinder {diameter,height}, cone {diameter,top,height} (top 0 = point), sphere {diameter}, fillet {size,length,style:fillet|weld|chamfer} (an edge strip you place yourself).
+Features: extrude {profile:[[x,y],...], length, twist (deg), scale (end size ratio, gives a loft/taper), direction [x,y,z]}; loft {profile, profile2 (same or different point count), length, twist}; revolve {profile:[[r,z],...], degrees} around the object's local Z; sweep {profile, path:[[x,y,z],...]}. face:{obj,conn} starts the feature on that face and keeps it attached.
+Connectors (mate targets): box: top, bottom, front (-y), back, left (-x), right, center, corners corner±x±y±z (e.g. corner-x-y-z = bottom-left-front), edge midpoints edge:top-front, edge:bottom-left, edge:front-right … (wedge: slope instead of top/right, no edge:*). Round shapes: bottom, top (cone: apex), center, side+x, side-x, side+y, side-y. Fillet strip: edge, leg-x, leg-z, end-a, end-b. Features: start, end, center, top, bottom, bbox+x/-x/+y/-y/+z/-z. World: origin, xy, xz, yz. model_describe connectors_of gives positions + normals.
+Mate: {op:'mate', id, to, a: target connector, b: own connector, offset (gap along the target connector's outward normal; negative = sink in), slide:[u,v] (move along the target face, along its u and v axes; on a top face u=+x, v=+y — connectors_of lists u and v for every connector), angle (spin about the normal, deg), flip}. Face-to-face mates flip automatically so faces touch. "add" accepts mate:{to,a,b,...} inline; with no mate and no "at" a new object sits on top of the ground object.
+Booleans: add with into:"targetId" + mode:"subtract"|"add"|"intersect" (or op boolean {target, tool, mode}); tools stay editable parametric objects (separate undoes it). A through-hole = {op:'add', type:'cylinder', params:{diameter:8, height: thickness+2}, mate:{to:'plate', a:'top', b:'top', flip:false, offset:1, slide:[x,y]}, into:'plate', mode:'subtract'} (its top sits 1 mm above the plate top and it reaches 1 mm below the bottom, so it cuts clean through).
+Edges: {op:'edge', target, near:[x,y,z] (a point on the edge), style:'fillet'|'weld'|'chamfer', size}. The edge is found on the finished body; convex (outside) edges are trimmed, concave (inside corner) edges are filled — automatically, by the angle between the faces (override with mode add/subtract). Round edges (a flat face meeting a cylinder/cone/revolve: disc rims, hole rims, boss bases) are treated all the way round — e.g. chamfer a hole rim = countersink, fillet a boss base = filled. The edge is remembered by the two surfaces it lies between, so it is re-found after parameter changes.
+Other ops: set {id, params, name, color, at, rot, hidden, fixed}; delete {id}; ground {id}; origin {obj, conn}; fix {id} (freeze current place, drop mate); cleanup {fixFloating} (repairs orphans: tools or edges whose target is gone, mates to deleted objects); dim {a:{obj,conn}, b:{obj,conn}, view} (a measured dimension between connectors); rename {name}.
+Every object's own parameters are shown as editable dimensions in the 2D views; the user can click one to change it, and mates keep everything attached. Warnings list floating (unmated, not fixed) and orphaned objects — fix them or tell the user.
+Workflow: open_model → model_build (one batch per idea, with a clear label, look:true when it helps) → model_view to check → adjust with set/mate. Errors name the valid connectors/objects; the whole batch is rolled back on any error.`;
 function out(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 async function handle(msg) {
   const { id, method, params } = msg;
@@ -283,7 +369,7 @@ async function handle(msg) {
   try {
     if (method === 'initialize') {
       const want = params && params.protocolVersion;
-      return isReq && out({ jsonrpc: '2.0', id, result: { protocolVersion: SUPPORTED.includes(want) ? want : SUPPORTED[1], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sketchflow', title: 'SketchFlow sketch board', version: VERSION }, instructions: INSTRUCTIONS } });
+      return isReq && out({ jsonrpc: '2.0', id, result: { protocolVersion: SUPPORTED.includes(want) ? want : SUPPORTED[1], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sketchflow', title: 'SketchFlow sketch board + 3D model', version: VERSION }, instructions: INSTRUCTIONS } });
     }
     if (method === 'notifications/initialized' || method === 'notifications/cancelled' || (method && method.startsWith('notifications/'))) return;
     if (method === 'ping') return isReq && out({ jsonrpc: '2.0', id, result: {} });

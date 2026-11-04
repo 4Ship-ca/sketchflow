@@ -4050,6 +4050,8 @@ function buildHub() {
       tile('rect', 'A4 · 300 dpi', '3508 × 2480', () => ui.newBoard(3508, 2480)),
       tile('image', 'Import image', 'Photo, scan or screenshot · cut-out', () => { ui.closeAll(); $('#fileIn').click(); }),
       tile('file', 'Open board file', '.sketchflow · .json · .ora', () => { ui.closeAll(); $('#openIn').click(); }));
+    /* v2: the parametric 3D workspace lives next to the board when SketchFlow is served by its MCP server */
+    if (/^https?:$/.test(location.protocol) && ((document.querySelector('meta[name="sketchflow-bridge"]') || {}).content || '')) tiles.append(tile('box', '3D model · 4 views', 'Parametric solids, mates, booleans', () => { location.href = '/3d/'; }));
     p.append(tiles);
     h4('Custom size');
     const w = el('input', { type: 'number', value: SF.doc.w, min: 64, max: 8192 }), hh = el('input', { type: 'number', value: SF.doc.h, min: 64, max: 8192 });

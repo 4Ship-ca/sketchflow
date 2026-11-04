@@ -4,13 +4,16 @@ A vector sketch board for fast idea capture. You draw with a mouse, stylus or fi
 
 Everything you draw stays editable: lines, shapes and text are vectors. Endpoints and corners **snap together and join**, and joined points move together when you drag them. On top of that you get drawing spaces (isometric, 1/2/3-point perspective, 3-view and 4-view), parametric dimensions, layers, collage and tracing, background cut-out, and a first linkage/motion simulator.
 
+**v2 adds a parametric 3D model workspace** at `/3d/`. You build solids from primitives, sketch-and-extrude, loft, revolve and sweep, then combine them with mates and booleans. Fillets and chamfers decide for themselves whether to add or remove material. The model is shown in four linked views (TOP · 3D · FRONT · RIGHT) that carry each object's dimensions, and you can edit those dimensions in place. The AI builds with the same operations through six `model_*` MCP tools. See [model/ARCHITECTURE.md](model/ARCHITECTURE.md). The 2D board is unchanged: it is frozen as **v1** (git tag `v1.5.0`, branch `v1`).
+
 ```
 sketchflow/
-├── index.html        UI + styles
+├── index.html        2D board UI + styles (v1)
 ├── js/               core · render · tools · input · ui · io · motion · bridge
-├── server.mjs        MCP server + local web server (Node 18+, zero dependencies)
+├── model/            3D workspace (v2): index.html, js/kernel · model · views · app, tests, ARCHITECTURE.md
+├── server.mjs        MCP server + local web server (Node 18+, zero dependencies): / = board, /3d/ = model
 ├── build.mjs         makes single-file versions in dist/
-└── dist/sketchflow.html   double-click to use offline (no AI link)
+└── dist/             sketchflow.html · sketchflow-3d.html — double-click to use offline (no AI link)
 ```
 
 ## 1 · Run it with Claude (MCP)
@@ -74,6 +77,28 @@ Other settings: `SKETCHFLOW_PORT` (default 7777), `SKETCHFLOW_NO_OPEN=1` (don't 
 - `export`
 - `mechanism`
 - `say`
+
+### 3D models with Claude
+
+Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, Ø20 bore, four Ø7 holes on a 58 mm circle, 1 mm chamfer on the rim"*. Claude opens **http://localhost:7777/3d/** and builds it in one undoable step. You watch it appear in all four views. Then change any dimension yourself, and everything mated to it follows.
+
+| Tool | What it does |
+|---|---|
+| `open_model` | open the 3D workspace and read the model |
+| `model_build` | add / set / mate / boolean / edge / extrude / loft / revolve / sweep / delete / origin / ground / fix / cleanup / dim, as one atomic batch; `look:true` returns a picture |
+| `model_describe` | parameters, positions from the origin, mates, connector names (with positions and normals on request), volumes, warnings |
+| `model_view` | a picture of the four views or one view, from any direction |
+| `model_session` | undo, redo, new, demo, load a `.sf3d.json`, select, say |
+| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json` |
+
+**In the browser:**
+- Add a shape with the toolbar (B box, W wedge, C cylinder, K cone, O sphere).
+- *Profile* (S): click points in FRONT, TOP or RIGHT, close the shape, then type a length, twist or end scale and choose Extrude, Revolve or Loft. Loft asks you to sketch the end profile.
+- *Mate* (M): click the part, then its connector, then the target connector.
+- *Union / Subtract / Intersect*: click the target, then the tool.
+- *Fillet / Weld / Chamfer*: set the size and click near an edge. Outer edges are trimmed and inner corners are filled; round edges get the treatment all the way round.
+- Click any orange dimension in the 2D views to change it.
+- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors.
 
 ## 2 · Or just draw
 
@@ -225,5 +250,13 @@ These build on the same joint model:
 - an animation timeline (keyframes of joint positions, onion skin)
 - smart connectors that stay attached to shapes
 - slider and prismatic joints, gears and springs in the motion solver
-- a 3D model derived from the 3-view drawing into the 4th viewport, and importing glTF/OBJ to project into the views
-- geometric constraints (parallel, perpendicular, equal length) alongside dimensions
+- geometric constraints (parallel, perpendicular, equal length) alongside dimensions, shared with the 3D profile sketcher
+- sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): variables, patterns, shell / holes, moving mates for the motion simulator, assemblies, configurations, STEP
+
+## Tests
+
+```bash
+node model/test/kernel.test.mjs && node model/test/model.test.mjs   # 3D kernel + parametric model
+node build.mjs                                                      # rebuild dist/
+```

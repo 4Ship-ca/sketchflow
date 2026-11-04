@@ -1,0 +1,125 @@
+<title>SketchFlow 3D</title>
+<meta name="sketchflow-bridge" content="">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: toolbar across the top, feature tree left, four linked viewports centre, properties right. Dark graphite first. */
+:root{
+  --bg:#f1efea; --panel:#ffffff; --panel-2:#f7f6f3; --line:#dcd8d0; --ink:#1d1c1a; --ink-2:#5f5b55; --ink-3:#8f8a82;
+  --accent:#e8672c; --accent-ink:#ffffff; --ai:#14a394; --cool:#3567d6; --warn:#c8372d; --ok:#2f9a5d; --hover:#00000010; --sel:#e8672c22;
+  --f-ui:"Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --f-brand:"Bricolage Grotesque", "Figtree", system-ui, sans-serif; --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#141519; --panel:#1c1e23; --panel-2:#22252b; --line:#30333b; --ink:#ecebe8; --ink-2:#a9a7a2; --ink-3:#73726f; --accent:#ff7b3d; --accent-ink:#1a1206; --ai:#3fd0bf; --cool:#7aa2ff; --warn:#ff6b5e; --ok:#5ad08c; --hover:#ffffff10; --sel:#ff7b3d26; color-scheme: dark; } }
+:root[data-theme="dark"]{ --bg:#141519; --panel:#1c1e23; --panel-2:#22252b; --line:#30333b; --ink:#ecebe8; --ink-2:#a9a7a2; --ink-3:#73726f; --accent:#ff7b3d; --accent-ink:#1a1206; --ai:#3fd0bf; --cool:#7aa2ff; --warn:#ff6b5e; --ok:#5ad08c; --hover:#ffffff10; --sel:#ff7b3d26; color-scheme: dark; }
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:500 13px/1.35 var(--f-ui);-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit}
+#app{display:grid;grid-template-columns:240px 1fr 280px;grid-template-rows:auto 1fr;height:100%}
+#bar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px max(10px, env(safe-area-inset-right,0px)) 8px max(10px, env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;row-gap:6px}
+#bar::-webkit-scrollbar{display:none}
+.brand{font:700 15px/1 var(--f-brand);letter-spacing:-.02em;display:flex;align-items:center;gap:7px;white-space:nowrap;margin-right:4px}
+.brand i{width:12px;height:12px;border-radius:3px;background:var(--accent);transform:rotate(12deg) skewX(-8deg);display:block;box-shadow:3px 3px 0 var(--ai)}
+.grp{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--panel-2);flex:none}
+.grp .lbl{font:700 9.5px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);align-self:center;padding:0 5px}
+.tb{border:0;background:transparent;border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12.5px/1 var(--f-ui);display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink)}
+.tb svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tb:hover{background:var(--hover)} .tb.on{background:var(--accent);color:var(--accent-ink)} .tb[disabled]{opacity:.35;pointer-events:none}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 10px 5px 8px;font:600 11.5px/1 var(--f-ui);color:var(--ink-2);white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)} .chip.live{color:var(--ai);border-color:color-mix(in srgb, var(--ai) 50%, var(--line))} .chip.live i{background:var(--ai)}
+#name{border:0;background:transparent;color:var(--ink-2);font:600 13px var(--f-ui);padding:5px 6px;border-radius:7px;width:140px}
+#name:focus{outline:2px solid var(--accent);background:var(--panel)}
+aside{background:var(--panel);overflow:auto;display:flex;flex-direction:column;min-width:0}
+#tree{border-right:1px solid var(--line)} #props{border-left:1px solid var(--line)}
+aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:flex;align-items:center;justify-content:space-between}
+.row{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:center;padding:6px 10px 6px 12px;cursor:pointer;border-left:3px solid transparent}
+.row:hover{background:var(--hover)} .row.on{background:var(--sel);border-left-color:var(--accent)}
+.row .ic{width:20px;height:20px;display:grid;place-items:center;color:var(--ink-2)} .row .ic svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+.row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.row .sub{font:500 10.5px/1.2 var(--f-mono);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.tool{padding-left:28px} .row.tool .nm{font-weight:500}
+.badge{font:700 10px/1 var(--f-ui);padding:3px 6px;border-radius:6px;background:var(--hover);color:var(--ink-2)}
+.badge.w{background:color-mix(in srgb, var(--warn) 18%, transparent);color:var(--warn)} .badge.sub{background:color-mix(in srgb, var(--cool) 18%, transparent);color:var(--cool)} .badge.add{background:color-mix(in srgb, var(--ok) 18%, transparent);color:var(--ok)}
+#warn{margin:10px;border:1px solid color-mix(in srgb, var(--warn) 40%, var(--line));border-radius:10px;padding:10px;font-size:12px;color:var(--ink-2);display:flex;flex-direction:column;gap:6px}
+#warn b{color:var(--warn)}
+#stage{position:relative;overflow:hidden;min-width:0;touch-action:none}
+#gl,#ov{position:absolute;inset:0;display:block}
+#ov{pointer-events:none}
+#hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font:600 12.5px/1.3 var(--f-ui);box-shadow:0 6px 20px #0000003a;display:flex;gap:10px;align-items:center;max-width:90%;z-index:5;flex-wrap:wrap;justify-content:center}
+#hint .hf{display:flex;align-items:center;gap:4px;font:600 11px var(--f-ui);color:var(--ink-2);white-space:nowrap}
+#hint .hf input{width:56px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-mono);-webkit-user-select:text;user-select:text}
+#hint button{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:5px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
+.sec{padding:4px 14px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid var(--line)}
+.sec h4{margin:8px 0 2px;font:700 10px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.f{display:grid;grid-template-columns:86px 1fr;gap:8px;align-items:center;font-size:12px;color:var(--ink-2)}
+.f input,.f select,.f textarea{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 7px;font:500 12px var(--f-mono);min-width:0;width:100%;box-sizing:border-box;-webkit-user-select:text;user-select:text}
+.f textarea{min-height:70px;resize:vertical}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:6px 10px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink)}
+.btn:hover{border-color:var(--accent)} .btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .btn.danger:hover{border-color:var(--warn);color:var(--warn)}
+.empty{padding:16px;color:var(--ink-3);font-size:12.5px;line-height:1.5}
+#dimEd{position:absolute;z-index:8;width:90px;font:600 13px var(--f-mono);border:2px solid var(--accent);border-radius:8px;padding:4px 7px;background:var(--panel);color:var(--ink)}
+#toasts{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:20;pointer-events:none;align-items:center}
+.toast{background:var(--ink);color:var(--bg);padding:8px 13px;border-radius:10px;font:600 12.5px var(--f-ui);box-shadow:0 6px 20px #0000003a}
+.menu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px #0000004a;padding:5px;display:flex;flex-direction:column;min-width:170px}
+.menu button{text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)}
+.menu button:hover{background:var(--hover)}
+@media (max-width: 1640px){ .grp .lbl{display:none} #name{width:110px} }
+@media (max-width: 1380px){ .tb[data-icon]{font-size:0;gap:0;padding:7px} .brand{font-size:0;gap:0} }
+@media (max-width: 900px){ #bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none} #bar::-webkit-scrollbar{display:none} #name{width:90px} #app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto} #tree{display:none} #props{max-height:34vh;border-left:0;border-top:1px solid var(--line)} }
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div id="app">
+  <header id="bar">
+    <div class="brand"><i></i>SketchFlow 3D</div>
+    <input id="name" value="Model" aria-label="Model name" spellcheck="false">
+    <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
+    <div class="grp"><span class="lbl">Add</span>
+      <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
+      <button class="tb" data-add="wedge" title="Wedge / triangle prism (W)" data-icon="wedge">Wedge</button>
+      <button class="tb" data-add="cylinder" title="Cylinder (C)" data-icon="cylinder">Cyl</button>
+      <button class="tb" data-add="cone" title="Cone (K)" data-icon="cone">Cone</button>
+      <button class="tb" data-add="sphere" title="Sphere (O)" data-icon="sphere">Sphere</button>
+      <button class="tb" data-add="fillet" title="Fillet strip (a triangle with an arc hypotenuse)" data-icon="fillet">Fillet</button>
+    </div>
+    <div class="grp"><span class="lbl">Sketch</span>
+      <button class="tb" data-tool="sketch" title="Sketch a profile in a FRONT / TOP / RIGHT view (S)" data-icon="sketch">Profile</button>
+    </div>
+    <div class="grp"><span class="lbl">Relate</span>
+      <button class="tb" data-tool="mate" title="Mate: connector to connector (M)" data-icon="mate">Mate</button>
+      <button class="tb" data-tool="bool-add" title="Union: target, then tool" data-icon="union">Union</button>
+      <button class="tb" data-tool="bool-subtract" title="Subtract: target, then tool" data-icon="subtract">Subtract</button>
+      <button class="tb" data-tool="bool-intersect" title="Intersect: target, then tool" data-icon="intersect">Intersect</button>
+    </div>
+    <div class="grp"><span class="lbl">Edge</span>
+      <button class="tb" data-tool="edge-fillet" title="Fillet an edge (rounds outer edges, fills inner corners)" data-icon="fillet">Fillet</button>
+      <button class="tb" data-tool="edge-weld" title="Weld bead in an inside corner" data-icon="weld">Weld</button>
+      <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
+    </div>
+    <div class="grp"><button class="tb" data-tool="measure" title="Measure / add a dimension between connectors (G)" data-icon="dim">Measure</button></div>
+    <div class="grp">
+      <button class="tb" id="undo" title="Undo (Ctrl Z)" data-icon="undo"></button>
+      <button class="tb" id="redo" title="Redo (Ctrl Shift Z)" data-icon="redo"></button>
+    </div>
+    <div class="grp">
+      <button class="tb" id="layout" title="1 view / 4 views (0–4)" data-icon="grid"></button>
+      <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
+      <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
+      <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
+      <button class="tb" id="theme" title="Light / dark" data-icon="sun"></button>
+    </div>
+    <div class="grp">
+      <button class="tb" id="fileBtn" title="Open, save, export" data-icon="file">File</button>
+      <a class="tb" href="/" title="2D sketch board (v1)" data-icon="board" style="text-decoration:none">2D</a>
+    </div>
+  </header>
+  <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<input type="file" id="openIn" hidden accept=".json,.sf3d,application/json">
+<script type="module" src="js/app.js"></script>
