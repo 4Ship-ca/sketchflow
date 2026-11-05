@@ -218,7 +218,7 @@ export function holeSpec(p) {
 function buildHole(p) {
   const h = holeSpec(p), r = h.d / 2, depth = p.kind === 'insert' && !p.through ? (+p.depth || h.insertDepth) : Math.max(0.5, +p.depth || 10);
   const seg = 48, up = 1, tr = (sol, z) => sol.transform(M4.translate([0, 0, z]));
-  if (p.kind === 'tapped' && p.modelled && h.pitch) {
+  if (p.kind === 'tapped' && p.modelled && !p.cosmetic && h.pitch) {
     /* a modelled internal thread: the tool is the mating bolt's shape (plus clearance), entered at the full diameter */
     const d = +String(p.size).slice(1), P = h.pitch, fn = threadR(d, P, { clear: 0.1, left: !!p.left_hand }), Rm = d / 2 + 0.1, tip = (h.tap / 2) / Math.tan(59 * Math.PI / 180);
     const st = [];
@@ -366,7 +366,7 @@ function threadStations(za, zb, P, fn, extra) {
 const hexR = (af) => (t) => (af / 2) / Math.cos(((t % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3) - Math.PI / 6);
 const flatSid = (j, N) => 'flat' + (Math.floor((2 * Math.PI * (j + 0.5) / N) / (Math.PI / 3)) % 6);   /* hexR has its corners at 0°, 60°…: flat k spans 60k°…60(k+1)° */
 function buildCylinder(p) {
-  const R = p.diameter / 2, H = +p.height, thr = p.thread && p.thread !== 'none', bore = +p.bore || 0;
+  const R = p.diameter / 2, H = +p.height, thr = p.thread && p.thread !== 'none' && !p.cosmetic, bore = +p.bore || 0;   /* cosmetic: the thread left plain (exports) */
   if (!(R > 0 && H > 0)) throw new Error('diameter and height must be above 0');
   if (!thr && !bore) return K.cylinder(R, R, H, p.segments || SEG);
   if (bore >= p.diameter) throw new Error('the bore must be smaller than the diameter');
@@ -385,7 +385,7 @@ function buildCylinder(p) {
 function buildBolt(p) {
   const T = threadSize(p.size), d = T.d, P = T.p, L = +p.length; if (!(L > 0)) throw new Error('length must be above 0');
   const Lt = +p.thread_length > 0 ? Math.min(L, +p.thread_length) : L, R = d / 2, N = threadN(d), fn = threadR(d, P, { z0: 0, left: !!p.left_hand });
-  const st = threadStations(0, Lt, P, fn);
+  const st = p.cosmetic ? [{ z: 0, r: () => R, sid: 'thread' }, { z: Lt, r: () => R, sid: 'thread' }] : threadStations(0, Lt, P, fn);
   if (Lt < L) st.push({ z: Lt, r: () => R, sid: 'shank' }, { z: L, r: () => R, sid: 'shank' });
   if (p.head === 'socket') {
     const rk = T.dk / 2, k = d, dep = Math.min(k * 0.6, k - 0.5), hs = hexR(T.s);
@@ -417,13 +417,24 @@ function buildNut(p) {
   const shape = p.shape || 'hex', od = +p.od > 0 ? +p.od : (T ? T.af / Math.cos(Math.PI / 6) : d * 1.8);
   if (od / 2 <= Rm + 0.5) throw new Error(`an outside of Ø${od} leaves no wall round a ${d} thread`);
   const outer = shape === 'round' ? () => od / 2 : shape === 'knurled' ? (t) => od / 2 - Math.min(0.6, od * 0.02) * Math.abs(Math.sin(Math.round(od * 1.2) * t / 2)) : hexR(T ? T.af : od * Math.cos(Math.PI / 6));
-  const st = threadStations(0, m, P, fn, (z) => ({ r: outer, ri: bore(z), sid: shape === 'knurled' ? 'knurl' : 'outer', sidIn: 'thread', flat: shape === 'hex' }));
+  const st = p.cosmetic ? [0, m].map(z => ({ z, r: outer, ri: () => (d - 1.0825 * P) / 2, sid: shape === 'knurled' ? 'knurl' : 'outer', sidIn: 'thread', flat: shape === 'hex' }))   /* cosmetic: a plain bore at the minor diameter */
+    : threadStations(0, m, P, fn, (z) => ({ r: outer, ri: bore(z), sid: shape === 'knurled' ? 'knurl' : 'outer', sidIn: 'thread', flat: shape === 'hex' }));
   return K.radialSolid(Math.max(threadN(d), shape === 'knurled' ? 96 : 36), st, { sidFlat: shape === 'hex' ? flatSid : null });
 }
 /* a loft with sections or guides (otherwise the plain two-profile loft, unchanged) */
 const loftIsMulti = (p) => (Array.isArray(p.sections) && p.sections.length > 0) || (Array.isArray(p.guides) && p.guides.length > 0);
 /* the loft's sections: the profile at 0, the ones given in between, its end at length (profile2 or the profile; a section at
    z = length restyles it) */
+/* a copy of the document with every modelled thread left plain (bolts and threaded cylinders at their major diameter, nuts
+   and tapped holes at the tap-drill size) — how CAD systems exchange threads, and a much smaller file */
+export function cosmeticThreads(doc) {
+  const d = JSON.parse(JSON.stringify(doc)); let n = 0;
+  for (const o of d.objects) {
+    const p = o.params || {};
+    if (o.type === 'bolt' || o.type === 'nut' || (o.type === 'cylinder' && p.thread && p.thread !== 'none') || (o.type === 'hole' && p.kind === 'tapped' && p.modelled)) { p.cosmetic = true; n++; }
+  }
+  return { doc: d, count: n };
+}
 export function loftStations(p, A) {
   A = A || expandArcs(p.profile, p.arcs, { splines: p.splines }).pts;
   const L = +p.length; if (!(L > 0)) throw new Error('length must be above 0');

@@ -91,11 +91,11 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
-| `model_import` | an STL / OBJ file from disk as a mesh part |
+| `model_import` | an STL, OBJ or STEP file from disk as mesh parts (STEP: planar faces, each solid kept in place) |
 | `model_check` | interference (which parts overlap, by how much, exact for moderate parts) and a motion sweep that reports the first contact of a joint |
 | `model_query` | geometry questions: every face of a part with the connector name to target it by, its normal, centre and area; edges; distances and angles between faces; section areas; bounding boxes |
 | `model_reference` | the op reference: every op in one line, or one op / topic in full with a worked example (works without the browser) |
-| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
+| `model_export` | **STEP** (AP214 solids for CAD, vetted before it is saved), STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
 
 **The pump housing example** ([examples/](examples/README.md)). Claude built it in one session using nothing but MCP calls. Load it from File → *Example: Pump housing*, or with `model_session {action:"example", id:"pump-housing"}`. It shows:
 - a fully constrained flange sketch, with arcs, tangents, equal radii and driving dimensions (0 degrees of freedom);
@@ -174,7 +174,12 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
 - **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar or **screw**, with limits), then drag its slider or press play. A screw joint turns and advances by its pitch per turn, so a nut or cap runs along its thread in step (keeping the thread phase). Its pitch is read from the thread, negative for a left-hand one, and you can change it. Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
 - **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
 - **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
-- File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
+- **File → Export STEP (.step)…** writes an AP214 file for CAD (Fusion, SolidWorks, Onshape, FreeCAD…):
+  - Every part is a **solid B-rep**, not a mesh. Flat faces are merged into single faces, and curved surfaces are kept as their facets.
+  - Parts are named and coloured, and their material is recorded. Several parts make an **assembly**, and a part repeated by a pattern is written once and placed each time.
+  - It is **vetted before it is saved**: SketchFlow reads the file back and checks it is a closed, consistently oriented solid whose volume, surface area and size match the model. The toast says what passed. Any hairline gaps a boolean left are closed and listed.
+  - With threaded parts you choose **plain threads** (cosmetic, as CAD systems exchange them; about 6× smaller) or **modelled** threads.
+- File → *Save version…* / *Versions…*; *Import STL / OBJ / STEP…* (STEP with planar faces, such as SketchFlow's own; curved CAD surfaces aren't read); *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
 - **View ▾** holds:
   - layouts: all four views, or one view;
   - fit, zoom in and out;
@@ -341,11 +346,11 @@ These build on the same joint model:
 - slider and prismatic joints, gears and springs in the motion solver
 - the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, constraints on spline fit points, multi-user editing
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP with exact curved surfaces (cylinders, cones) and import of curved CAD files, constraints on spline fit points, multi-user editing
 
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference
+npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference, STEP
 node build.mjs                                                      # rebuild dist/
 ```

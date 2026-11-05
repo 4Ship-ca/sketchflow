@@ -315,7 +315,7 @@ const TOOLS = [
       const r = await model('snapshot', a);
       return { content: [{ type: 'image', data: r.png, mimeType: 'image/png' }, { type: 'text', text: `Image ${r.width}x${r.height}.\n` + JSON.stringify(r.model) }] };
     } },
-  { name: 'model_import', description: 'Import an STL (binary or ASCII) or OBJ file from disk as a mesh part (re-centred on its base, stacked on the ground unless mated later). It takes mates, booleans, materials and mass like any part. scale e.g. 25.4 for a model in inches.', inputSchema: S({ path: { type: 'string' }, scale: { type: 'number' }, material: { type: 'string' } }, ['path']),
+  { name: 'model_import', description: 'Import an STL (binary or ASCII), OBJ or STEP file from disk as mesh parts (STL / OBJ re-centred on the base, stacked on the ground unless mated later; STEP: each solid kept where it is in the file — STEP files with planar faces only, as SketchFlow writes them and faceted exports from other tools; curved CAD surfaces are refused with the reason). It takes mates, booleans, materials and mass like any part. scale e.g. 25.4 for a model in inches.', inputSchema: S({ path: { type: 'string' }, scale: { type: 'number' }, material: { type: 'string' } }, ['path']),
     run: async (a) => {
       const f = a.path.replace(/^~(?=$|\/|\\)/, os.homedir()), buf = await fsp.readFile(f);
       if (buf.length > 60 * 1024 * 1024) throw new Error('That file is over 60 MB');
@@ -350,17 +350,18 @@ const TOOLS = [
       if (r.png) out.content.unshift({ type: 'image', data: r.png, mimeType: 'image/png' });
       return out;
     } },
-  { name: 'model_export', description: 'Save the 3D model to disk: stl (watertight mesh for printing/slicers), obj (mesh, one object per body), json (.sf3d.json, the editable parametric model), bom (parts list CSV with quantities, materials and masses), svg / dxf (an engineering drawing sheet: third-angle TOP / FRONT / RIGHT + isometric, hidden lines dashed, the model\'s dimensions, parts list and title block with material and mass; an assembly of two or more parts gets an exploded isometric with balloons numbered as the parts list, unless exploded:false). Coordinates are mm from the model origin. Returns the file paths.', inputSchema: S({ formats: { type: 'array', items: { type: 'string', enum: ['stl', 'obj', 'json', 'bom', 'svg', 'dxf'] } }, sheet: { type: 'string', enum: ['A4', 'A3', 'A2'] }, exploded: { type: 'boolean', description: 'assemblies: exploded isometric with balloons (default true)' }, dir: { type: 'string', description: 'folder (default ~/Pictures/SketchFlow)' } }),
+  { name: 'model_export', description: 'Save the 3D model to disk: step (AP214 for CAD — every part an exact solid B-rep with planar faces, one product per part in an assembly, repeated parts placed rather than copied; vetted by reading it back before it is written: closed oriented shells, planarity, genus, and volume / area / bounding box against the model — the vetting report is returned; threads:"plain" leaves modelled threads cosmetic for a much smaller file), stl (watertight mesh for printing/slicers), obj (mesh, one object per body), json (.sf3d.json, the editable parametric model), bom (parts list CSV with quantities, materials and masses), svg / dxf (an engineering drawing sheet: third-angle TOP / FRONT / RIGHT + isometric, hidden lines dashed, the model\'s dimensions, parts list and title block with material and mass; an assembly of two or more parts gets an exploded isometric with balloons numbered as the parts list, unless exploded:false). Coordinates are mm from the model origin. Returns the file paths.', inputSchema: S({ formats: { type: 'array', items: { type: 'string', enum: ['step', 'stl', 'obj', 'json', 'bom', 'svg', 'dxf'] } }, threads: { type: 'string', enum: ['modelled', 'plain'], description: 'step: modelled threads (default) or plain (cosmetic, much smaller)' }, sheet: { type: 'string', enum: ['A4', 'A3', 'A2'] }, exploded: { type: 'boolean', description: 'assemblies: exploded isometric with balloons (default true)' }, dir: { type: 'string', description: 'folder (default ~/Pictures/SketchFlow)' } }),
     run: async (a) => {
       const base = a.dir ? a.dir.replace(/^~(?=$|\/|\\)/, os.homedir()) : defaultExportDir();
       await fsp.mkdir(base, { recursive: true });
-      const written = [];
+      const written = [], reports = [];
       for (const f of (a.formats && a.formats.length ? a.formats : ['stl', 'json', 'bom'])) {
-        const r = await model('export', { format: f, sheet: a.sheet, exploded: a.exploded }, 120000);
+        const r = await model('export', { format: f, sheet: a.sheet, exploded: a.exploded, threads: a.threads }, 300000);
         const out = path.join(base, r.name.replace(/(\.[\w.]+)$/, '-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '$1'));
         await fsp.writeFile(out, r.text, 'utf8'); written.push(out);
+        if (r.report) reports.push(r.report);
       }
-      return text('Saved ' + written.length + ' file(s):\n' + written.join('\n'));
+      return text('Saved ' + written.length + ' file(s):\n' + written.join('\n') + (reports.length ? '\n\nSTEP vetting report:\n' + JSON.stringify(reports[0], null, 1) : ''));
     } },
   { name: 'say', description: 'Show a short speech bubble from you on the board (does not draw).', inputSchema: S({ text: { type: 'string' }, seconds: { type: 'integer', description: '0 = until dismissed (default 20)' } }, ['text']),
     run: async (a) => json(await board('say', a)) }

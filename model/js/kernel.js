@@ -653,8 +653,49 @@ export function wrapSolid(flat, R, stepDeg = 2) {
   }
   const map = (p) => { const r = R + p[2], a = p[0] / R; return [r * Math.cos(a), r * Math.sin(a), p[1]]; };
   const polys = [];
-  for (const q of pieces) { const pts = q.v.map(v => map(v.p)); for (let i = 1; i < pts.length - 1; i++) { const t = poly([pts[0], pts[i], pts[i + 1]], q.sid); if (t) polys.push(t); } }
+  pieces = healTJunctions(new Solid(pieces)).polys;
+  for (const q of pieces) for (const tri of bentTriangles(q.v.map(v => v.p), map)) { const t = poly(tri, q.sid); if (t) polys.push(t); }
   const s = new Solid(polys); fixOrientation(s); return s;
+}
+/* triangles of a flat convex polygon after bending it with map: a triangle keeps the polygon's own corners; a polygon with
+   more than three is fanned from its centre (mapped too), so a run of corners along one edge never makes a needle-thin
+   sliver whose plane the booleans can't trust */
+function bentTriangles(flatPts, map) {
+  const m = flatPts.map(map);
+  if (m.length === 3) return [m];
+  let c = [0, 0, 0]; for (const p of flatPts) c = V.add(c, p); const mc = map(V.mul(c, 1 / flatPts.length)), out = [];
+  for (let i = 0; i < m.length; i++) out.push([mc, m[i], m[(i + 1) % m.length]]);
+  return out;
+}
+/* heal T-junctions: a corner of one polygon lying inside another polygon's edge is inserted into that edge. A flat solid
+   must be healed before it is bent (wrap, drape): otherwise the corner moves onto the curve while its neighbour's edge
+   stays a straight chord, and a crack opens between them */
+export function healTJunctions(sol, tol = 1e-7) {
+  const pts = [], seen = new Map(), key = (p) => p.map(x => Math.round(x / (tol * 10))).join(',');
+  for (const q of sol.polys) for (const v of q.v) { const k = key(v.p); if (!seen.has(k)) { seen.set(k, pts.length); pts.push(v.p); } }
+  if (!pts.length) return sol;
+  const bb = sol.bbox(), span = Math.max(1e-9, bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]), gs = Math.max(span / 64, tol * 100), grid = new Map();
+  const gc = (p) => [0, 1, 2].map(k => Math.floor((p[k] - bb.min[k]) / gs));
+  pts.forEach((p, i) => { const c = gc(p).join(','); if (!grid.has(c)) grid.set(c, []); grid.get(c).push(i); });
+  const polys = sol.polys.map(q => {
+    const out = []; let changed = false;
+    q.v.forEach((v, i) => {
+      out.push(v); const w = q.v[(i + 1) % q.v.length], d = V.sub(w.p, v.p), L = V.len(d); if (L < tol * 10) return;
+      const u = V.mul(d, 1 / L), lo = gc(v.p.map((x, k) => Math.min(x, w.p[k]) - tol)), hi = gc(v.p.map((x, k) => Math.max(x, w.p[k]) + tol)), mid = [];
+      for (let a = lo[0]; a <= hi[0]; a++) for (let b = lo[1]; b <= hi[1]; b++) for (let c = lo[2]; c <= hi[2]; c++) {
+        for (const id of grid.get(a + ',' + b + ',' + c) || []) {
+          const r = V.sub(pts[id], v.p), t = V.dot(r, u); if (t <= tol * 10 || t >= L - tol * 10) continue;
+          if (V.len(V.sub(r, V.mul(u, t))) <= tol * Math.max(1, L)) mid.push(t);
+        }
+      }
+      if (!mid.length) return;
+      mid.sort((x, y) => x - y); let last = -1;
+      for (const t of mid) { if (t - last < tol * 10) continue; last = t; const f = t / L; out.push({ p: V.lerp(v.p, w.p, f), n: V.norm(V.lerp(v.n, w.n, f)) }); }
+      changed = true;
+    });
+    return changed ? new Poly(out, q.sid, q.plane.clone()) : q;
+  });
+  return new Solid(polys);
 }
 /* cut a solid into a grid of cells (planes x = c and y = c, every step) so it can be bent onto a surface. Every
    polygon crossing a plane is cut at it, so neighbours share their new corners and the result stays closed */
@@ -708,7 +749,7 @@ export function drapeSolid(flat, target, frame, o) {
     memo.set(key, out); return out;
   };
   const polys = [];
-  for (const q of flat.polys) {
+  for (const q of healTJunctions(flat).polys) {
     const m = q.v.map(v => map(v.p)), cap = Math.abs(q.plane.n[2]) > 0.9, sg = q.plane.n[2] > 0 ? 1 : -1;
     for (let i = 1; i < m.length - 1; i++) {
       const tri = [m[0], m[i], m[i + 1]], t = poly(tri.map(x => x.p), q.sid, cap ? tri.map(x => V.mul(x.n, sg)) : null);   /* its top and bottom shade as smoothly as the surface */

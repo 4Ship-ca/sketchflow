@@ -9,6 +9,7 @@ A flanged pump housing with a screw-on cap. Claude built it in one session using
 | File | What it is |
 |---|---|
 | [`pump-housing.sf3d.json`](pump-housing.sf3d.json) | The finished model. Open it with File → *Open model file…*, load it with `model_session {action:"load", path:"examples/pump-housing.sf3d.json"}`, or use the bundled copy: File → *Example: Pump housing*, or `model_session {action:"example", id:"pump-housing"}` |
+| [`pump-housing.step`](pump-housing.step) | The same assembly as a STEP file (AP214) for CAD. It has plain threads, as CAD systems exchange them, and it passed SketchFlow's vetting: closed solids, with volumes and areas matching the model. The four screws are one part placed four times |
 | [`pump-housing.ops.json`](pump-housing.ops.json) | The recipe: the ten `model_build` batches as they were sent, each with its label. Replay them in order to rebuild the model from nothing (about 3.5 s) |
 
 ### What it uses

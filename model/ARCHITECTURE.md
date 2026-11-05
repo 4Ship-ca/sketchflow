@@ -13,9 +13,10 @@ model/
 ├── js/drawing.js     drawing sheets: SVG / DXF, hidden lines, dimensions, exploded isometric with balloons
 ├── js/views.js       WebGL2 renderer: TOP | 3D / FRONT | RIGHT, hidden lines, carried dimensions, view cube
 ├── js/examples.js    bundled example models (File → Example)
+├── js/step.js        STEP (AP214) export as exact planar B-reps, its reader / vetting, planar STEP import
 ├── js/app.js         tools, panels, autosave, export, AI bridge, add-on loading
 ├── addons/           gears.js (built in) · examples/fasteners.js — see ADDONS.md
-└── test/             kernel · model · gears · addons · collide · reference  (npm test)
+└── test/             kernel · model · gears · addons · collide · reference · step  (npm test)
 ```
 
 The MCP server is `server.mjs`; its op reference (`model_reference`) is `mcp-reference.mjs`, and `test/reference.test.mjs` runs every worked example in it, so the reference can't drift from what the model accepts.
@@ -76,6 +77,32 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Dimensions in the views | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
+
+### STEP: a vetted exact planar B-rep
+
+`model/js/step.js` turns each body into an AP214 `MANIFOLD_SOLID_BREP`: `PLANE` faces bounded by `LINE` edges in a `CLOSED_SHELL`. Each body is one `PRODUCT`, with its name, colour (`STYLED_ITEM`) and material. Several bodies make an assembly (`NEXT_ASSEMBLY_USAGE_OCCURRENCE` with `ITEM_DEFINED_TRANSFORMATION`). A pattern copy or linked instance that is a rigid copy (same volume, centroid where the transform puts it) is placed, not written again.
+
+From the BSP mesh to a B-rep:
+1. **Weld** corners within 1e-5 mm.
+2. **Heal T-junctions**: every corner lying inside an edge splits it, the same way on both sides.
+3. **Close hairline cracks.** Booleans between nearly coplanar faces can leave gaps much less than a micron wide. Open-edge ends within 2 µm are welded, corners lying on open edges split them, small closed holes are capped with flat triangles, and doubled faces cancel. Only open edges are touched, and every repair is reported.
+4. **Keep faces exactly flat.** A polygon that is no longer flat after a repair is fanned round its centre.
+5. **Merge coplanar neighbours** into one face. Boundary loops are traced round each corner through the face's own polygons, which stays right where a face touches itself.
+6. **Drop corners that only split a straight edge** (a vertex with two edges).
+7. **Split pinch vertices.** Where two separate fans of faces meet at one point, each fan gets its own vertex, so the surface is a manifold.
+
+**Vetting** happens on every export. The writer's output is parsed back by its own ISO 10303-21 reader, then checked:
+- every reference resolves;
+- every loop closes;
+- every edge is used exactly once each way (a closed, oriented shell);
+- every vertex lies on its faces' planes and its edges' lines;
+- outer loops run with their face normals;
+- Euler–Poincaré gives a whole genus;
+- volume and surface area (from the loops alone) and the bounding box match the model.
+
+The report comes back with the file (UI toast, MCP result). The tests also read files back as solids. The plate test has zero volume between the original and the read-back solid in either direction, and writing it again gives identical topology.
+
+The same reader imports planar STEP files, including assembly placements; faces with holes are bridged (Eberly) and ear-clipped. *Plain threads* exports a copy of the model with every modelled thread left cosmetic.
 
 ### Fast booleans: culled, lazy classification trees
 
@@ -182,6 +209,7 @@ Built so far, on top of the first version:
 - left-hand threads; a screw joint that reads its pitch from the thread
 - formulas on mate offsets, angles, tilts and slides; re-mating keeps a part's joint
 - spline fit points that move with their segment when dimensions change, and edit in Properties
+- STEP export (AP214 solid B-reps, assemblies, placed copies), vetted on every export; planar STEP import
 - an op reference that covers every op, with examples checked by the tests
 - lofts through any number of sections, with guide curves; smooth, twisted and scaled sweeps
 - sketches and text projected onto any curved surface (spheres, cones, lofts, fillets)
@@ -194,7 +222,7 @@ Still to come, roughly in order of how much each unlocks:
 4. **Length-preserving wraps on doubly-curved faces** (projection onto any surface is done; wrapping keeps lengths only on cylinders). Outline fonts from a file.
 5. **Constraints between parts' sketches** (a sketch point on another part's edge, projected geometry). Mate formulas and driving dimensions cover placement today.
 6. **More on drawings**: section views on the sheet, GD&T and notes.
-7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be faster on very large booleans, though the culled trees close most of that gap for parts under about 50k polygons.
+7. **Exact curved surfaces in STEP** (cylinders, cones, spheres as analytic surfaces rather than facets) and import of curved CAD files. STEP export of exact *planar* B-reps is done and vetted. Analytic surfaces need a B-rep kernel (Manifold, OpenCascade.js); the `Solid` interface is small on purpose so one could be swapped in.
 8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
 9. **More add-ons**: bearings and shafts, sheet metal, extrusion profiles, pipe and tube.
 
@@ -207,5 +235,6 @@ node model/test/gears.test.mjs    # gears mesh (no overlap; a half-tooth error o
 node model/test/addons.test.mjs   # the add-on contract and the fasteners example
 node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact
 node model/test/reference.test.mjs # every op has a reference entry, and every worked example in mcp-reference.mjs runs
+node model/test/step.test.mjs      # STEP: exact topology, vetting catches broken files, round trips, assemblies, threads plain / modelled
 node build.mjs                    # single-file builds in dist/
 ```

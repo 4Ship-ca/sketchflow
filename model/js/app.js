@@ -7,6 +7,7 @@ import { drawingSVG, drawingDXF } from './drawing.js';
 import { autoConstraints, KINDS as SKETCH_KINDS, expandArcs, arcThrough, arcTangent, arcMid, splinePoints } from './sketch.js';
 import { interference, collisions, restBaseline } from './collide.js';
 import { EXAMPLES, exampleDoc } from './examples.js';
+import { exportStep, stepToSolids } from './step.js';
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -791,12 +792,13 @@ $('#fileBtn').onclick = (e) => {
   item('Save model file (.json)', () => download(new Blob([JSON.stringify(model.doc, null, 1)], { type: 'application/json' }), slug() + '.sf3d.json'));
   item('Export STL (3D print)', () => download(new Blob([exportSTL()], { type: 'model/stl' }), slug() + '.stl'));
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
+  item('Export STEP (.step)…', stepHint);
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
   item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
   item('Export drawing (SVG, A3)', () => { try { download(new Blob([drawingSVG(model, { sheet: 'A3', exploded: prefs.exploded !== false })], { type: 'image/svg+xml' }), slug() + '-drawing.svg'); } catch (e) { toast(e.message, 3000); } });
   item('Export drawing (DXF)', () => { try { download(new Blob([drawingDXF(model, { sheet: 'A3', exploded: prefs.exploded !== false })], { type: 'application/dxf' }), slug() + '-drawing.dxf'); } catch (e) { toast(e.message, 3000); } });
   item('Preview drawing', previewDrawing);
-  item('Import STL / OBJ…', () => $('#meshIn').click());
+  item('Import STL / OBJ / STEP…', () => $('#meshIn').click());
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
   item('Versions…', showVersions);
   item('Load the demo model', demo);
@@ -804,6 +806,34 @@ $('#fileBtn').onclick = (e) => {
   if (/^\/3d\b/.test(location.pathname)) item('2D sketch board ↗', () => { location.href = '/'; });
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
+/* STEP: an AP214 file with each part an exact planar B-rep, vetted by reading it back (closed shells, every edge once each
+   way, planarity, genus, volume, area and bounding box against the model) before it is saved */
+function exportStepFile(threads) {
+  toast('Writing and vetting the STEP file…', 1500);
+  setTimeout(() => {
+    try {
+      const { text, report } = exportStep(model, { threads, file: slug() + '.step' });
+      download(new Blob([text], { type: 'model/step' }), slug() + '.step');
+      const faces = report.parts.reduce((a, p) => a + p.faces, 0), mb = report.bytes / 1048576;
+      if (report.ok) toast(`STEP saved and vetted ✓ — ${report.parts.length} part${report.parts.length > 1 ? 's' : ''}${report.placed_copies ? ` (+${report.placed_copies} placed copies)` : ''}, ${faces.toLocaleString()} faces, closed shells, volumes and areas match · ${mb < 1 ? Math.round(report.bytes / 1024) + ' KB' : mb.toFixed(1) + ' MB'}${(report.repairs || []).length ? ` · closed ${report.repairs.reduce((a, r) => a + r.hairline_holes_closed, 0)} hair-line gaps left by booleans` : ''}`, 5200);
+      else toast('⚠ STEP saved, but vetting found: ' + report.errors.slice(0, 2).join('; '), 6000);
+    } catch (e) { toast('Could not write STEP: ' + e.message, 4000); }
+  }, 30);
+}
+function stepHint() {
+  const big = model.doc.objects.some(o => ['bolt', 'nut'].includes(o.type) || (o.type === 'cylinder' && o.params.thread && o.params.thread !== 'none') || (o.type === 'hole' && o.params.modelled));
+  hint(big ? 'Export STEP (AP214, solid B-rep, vetted). Threads:' : 'Export STEP (AP214, solid B-rep, vetted before it is saved):', big ? [['Plain threads (smaller)', () => { hint(null); exportStepFile('plain'); }], ['Modelled threads', () => { hint(null); exportStepFile('modelled'); }]] : [['Export STEP', () => { hint(null); exportStepFile('modelled'); }]]);
+}
+/* STEP in: each solid with planar faces becomes a mesh part, kept where it was in the file */
+function importStepText(name, text, extra = {}) {
+  const solids = stepToSolids(text), ops = [];
+  for (const { name: pn, solid } of solids) {
+    const bb = solid.bbox(), c = [(bb.min[0] + bb.max[0]) / 2, (bb.min[1] + bb.max[1]) / 2, bb.min[2]], tri = [];
+    for (const q of solid.polys) for (let i = 1; i < q.v.length - 1; i++) for (const v of [q.v[0], q.v[i], q.v[i + 1]]) tri.push(v.p[0] - c[0], v.p[1] - c[1], v.p[2] - c[2]);
+    ops.push({ op: 'import', name: pn || name.replace(/\.(step|stp)$/i, ''), triangles: encodeTriangles(new Float32Array(tri)), count: tri.length / 9, at: c, fixed: true, material: extra.material });
+  }
+  return apply(ops, `Import ${name}`);
+}
 /* the drawing sheet in an overlay (works in the artifact viewer too, where downloads are blocked) */
 function previewDrawing() {
   const dopts = () => ({ sheet: prefs.sheet || 'A3', exploded: prefs.exploded !== false });
@@ -828,6 +858,7 @@ function showVersions() {
 }
 $('#meshIn').addEventListener('change', async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (/\.(step|stp)$/i.test(f.name)) { try { const r = importStepText(f.name, await f.text()); select(r[0].id); views.fitAll(); toast(`${f.name}: ${r.length} part${r.length > 1 ? 's' : ''} imported from STEP`, 3200); } catch (err) { toast('Could not import: ' + err.message, 5000); } return; }
   try {
     const parsed = parseMesh(f.name, await f.arrayBuffer());
     if (parsed.count > 60000) toast(`${parsed.count.toLocaleString()} triangles: booleans on it will be slow`, 3200);
@@ -1640,7 +1671,7 @@ async function runCmd(cmd, a) {
       return out;
     }
     case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
-    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : JSON.stringify(model.doc, null, 1) }; }
+    case 'model.export': { const f = a.format || 'stl'; if (f === 'step') { const r = exportStep(model, { threads: a.threads || 'modelled', file: slug() + '.step' }); return { name: slug() + '.step', text: r.text, report: r.report }; } return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : JSON.stringify(model.doc, null, 1) }; }
     case 'model.select': select(a.id || null); return { selected };
     case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }
@@ -1652,6 +1683,7 @@ async function runCmd(cmd, a) {
     case 'model.version': return a.restore ? model.restoreVersion(a.restore) : a.name !== undefined || a.save ? model.saveVersion(a.name) : { versions: model.listVersions() };
     case 'model.import': {
       let tri = a.triangles, count = a.count, data = a.data;
+      if (a.file_b64 && /\.(step|stp)$/i.test(a.name || '')) { const bin = atob(a.file_b64); const r = importStepText(a.name, bin, { material: a.material }); views.fitAll(); return { result: r, model: model.describe() }; }
       if (a.file_b64) { const bin = atob(a.file_b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const parsed = parseMesh(a.name, u); tri = encodeTriangles(parsed.triangles); count = parsed.count; data = undefined; }
       const r = model.apply([{ op: 'import', name: a.name, triangles: tri, count, data, scale: a.scale, material: a.material }], `Import ${a.name}`, { relative: true })[0]; views.fitAll(); return { result: r, model: model.describe() };
     }

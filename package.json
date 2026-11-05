@@ -9,7 +9,7 @@
   "scripts": {
     "serve": "node server.mjs --serve",
     "build": "node build.mjs",
-    "test": "node model/test/kernel.test.mjs && node model/test/model.test.mjs && node model/test/gears.test.mjs && node model/test/addons.test.mjs && node model/test/collide.test.mjs && node model/test/reference.test.mjs"
+    "test": "node model/test/kernel.test.mjs && node model/test/model.test.mjs && node model/test/gears.test.mjs && node model/test/addons.test.mjs && node model/test/collide.test.mjs && node model/test/reference.test.mjs && node model/test/step.test.mjs"
   },
   "engines": {
     "node": ">=18"
