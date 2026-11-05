@@ -24,6 +24,8 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  wrap: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3zM9 10h6M12 10v6',
+  drape: 'M3 17c3-9 15-9 18 0M9 9l1 4h4l1-4M12 3v4',
   split: 'M3 21L21 3M6 9V6h3M18 15v3h-3M4 14l6 6M14 4l6 6',
   view: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
   boss: 'M3 16l9 4 9-4-9-4zM8 14V8.5l4-2 4 2V14M8 8.5l4 2 4-2M12 10.5V16',
@@ -79,9 +81,9 @@ function subOf(o) {
     case 'fillet': return `${p.style} ${fmt(p.size)} × ${fmt(p.length)}`;
     case 'extrude': if (p.shape && p.shape !== 'points') return `${p.shape === 'rect' ? 'rectangle ' + fmt(p.width) + ' × ' + fmt(p.height) + (p.radius ? ' r' + fmt(p.radius) : '') : p.shape === 'slot' ? 'slot ' + fmt(p.width) + ' × ' + fmt(p.height) : (p.shape === 'polygon' ? p.sides + '-gon Ø' : 'circle Ø') + fmt(p.diameter)} · ${fmt(p.length)}${o.into ? ' · cut' : ''}`;
     /* falls through */
-    case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${p.twist ? ' · ' + p.twist + '°' : ''}`;
+    case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${(p.sections || []).length ? ' · ' + (p.sections.length + 2) + ' sections' : ''}${(p.guides || []).length ? ' · ' + p.guides.length + ' guide' + (p.guides.length > 1 ? 's' : '') : ''}${p.twist ? ' · ' + p.twist + '°' : ''}`;
     case 'revolve': return `${p.profile.length} pts · ${fmt(p.degrees)}°`;
-    case 'sweep': return `${p.profile.length} pts · ${p.path.length - 1} segments`;
+    case 'sweep': return p.helix ? `coil · ${fmt(p.helix.turns)} turns` : `${p.profile.length} pts · ${p.path.length - 1} segments${p.smooth ? ' · smooth' : ''}${p.twist ? ' · ' + fmt(p.twist) + '° twist' : ''}${p.scale != null && +p.scale !== 1 ? ' · ×' + fmt(p.scale) + ' at end' : ''}`;
     case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
     case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
     case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
@@ -91,6 +93,7 @@ function subOf(o) {
     case 'bolt': return `${p.size} × ${fmt(p.length)} ${p.head === 'socket' ? 'socket head' : 'hex'} · modelled thread`;
     case 'nut': return `${p.size === 'custom' ? 'Ø' + fmt(p.diameter) + ' × ' + fmt(p.pitch) : p.size} ${p.shape || 'hex'} nut`;
     case 'wrap': return `${p.text ? '“' + String(p.text).slice(0, 18) + '”' : (p.profile || []).length + ' pts'} wrapped ${p.mode === 'engrave' ? 'in' : 'on'} R${fmt(typeof p.radius === 'number' ? p.radius : 0)} · ${fmt(p.depth)} deep`;
+    case 'drape': return `${p.text ? '“' + String(p.text).slice(0, 18) + '”' : (p.profile || []).length + ' pts'} projected ${p.mode === 'engrave' ? 'into' : 'onto'} ${name(o.into)} · ${fmt(p.depth)} ${p.mode === 'engrave' ? 'deep' : 'high'}`;
     case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
     case 'text': return `“${String(p.text).slice(0, 24)}” · ${fmt(p.height)} mm${p.path && p.path !== 'line' ? ' · ' + (p.path === 'points' ? 'on a path' : p.path === 'arc' ? 'arc R' + fmt(p.radius) : 'arc (inside) R' + fmt(p.radius)) : ''}${o.into ? (o.op === 'subtract' ? ' · engraved ' : ' · embossed ') + fmt(p.depth) + ' on ' + name(o.into) : ''}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
@@ -319,7 +322,7 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'], nut: ['hex', 'round', 'knurled'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { wrap: ['emboss', 'engrave'], '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES), bolt: Object.keys(THREADS), nut: [...Object.keys(THREADS), 'custom'] }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, thread: { cylinder: ['none', ...Object.keys(THREADS), 'custom'] }, thread_from: { cylinder: ['bottom', 'top'] }, head: { bolt: ['hex', 'socket'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
+const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'], nut: ['hex', 'round', 'knurled'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { wrap: ['emboss', 'engrave'], drape: ['emboss', 'engrave'], '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES), bolt: Object.keys(THREADS), nut: [...Object.keys(THREADS), 'custom'] }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, thread: { cylinder: ['none', ...Object.keys(THREADS), 'custom'] }, thread_from: { cylinder: ['bottom', 'top'] }, head: { bolt: ['hex', 'socket'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
 /* the parameters a threaded part shows: the thread's own settings only when it has one */
 const THREAD_KEYS = {
   cylinder: (p) => ['diameter', 'height', 'thread', ...(p.thread && p.thread !== 'none' ? [...(p.thread === 'custom' ? ['pitch'] : []), 'thread_length', 'thread_from', 'left_hand'] : []), 'bore'],
@@ -364,6 +367,42 @@ function massSection(o, sec) {
     s.append(el('div', { class: 'f' }, 'volume', el('span', null, r1(part.volume_cm3) + ' cm³')), el('div', { class: 'f' }, 'mass', el('b', null, part.mass_g == null ? 'set a material' : fmt(part.mass_g) + ' g' + (part.assumed ? ' (model default)' : ''))), el('div', { class: 'f' }, 'centre of gravity', el('span', { class: 'mono' }, xyz(part.centroid))));
     if (part.inertia_kg_mm2) s.append(el('div', { class: 'f' }, 'inertia kg·mm²', el('span', { class: 'mono' }, part.inertia_kg_mm2.slice(0, 3).map(v => fmt(v)).join(' / '))));
   }
+}
+/* a loft's sections (height, scale, turn, offset) and guide curves (points x, y, z), all editable */
+function loftSection(o, sec) {
+  const p = o.params, L = +p.length || 0, secs = (p.sections || []).map(q => Object.assign({}, q)), guides = (p.guides || []).map(g => g.map(q => q.slice()));
+  const s = sec('Loft sections & guides'), set = (patch, label) => { try { apply([{ op: 'set', id: o.id, params: patch }], label); } catch (e) { /* toast shown */ } };
+  s.append(el('div', { class: 'note' }, 'The profile at 0, the end at the loft length, and any sections between. With smooth on, the sides run through every section in a smooth curve. A guide is a curve from the first section to the last; the sections follow it (one guide moves them, two also turn and scale them, three or more also skew them).'));
+  const tbl = el('table', { class: 'cfg sk loft' }); tbl.append(el('tr', null, el('th', null, 'height'), el('th', null, 'scale'), el('th', null, 'turn °'), el('th', null, 'offset x'), el('th', null, 'offset y'), el('th', null, '')));
+  tbl.append(el('tr', { class: 'sub' }, el('td', { class: 'mono' }, '0'), el('td', { colspan: 5, class: 'note' }, 'the profile')));
+  secs.sort((a, b) => a.z - b.z).forEach((q, k) => {
+    const upd = (key, v) => { const nx = secs.map(z => Object.assign({}, z)); if (key === 'offset0' || key === 'offset1') { const off = (nx[k].offset || [0, 0]).slice(); off[key === 'offset0' ? 0 : 1] = v; nx[k].offset = off; } else nx[k][key] = v; set({ sections: nx }, `Loft section ${k + 1}: ${key.replace(/\d$/, '')}`); };
+    tbl.append(el('tr', null, el('td', null, numInput(q.z, v => upd('z', v))), el('td', null, numInput(q.scale == null ? 1 : q.scale, v => upd('scale', v))), el('td', null, numInput(q.rot || 0, v => upd('rot', v))),
+      el('td', null, numInput((q.offset || [0, 0])[0], v => upd('offset0', v))), el('td', null, numInput((q.offset || [0, 0])[1], v => upd('offset1', v))),
+      el('td', null, el('button', { class: 'chain', title: 'Remove this section', onclick: () => set({ sections: secs.filter((_, kk) => kk !== k) }, 'Remove a loft section') }, '×'))));
+  });
+  if (!secs.some(q => Math.abs(q.z - L) < 1e-9)) tbl.append(el('tr', { class: 'sub' }, el('td', { class: 'mono' }, fmt(L)), el('td', { colspan: 5, class: 'note' }, p.profile2 ? 'the end profile' : 'the end (the profile again)')));
+  s.append(el('div', { class: 'tblwrap' }, tbl));
+  const between = () => { const zs = [0, ...secs.map(q => +q.z).sort((a, b) => a - b), L].filter((v, i, a) => i === 0 || v > a[i - 1]); let gap = 0, at = L / 2; for (let i = 1; i < zs.length; i++) if (zs[i] - zs[i - 1] > gap) { gap = zs[i] - zs[i - 1]; at = (zs[i] + zs[i - 1]) / 2; } return +at.toFixed(3); };
+  const smooth = el('input', { type: 'checkbox' }); smooth.checked = p.smooth !== false; smooth.onchange = () => set({ smooth: smooth.checked }, smooth.checked ? 'Smooth loft' : 'Ruled loft');
+  s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', title: 'A section halfway along the longest gap, at 1.2× so you see it — then set its size', onclick: () => set({ sections: secs.concat([{ z: between(), scale: 1.2, rot: 0, offset: [0, 0] }]) }, 'Add a loft section') }, '+ section'), el('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' }, smooth, 'smooth through the sections')));
+  /* guides */
+  guides.forEach((g, gi) => {
+    const gt = el('table', { class: 'cfg sk' }); gt.append(el('tr', null, el('th', { colspan: 4 }, `Guide ${gi + 1}`), el('th', null, el('button', { class: 'chain', title: 'Remove this guide', onclick: () => set({ guides: guides.filter((_, kk) => kk !== gi) }, 'Remove a guide') }, '×'))));
+    g.forEach((pt, k) => {
+      const upd = (c, v) => { const nx = guides.map(x => x.map(q => q.slice())); nx[gi][k][c] = v; set({ guides: nx }, `Guide ${gi + 1} point ${k + 1}`); };
+      gt.append(el('tr', { class: 'sub' }, el('td', { class: 'note' }, `point ${k + 1}`), el('td', null, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, 'x'), numInput(pt[0], v => upd(0, v)))), el('td', null, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, 'y'), numInput(pt[1], v => upd(1, v)))), el('td', null, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, 'z'), numInput(pt[2], v => upd(2, v)))),
+        el('td', null, g.length > 2 && k > 0 && k < g.length - 1 ? el('button', { class: 'chain', title: 'Remove this point', onclick: () => { const nx = guides.map(x => x.map(q => q.slice())); nx[gi].splice(k, 1); set({ guides: nx }, 'Remove a guide point'); } }, '×') : null)));
+    });
+    s.append(el('div', { class: 'tblwrap' }, gt), el('div', { class: 'btns' }, el('button', { class: 'btn', title: 'Add a point halfway along the longest leg of this guide', onclick: () => { let best = 0, bl = -1; for (let k = 0; k < g.length - 1; k++) { const l = Math.hypot(g[k + 1][0] - g[k][0], g[k + 1][1] - g[k][1], g[k + 1][2] - g[k][2]); if (l > bl) { bl = l; best = k; } } const a = g[best], b = g[best + 1], nx = guides.map(x => x.map(q => q.slice())); nx[gi].splice(best + 1, 0, a.map((v, c) => +((v + b[c]) / 2).toFixed(3))); set({ guides: nx }, 'Add a guide point'); } }, '+ point')));
+  });
+  s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', title: 'A guide from the first section to the last through the point furthest out in x, bowed out by 20% in the middle — then move its points', onclick: () => {
+    const prof = expandArcs(p.profile, p.arcs || [], { splines: p.splines }).pts, used = guides.length, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]], dir = dirs[used % 4];
+    let best = prof[0], bv = -Infinity; for (const q of prof) { const v = q[0] * dir[0] + q[1] * dir[1]; if (v > bv) { bv = v; best = q; } }
+    const endProf = p.profile2 || prof; let e = endProf[0], ev = -Infinity; for (const q of endProf) { const v = q[0] * dir[0] + q[1] * dir[1]; if (v > ev) { ev = v; e = q; } }
+    const mid = [(best[0] + e[0]) / 2 * 1.2, (best[1] + e[1]) / 2 * 1.2, L / 2].map(v => +v.toFixed(3));
+    set({ guides: guides.concat([[[best[0], best[1], 0], mid, [e[0], e[1], L]]]) }, 'Add a guide');
+  } }, '+ guide')));
 }
 /* the profile's constraints: status, per segment H / V / length, relations between segments, fixed points */
 function sketchSection(o, sec) {
@@ -508,7 +547,8 @@ function renderProps() {
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
     : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'end', 'draft', 'thin', 'twist', 'scale'] : ['length', 'end', 'draft', 'thin', 'open', 'twist', 'scale', 'direction'])
-      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs', 'splines'].includes(k) && !/^d\d+$/.test(k))
+      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs', 'splines', 'profile2', 'sections', 'guides'].includes(k) && !/^d\d+$/.test(k))
+      : o.type === 'drape' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'mode', 'cell'] : ['depth', 'mode', 'cell'])
       : THREAD_KEYS[o.type] ? THREAD_KEYS[o.type](o.params)
         : o.type === 'sweep' && o.params.helix ? [] : o.type === 'wrap' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'radius', 'mode'] : ['depth', 'radius', 'mode']) : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
@@ -536,7 +576,8 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
-  if ((['extrude', 'revolve', 'loft'].includes(o.type) || (o.type === 'wrap' && !o.params.text)) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
+  if (o.type === 'loft') loftSection(o, sec);
+  if ((['extrude', 'revolve', 'loft'].includes(o.type) || ((o.type === 'wrap' || o.type === 'drape') && !o.params.text)) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
   if (o.type === 'text' && o.into && o.mate) {
     const eng = o.op === 'subtract', m = o.mate;
     s1.append(el('div', { class: 'note' }, eng ? 'Engraved: a boolean remove, cut in flush with the face' : 'Embossed: a boolean add, standing on the face'),
@@ -961,7 +1002,7 @@ function sketchHint() {
   const reset = () => { d.points = []; d.arcs = []; d.tangents = []; d.splines = []; d.spl = []; d.hist = []; d.arcEnd = null; if (!d.on) d.pane = null; views.preview = null; };
   const lineBtn = (seg, label, tip) => el('button', { class: d.mode === 'polyline' && (d.seg || 'line') === seg ? 'on' : '', title: tip, onclick: () => { commitSpline(d); prefs.sketchMode = 'polyline'; prefs.sketchSeg = seg; savePrefs(); if (d.mode !== 'polyline') reset(); d.mode = 'polyline'; d.seg = seg; d.arcEnd = null; sketchHint(); views.draw(); } }, label);
   const shapeBtn = (k, label) => el('button', { class: d.mode === k ? 'on' : '', disabled: pendingLoft ? true : null, onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; reset(); sketchHint(); views.draw(); } }, label);
-  const where = d.on && d.on.wrap ? `on ${d.on.name} · ${d.on.faceName} — drawn unrolled (across = round the face, up = along it)` : d.on ? `on ${d.on.name} · ${d.on.faceName} (the view is square to it)` : pendingLoft ? `the END profile, in the ${pendingLoft.pane.toUpperCase()} view` : d.pane ? `in the ${d.pane.toUpperCase()} view` : 'in FRONT, TOP or RIGHT';
+  const where = d.on && d.on.wrap ? `on ${d.on.name} · ${d.on.faceName} — drawn unrolled (across = round the face, up = along it)` : d.on && d.on.drape ? `on ${d.on.name} · ${d.on.faceName} — drawn on the plane touching it, then projected onto the surface` : d.on ? `on ${d.on.name} · ${d.on.faceName} (the view is square to it)` : pendingLoft ? `the END profile, in the ${pendingLoft.pane.toUpperCase()} view` : d.pane ? `in the ${d.pane.toUpperCase()} view` : 'in FRONT, TOP or RIGHT';
   const row = el('div', { class: 'skrow' }, el('b', null, pendingLoft ? 'Loft' : 'Sketch'), el('span', { class: 'note' }, where));
   if (!d.on && !pendingLoft) row.append(el('button', { title: 'Sketch on a flat face of a part (any angle): the profile starts on that face, joins or cuts that part, and follows it', onclick: () => setTool('sketch-face') }, 'On a face…'));
   row.append(grp('Lines', lineBtn('line', 'Line', 'Straight segments, point after point'), lineBtn('arc', 'Arc', 'Three-point arc: its end, then a point it passes through'), lineBtn('tarc', 'Tangent arc', 'An arc that carries on smoothly from the last segment: click its end'), lineBtn('spline', 'Spline', 'A smooth curve through the points you click; switch to another line type (or close) to end it')),
@@ -1089,6 +1130,15 @@ function startFaceSketch(pk, only) {
       toast(`Sketching on the round face of ${name}: draw it unrolled — it is wrapped round when you finish`, 3000);
       return true;
     }
+    /* any other curved face (a sphere, a cone, a loft, a fillet…): sketch on the plane touching it there, then project onto it */
+    if (model.bodyContaining(id)) {
+      const tid = rootOf(id), O = model.result.originPoint, name = model.get(tid).name;
+      views.setFaceView(n, `ON ${name.toUpperCase()} · CURVED FACE (PROJECTED)`, V.sub(pk.point, O));
+      const on = { id: tid, root: tid, n, point: pk.point, pane: 'face', conn: null, faceName: 'curved face', name, gridAt: V.sub(pk.point, O), drape: true };
+      const prevLayout = views.layout; setTool('sketch', { on, prevLayout }); views.layout = 'face'; views.draw();
+      toast(`Sketching on the curved face of ${name}: draw it on the plane touching it — it is projected onto the surface when you finish`, 3200);
+      return true;
+    }
   }
   const name = model.get(owner).name, faceName = f ? (f.face === 'plane' ? 'plane' : f.face.replace(/^face:/, '') + ' face') : 'face';
   const O = model.result.originPoint, centre = V.sub(f && o.type !== 'plane' ? f.conn.o : pk.point, O);
@@ -1104,8 +1154,10 @@ function startFaceSketch(pk, only) {
 function wrapActions(d, geo, label) {
   const on = d.on, { P2 } = sk2(d), c = P2(V.sub(on.point, model.result.originPoint)), rel = (q) => [+(q[0] - c[0]).toFixed(5), +(q[1] - c[1]).toFixed(5)];
   const g = { profile: geo.profile.map(rel), arcs: (geo.arcs || []).map(a => ({ i: a.i, c: rel(a.c), ccw: a.ccw })), splines: (geo.splines || []).map(q => ({ i: q.i, pts: q.pts.map(rel) })) };
-  const go = (mode) => (v) => { try { const r = apply([Object.assign({ op: 'wrap', target: on.id, at: on.point, normal: on.n, depth: Number.isFinite(v.depth) && v.depth > 0 ? v.depth : 1, mode }, g)], `${label} wrapped (${mode})`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ } };
-  hint(`${label} on ${on.name} (${on.faceName}) — wrap it round the face:`, [['Wrap · emboss', go('emboss')], ['Wrap · engrave', go('engrave')]], [['depth', 'depth mm', 1]]);
+  const proj = !!on.drape, extra = proj ? { project: true, xdir: sk2(d).B.r } : {};
+  const go = (mode) => (v) => { try { const r = apply([Object.assign({ op: 'wrap', target: on.id, at: on.point, normal: on.n, depth: Number.isFinite(v.depth) && v.depth > 0 ? v.depth : 1, mode }, extra, g)], `${label} ${proj ? 'projected' : 'wrapped'} (${mode})`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ } };
+  if (proj) hint(`${label} on ${on.name} (${on.faceName}) — project it onto the surface:`, [['Project · emboss', go('emboss')], ['Project · engrave', go('engrave')]], [['depth', 'depth mm', 1]]);
+  else hint(`${label} on ${on.name} (${on.faceName}) — wrap it round the face:`, [['Wrap · emboss', go('emboss')], ['Wrap · engrave', go('engrave')]], [['depth', 'depth mm', 1]]);
   tool.step = 9;
 }
 /* the choices for a profile on a face: join it to the part, cut it in, cut through, or make a new part there */
@@ -1134,7 +1186,7 @@ function finishShape(spec) {
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]), pose = poseFromMatrix(frame);
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt), name = { rect: 'Rectangle', circle: 'Circle', slot: 'Slot', polygon: 'Polygon' }[spec.shape];
   const sizeText = `${name} ${spec.shape === 'rect' || spec.shape === 'slot' ? fmt(spec.width) + ' × ' + fmt(spec.height) : 'Ø' + fmt(spec.diameter)}`;
-  if (d.on && d.on.wrap) { wrapActions(d, { profile: shapePoints3(spec, B).map(q => [V.dot(q, B.r), V.dot(q, B.u)]) }, name); return; }
+  if (d.on && (d.on.wrap || d.on.drape)) { wrapActions(d, { profile: shapePoints3(spec, B).map(q => [V.dot(q, B.r), V.dot(q, B.u)]) }, name); return; }
   if (d.on) {
     /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
     const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
@@ -1164,7 +1216,7 @@ function finishSketch() {
   const d = tool.data; if (!d.points || d.points.length < ((d.arcs && d.arcs.length) || (d.splines && d.splines.length) ? 2 : 3)) { toast('A closed profile needs at least 3 points (or 2 with an arc or spline)'); return; }
   const B = d.basis, { pts2, arcs2, spl2, cons } = sketchData(d, false);
   views.preview = { pane: d.pane, points: sketchPath(d, true), closed: true }; views.draw();
-  if (d.on && d.on.wrap) { wrapActions(d, { profile: pts2, arcs: arcs2, splines: spl2 }, 'Sketch'); return; }
+  if (d.on && (d.on.wrap || d.on.drape)) { wrapActions(d, { profile: pts2, arcs: arcs2, splines: spl2 }, 'Sketch'); return; }
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
   /* a fresh sketch gets horizontal / vertical constraints where it nearly is (not on its arcs), its first point fixed, and its tangent arcs tangent (edit them in Properties → Sketch) */
@@ -1192,7 +1244,7 @@ function finishSketch() {
 /* an open outline: a rib or thin wall of a thickness, extruded (joined to a face's part, cut, or a new part) */
 function finishOpen() {
   const d = tool.data; if (!d.points || d.points.length < 2) { toast('An open profile needs at least 2 points'); return; }
-  if (d.on && d.on.wrap) { toast('On a round face, close the outline: it is wrapped round and embossed or engraved'); return; }
+  if (d.on && (d.on.wrap || d.on.drape)) { toast(d.on.drape ? 'On a curved face, close the outline: it is projected onto it and embossed or engraved' : 'On a round face, close the outline: it is wrapped round and embossed or engraved'); return; }
   const B = d.basis, { pts2, arcs2, spl2, cons } = sketchData(d, true), ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt);
   views.preview = { pane: d.pane, points: sketchPath(d, false) }; views.draw();
   const fields = [['thin', 'thickness mm', prefs.ribT || 3], ['length', 'height mm', 10]];
@@ -1387,6 +1439,10 @@ function clickTool(pane, x, y, hit, e) {
     const flatHere = (() => { const g = model.faceAt(id, pk.point, pk.normal); return g && g.off < 1e-3; })(), cyl = !flatHere && model.cylinderAt(id, pk.point, pk.normal);
     if (cyl) {
       try { const r = apply([{ op: 'wrap', target: cyl.primitive ? cyl.id : id, at: pk.point, normal: pk.normal, text: f.text || 'TEXT', size: f.height || 8, depth: f.depth || 1, mode: f.mode === 'engrave' ? 'engrave' : 'emboss' }])[0]; setTool(null); select(r.id); toast(`Text wrapped round the face (${f.mode === 'engrave' ? 'engraved' : 'embossed'}) — edit it in Properties`, 2400); } catch (e) { /* toast shown */ }
+      return;
+    }
+    if (!flatHere) {
+      try { const r = apply([{ op: 'wrap', project: true, target: id, at: pk.point, normal: pk.normal, text: f.text || 'TEXT', size: f.height || 8, depth: f.depth || 1, mode: f.mode === 'engrave' ? 'engrave' : 'emboss' }])[0]; setTool(null); select(r.id); toast(`Text projected onto the curved face (${f.mode === 'engrave' ? 'engraved' : 'embossed'}) — edit it in Properties`, 2400); } catch (e) { /* toast shown */ }
       return;
     }
     try {

@@ -470,6 +470,45 @@ Mf_t.apply([{ op: 'unlink', id: 'lid', param: 'mate.offset' }, { op: 'var', name
 ok('unlinking a mate formula keeps its value', near(lidAt_t()[2], 11) && !('offset' in (Mf_t.get('lid').mexpr || {})) && Mf_t.describe().objects.find(o => o.id === 'lid').mate_formulas['slide.0'] === '=plate.width / 2 - 10');
 let badMf_t = ''; try { Mf_t.apply([{ op: 'mate', id: 'lid', to: 'plate', a: 'top', b: 'bottom', offset: '=2 +' }]); } catch (e) { badMf_t = e.message; }
 ok('a broken mate formula is refused, saying why', /ends too early/.test(badMf_t), badMf_t);
+/* lofts through sections, guide curves, smooth / twisted / scaled sweeps */
+const sq_t = [[-10, -10], [10, -10], [10, 10], [-10, 10]];
+const Lf_t = new Model(); Lf_t.apply([{ op: 'loft', id: 'l', profile: sq_t, length: 40, sections: [{ z: 20, scale: 2 }], smooth: false, fixed: true }]);
+/* ruled: two frusta 20 tall, from a 20 square to a 40 square and back: V = h/3 (A1 + A2 + √(A1 A2)) each */
+const frus_t = 20 / 3 * (400 + 1600 + 800);
+ok('a ruled loft through a middle section is two frusta', near(Lf_t.result.bodies[0].solid.volume(), 2 * frus_t, 1e-6), Lf_t.result.bodies[0].solid.volume());
+Lf_t.apply([{ op: 'set', id: 'l', params: { smooth: true } }]);
+const lfB_t = Lf_t.result.bodies[0].solid.bbox();
+ok('…smooth, it bulges through the section without overshooting it', near(lfB_t.max[0], 20, 1e-6) && Lf_t.result.bodies[0].solid.volume() > 2 * frus_t, { x: lfB_t.max[0], v: Lf_t.result.bodies[0].solid.volume() });
+const circ_t = [...Array(32)].map((_, i) => [10 * Math.cos(i * Math.PI / 16), 10 * Math.sin(i * Math.PI / 16)]);
+const Gd_t = new Model(); Gd_t.apply([{ op: 'loft', id: 'v', profile: circ_t, length: 60, guides: [[[10, 0, 0], [18, 0, 30], [10, 0, 60]], [[-10, 0, 0], [-18, 0, 30], [-10, 0, 60]]], fixed: true }]);
+const gdB_t = Gd_t.result.bodies[0].solid.bbox();
+ok('two guides scale the sections between them (a barrel 36 across)', near(gdB_t.max[0], 18, 1e-3) && near(gdB_t.max[1], 18, 2e-2) && near(gdB_t.max[2], 60), gdB_t);
+const Gd1_t = new Model(); Gd1_t.apply([{ op: 'loft', id: 'v', profile: circ_t, length: 60, guides: [[[10, 0, 0], [25, 0, 30], [10, 0, 60]]], fixed: true }]);
+ok('one guide moves the sections along it', near(Gd1_t.result.bodies[0].solid.bbox().max[0], 25, 1e-3) && near(Gd1_t.result.bodies[0].solid.volume(), Math.PI * 100 * 60, 0.02));
+let inv_t = ''; try { new Model().apply([{ op: 'loft', id: 'x', profile: sq_t, length: 40, sections: [{ z: 60, scale: 1 }], fixed: true }]); } catch (e) { inv_t = e.message; }
+const InvM_t = new Model(); InvM_t.apply([{ op: 'loft', id: 'x', profile: sq_t, length: 40, sections: [{ z: 60, scale: 1 }], fixed: true }]);
+ok('a loft section outside the loft is reported', /outside the loft/.test([...InvM_t.result.errors.values()].join(' ') + inv_t));
+const Sw2_t = new Model(); Sw2_t.apply([{ op: 'sweep', id: 's', profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 50]], twist: 90, scale: 0.5, fixed: true }]);
+ok('a sweep that twists and scales to half along a straight path is a frustum (twisting keeps each cross-section\'s area)', near(Sw2_t.result.bodies[0].solid.volume(), 50 / 3 * (16 + 4 + 8), 2e-3), Sw2_t.result.bodies[0].solid.volume());
+const Sw3_t = new Model(); Sw3_t.apply([{ op: 'sweep', id: 's', profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], smooth: true, fixed: true }]);
+const sw3e_t = worldConnectors(Sw3_t.result, 's').find(c => c.name === 'end');
+const sp3_t = K0.smoothPath([[0, 0, 0], [0, 0, 30], [30, 0, 30]]); let sp3L_t = 0; for (let i = 1; i < sp3_t.length; i++) sp3L_t += V.len(V.sub(sp3_t[i], sp3_t[i - 1]));
+ok('a smooth sweep follows a curve through the path points (volume = area × its length) and ends on the last point', !Sw3_t.result.errors.size && near(sw3e_t.o[0], 30) && near(sw3e_t.o[2], 30) && sp3_t.some(q => near(q[2], 30) && Math.abs(q[0]) < 1e-9) && near(Sw3_t.result.bodies[0].solid.volume(), 16 * sp3L_t, 2e-3), { v: Sw3_t.result.bodies[0].solid.volume(), want: 16 * sp3L_t });
+/* sketches and text projected onto any curved surface */
+const Dr_t = new Model(); Dr_t.apply([{ op: 'add', type: 'sphere', id: 'ball', params: { diameter: 40 } }]); const drV0_t = Dr_t.result.bodies[0].solid.volume();
+const drR_t = Dr_t.apply([{ op: 'wrap', target: 'ball', at: [0, -20, 20], normal: [0, -1, 0], profile: [[-5, -3], [5, -3], [5, 3], [-5, 3]], depth: 1, mode: 'emboss' }])[0];
+const drB_t = Dr_t.result.bodies[0].solid.bbox(), drAdd_t = Dr_t.result.bodies[0].solid.volume() - drV0_t;
+ok('on a sphere a sketch is projected (not wrapped) and stands 1 mm off the surface', drR_t.projected && Dr_t.get(drR_t.id).type === 'drape' && near(drB_t.min[1], -21, 2e-3) && drAdd_t > 60 * 0.95 && drAdd_t < 60 * 1.25, { y: drB_t.min[1], added: drAdd_t });
+Dr_t.apply([{ op: 'set', id: drR_t.id, params: { mode: 'engrave' } }]);
+const drE_t = drV0_t - Dr_t.result.bodies[0].solid.volume();
+ok('…engraved, it cuts the same patch in (about the same volume)', drE_t > 60 * 0.85 && drE_t < 60 * 1.15 && Dr_t.result.bodies.length === 1, drE_t);
+Dr_t.apply([{ op: 'set', id: 'ball', at: [50, 0, 0] }]);
+ok('…and moves with its part', near(Dr_t.result.bodies[0].solid.bbox().min[0], 30, 1e-3) && !Dr_t.result.errors.size);
+const Dt_t = new Model(); Dt_t.apply([{ op: 'add', type: 'cone', id: 'k', params: { diameter: 40, top: 10, height: 40 } }]); const dtV_t = Dt_t.result.bodies[0].solid.volume();
+Dt_t.apply([{ op: 'wrap', target: 'k', at: [0, -12.5, 20], normal: [0, -0.8, 0.6], text: 'UP', size: 6, depth: 0.6, mode: 'engrave' }]);
+ok('text engraved onto a cone (projected)', Dt_t.result.bodies[0].solid.volume() < dtV_t - 5 && !Dt_t.result.errors.size, dtV_t - Dt_t.result.bodies[0].solid.volume());
+let off_t = ''; try { new Model().apply([{ op: 'add', type: 'sphere', id: 'b', params: { diameter: 20 } }, { op: 'wrap', target: 'b', at: [0, -10, 10], normal: [0, -1, 0], profile: [[-30, -2], [30, -2], [30, 2], [-30, 2]], depth: 1 }]); } catch (e) { off_t = e.message; }
+ok('a sketch bigger than the face it is projected onto is refused, saying why', /runs off the surface/.test(off_t), off_t);
 /* the bundled pump housing (built over MCP) still rebuilds: constrained flange, threads, wrap, screw joint */
 const Ex_t = new Model(); Ex_t.load(exampleDoc('pump-housing'));
 const exFl_t = Ex_t.describe().objects.find(o => o.id === 'flange').sketch, exMass_t = massReport(Ex_t.doc, Ex_t.result);

@@ -20,14 +20,20 @@ export const TYPES = {
   /* end: blind | symmetric (both ways, half each) | through (through everything, for cuts); draft: taper ° (inward);
      thin: a wall of that thickness (a closed profile becomes a tube-like wall; an open one, open: true, a rib / thin plate) */
   extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], splines: [], length: 20, end: 'blind', draft: 0, thin: 0, open: false, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
-  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], splines: [], profile2: null, length: 30, twist: 0, constraints: [] } },
+  /* loft: the profile at 0 to its end at length (profile2, or the profile again); sections [{z, scale, rot, offset, profile?}] in between
+     (one at z = length restyles the end); guides [[[x,y,z]…]…] pull its sides; smooth = a monotone cubic through the sections */
+  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], splines: [], profile2: null, length: 30, twist: 0, sections: [], guides: [], smooth: true, constraints: [] } },
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], arcs: [], splines: [], degrees: 360, constraints: [] } },
   /* helix: {radius, pitch, turns, left} sweeps the profile along a helix instead of path (springs, coils, threads' cores) */
-  sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], helix: null } },
+  /* sweep: a profile along a path (smooth: a curve through the path points), twisting (° over the path) and scaling (at its end) */
+  sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], helix: null, smooth: false, twist: 0, scale: 1 } },
   /* fasteners with modelled ISO threads: a bolt (hex or socket head; thread_length 0 = threaded all the way) and a nut; left_hand for a left-hand thread */
   bolt: { label: 'Bolt', params: { size: 'M8', length: 25, head: 'hex', thread_length: 0, left_hand: false } },
   nut: { label: 'Nut', params: { size: 'M8', shape: 'hex', thickness: 0, od: 0, diameter: 0, pitch: 0, left_hand: false } },
   /* a sketch (or text) wrapped onto a cylindrical face: emboss stands out of it, engrave cuts in; radius follows the cylinder */
+  /* a sketch or text projected onto any surface (sphere, cone, torus, freeform) and embossed / engraved square to it; built on its
+     part as that part is at this point in the history, from a frame in the part's own coordinates (so it moves with it) */
+  drape: { label: 'Projected sketch', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], constraints: [], text: '', size: 8, weight: 0, depth: 1, mode: 'emboss', origin: [0, 0, 0], normal: [0, 0, 1], xdir: [1, 0, 0], cell: 0 } },
   wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], constraints: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
   /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
   plane: { label: 'Plane', params: { size: 60 } },
@@ -67,9 +73,10 @@ export const MATERIALS = {
   glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
 };
 /* object types that are not shapes of their own */
-const META = new Set(['edge', 'pattern', 'weld', 'shell']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell', 'drape']);
 export const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
+const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const fmt = (v) => String(Math.round(v * 100) / 100);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
@@ -413,6 +420,24 @@ function buildNut(p) {
   const st = threadStations(0, m, P, fn, (z) => ({ r: outer, ri: bore(z), sid: shape === 'knurled' ? 'knurl' : 'outer', sidIn: 'thread', flat: shape === 'hex' }));
   return K.radialSolid(Math.max(threadN(d), shape === 'knurled' ? 96 : 36), st, { sidFlat: shape === 'hex' ? flatSid : null });
 }
+/* a loft with sections or guides (otherwise the plain two-profile loft, unchanged) */
+const loftIsMulti = (p) => (Array.isArray(p.sections) && p.sections.length > 0) || (Array.isArray(p.guides) && p.guides.length > 0);
+/* the loft's sections: the profile at 0, the ones given in between, its end at length (profile2 or the profile; a section at
+   z = length restyles it) */
+export function loftStations(p, A) {
+  A = A || expandArcs(p.profile, p.arcs, { splines: p.splines }).pts;
+  const L = +p.length; if (!(L > 0)) throw new Error('length must be above 0');
+  const prof = (q) => q.profile ? expandArcs(q.profile, q.arcs, { splines: q.splines }).pts : A;
+  const mid = [], endStyle = {};
+  for (const q of p.sections || []) {
+    const z = +q.z; if (!(z > 0 && z <= L + 1e-9)) throw new Error(`a loft section at ${q.z} is outside the loft (0 … ${L}); make the loft longer or move the section`);
+    const st = { z, profile: prof(q), scale: q.scale == null ? 1 : +q.scale, rot: +q.rot || 0, offset: q.offset || [0, 0] };
+    if (Math.abs(z - L) < 1e-9) Object.assign(endStyle, st); else mid.push(st);
+  }
+  const end = Object.assign({ z: L, profile: p.profile2 || A, scale: 1, rot: 0, offset: [0, 0] }, endStyle, { z: L });
+  if (endStyle.profile && !(p.sections || []).find(q => Math.abs(+q.z - L) < 1e-9).profile) end.profile = p.profile2 || A;
+  return [{ z: 0, profile: A, scale: 1, rot: 0, offset: [0, 0] }, ...mid, end];
+}
 function buildWrap(p) {
   const R = +p.radius, depth = +p.depth, emboss = p.mode !== 'engrave', eps = Math.min(0.2, depth * 0.25);
   if (!(depth > 0)) throw new Error('depth must be above 0');
@@ -491,9 +516,9 @@ function buildLocal(o) {
     case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
     case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
     case 'extrude': return buildExtrude(p);
-    case 'loft': { const A = expandArcs(p.profile, p.arcs, { splines: p.splines }).pts; return K.loft(A, p.profile2 || A, { length: p.length, twist: p.twist }); }
+    case 'loft': { const A = expandArcs(p.profile, p.arcs, { splines: p.splines }).pts; if (!loftIsMulti(p)) return K.loft(A, p.profile2 || A, { length: p.length, twist: p.twist }); return K.loftSections(loftStations(p, A), { guides: p.guides, smooth: p.smooth !== false, twist: p.twist }); }
     case 'revolve': return K.revolve(expandArcs(p.profile, p.arcs, { splines: p.splines }).pts, { degrees: p.degrees });
-    case 'sweep': return K.sweep(p.profile, p.helix ? helixPath(p.helix) : p.path);
+    case 'sweep': return K.sweep(p.profile, p.helix ? helixPath(p.helix) : p.path, p.helix ? {} : { smooth: !!p.smooth, twist: +p.twist || 0, scale: p.scale == null ? 1 : +p.scale });
     case 'plane': return K.Solid.empty();
     case 'halfspace': return K.box(+p.size || 4000, +p.size || 4000, (+p.size || 4000) / 2);
     case 'hole': return buildHole(p);
@@ -885,6 +910,7 @@ export function evaluate(doc, opts) {
       R.consumed.add(t.id);
       try {
         if (t.type === 'edge') { s = applyEdge(s, t, o, R); steps.push({ kind: 'edge', t, run: (x, RR) => applyEdge(x, t, o, RR) }); continue; }
+        if (t.type === 'drape') { s = applyDrape(s, t, o, R); steps.push({ kind: t.params.mode === 'engrave' ? 'subtract' : 'union', t, run: (x, RR) => applyDrape(x, t, o, RR || R) }); continue; }
         if (t.type === 'shell') {
           const replay = (ok) => replayFor(start, steps, o, R, ok);
           const r = shellBody(s, o, t.params, R, t.id, replay); s = r.solid;
@@ -1164,6 +1190,22 @@ function circleFit(pts, axis) {
   const D = det(col(0)) / D0, E = det(col(1)) / D0, F = det(col(2)) / D0, cx = -D / 2, cy = -E / 2, r2 = cx * cx + cy * cy - F;
   if (!(r2 > 0)) return null;
   return { c: V.add(o, V.add(V.add(V.mul(e1, cx), V.mul(e2, cy)), V.mul(axis, h / n))), r: Math.sqrt(r2) };
+}
+/* a projected sketch (drape): the flat sketch (or text) as a thin solid in its own frame, cut into small cells, laid onto the
+   part as it is at this point in the history, then joined (emboss) or cut (engrave) */
+function applyDrape(s, t, root, R) {
+  const p = t.params, M = R.world.get(root.id); if (!M) throw new Error('its part has no position');
+  const depth = +p.depth; if (!(depth > 0)) throw new Error('depth must be above 0');
+  const emboss = p.mode !== 'engrave', eps = Math.min(0.2, depth * 0.25);
+  const O = M4.point(M, p.origin || [0, 0, 0]), N = V.norm(M4.dir(M, p.normal || [0, 0, 1])), x0 = M4.dir(M, p.xdir || [1, 0, 0]);
+  let X = V.sub(x0, V.mul(N, V.dot(x0, N))); if (V.len(X) < 1e-6) X = Math.abs(N[2]) < 0.9 ? V.cross([0, 0, 1], N) : [1, 0, 0]; X = V.norm(X); const Y = V.cross(N, X);
+  let flat;
+  if (p.text) flat = textSolid({ text: p.text, height: +p.size || 8, depth: depth + eps, weight: +p.weight > 0 ? +p.weight : undefined, spacing: p.spacing, align: 'center', path: 'line' });
+  else flat = K.extrude(expandArcs(p.profile, p.arcs, { splines: p.splines }).pts, { length: depth + eps });
+  flat = flat.transform(M4.translate([0, 0, emboss ? -eps : -depth]));
+  const fb = flat.bbox(), cell = +p.cell > 0 ? +p.cell : Math.max(0.4, Math.min(2.5, Math.max(fb.max[0] - fb.min[0], fb.max[1] - fb.min[1]) / 30));
+  const tool = K.drapeSolid(K.gridSplit(flat, cell), s, { O, X, Y, N }).tag(t.id);
+  return emboss ? s.union(tool) : s.subtract(tool);
 }
 function applyEdge(s, t, target, R) {
   const M = R.world.get(target.id), ref = t.edge || {};
@@ -1606,9 +1648,25 @@ export class Model {
         /* a sketch or text wrapped onto a cylindrical face: emboss (a boolean add) or engrave (a boolean remove). Placed by a
            point on the face (at + normal), or on a cylinder part by angle (° round from its x axis) and height (from its middle) */
         const t = need(o.target), root = (this.bodyContaining(t.id) || {}).id || t.id;
-        let cyl = o.at ? this.cylinderAt(t.id, W(o.at), o.normal) : t.type === 'cylinder' ? { id: t.id, primitive: true, radius: t.params.diameter / 2, angle: +o.angle || 0, height: +o.height || 0 } : null;
-        if (!cyl) throw new Error(`${t.name}: wrap works on round (cylindrical) faces — give a point on its round side (at + normal)`);
-        const mode = /^(engrave|cut|subtract|remove)$/.test(o.mode || '') ? 'engrave' : 'emboss', params = { depth: +o.depth || 1, mode, radius: cyl.radius };
+        const mode = /^(engrave|cut|subtract|remove)$/.test(o.mode || '') ? 'engrave' : 'emboss';
+        let cyl = o.project ? null : o.at ? this.cylinderAt(t.id, W(o.at), o.normal) : t.type === 'cylinder' ? { id: t.id, primitive: true, radius: t.params.diameter / 2, angle: +o.angle || 0, height: +o.height || 0 } : null;
+        if (!cyl) {
+          /* not a cylinder (a sphere, a cone, a lofted or filleted surface…), or asked to project: a projected sketch */
+          if (!o.at || !o.normal) throw new Error(`${t.name}: give at:[x,y,z] (a point on the face) and normal (the face's normal there) — on a cylinder part angle + height also work`);
+          const body = this.bodyContaining(t.id); if (!body) throw new Error(`${t.name} has no geometry to project onto`);
+          const rootObj = this.get(body.id), Mw = this.result.world.get(rootObj.id), Mi = M4.inv(Mw), n0 = V.norm(o.normal);
+          let xw = o.xdir ? V.norm(o.xdir) : (Math.abs(n0[2]) < 0.9 ? V.norm(V.cross([0, 0, 1], n0)) : [1, 0, 0]);
+          const dp = { depth: +o.depth || 1, mode, origin: M4.point(Mi, W(o.at)).map(r6), normal: V.norm(M4.dir(Mi, n0)).map(r6), xdir: V.norm(M4.dir(Mi, xw)).map(r6), cell: +o.cell || 0 };
+          for (const k of ['profile', 'arcs', 'splines', 'text', 'size', 'weight', 'spacing']) if (o[k] !== undefined) dp[k] = o[k];
+          if (o.shape) dp.profile = shapeProfile(o);
+          if (!dp.text && !(Array.isArray(dp.profile) && dp.profile.length >= 3)) throw new Error('give text, a profile [[x,y]…] (in the plane square to normal, from at) or a shape');
+          const pid = o.id && !this.get(o.id) ? String(o.id) : uid('drp'), pname = o.name || `${mode === 'engrave' ? 'Engrave' : 'Emboss'} projected${dp.text ? ' “' + String(dp.text).slice(0, 14) + '”' : ''}`;
+          this.insert({ id: pid, name: pname, type: 'drape', params: Object.assign(defaultParams('drape'), dp), into: rootObj.id, op: mode === 'engrave' ? 'subtract' : 'add', mate: null, pose: null, fixed: false, color: null });
+          this.recompute();
+          if (this.result.errors.has(pid)) { const msg = this.result.errors.get(pid); throw new Error(`${pname}: ${msg}`); }
+          return { label: `${pname} on ${t.name}`, id: pid, name: pname, projected: true };
+        }
+        const params = { depth: +o.depth || 1, mode, radius: cyl.radius };
         for (const k of ['profile', 'arcs', 'splines', 'text', 'size', 'weight', 'spacing']) if (o[k] !== undefined) params[k] = o[k];
         if (o.shape) params.profile = shapeProfile(o);
         if (!params.text && !(Array.isArray(params.profile) && params.profile.length >= 3)) throw new Error('give text, a profile [[s,t]…] (s round the face, t along it) or a shape');

@@ -134,7 +134,12 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
   - **Finish open** leaves the outline open: a **rib** or thin plate of a thickness you choose.
 - **Sketch on a face** (*On face* in the toolbar, or *On a face…* in the sketch bar): click **any** flat face, inclined ones included, and a view square to it opens with the grid on the face. Then choose *Extrude · join*, *Cut into*, *Cut through* or *New part*. The result is mated to that face.
 - Every flat face of a shape can be a target: a wedge's slope, an extrude's side faces, the flat ring of a revolve. That covers holes, text, bosses, cuts, sketches and mates.
+- **Lofts through sections, with guide curves:** Properties → *Loft sections & guides*.
+  - **+ section** adds a profile part-way up. Give each one a height, scale, turn and offset. With *smooth* on, the sides run in a smooth curve through every section (no overshoot); with it off, they're straight between sections.
+  - **+ guide** adds a curve from the first section to the last, which the sides follow. Edit its points (x, y, z). One guide moves the sections, two also turn and scale them (a barrel), and three or more also skew them.
+- **Sweeps** can follow a **smooth** curve through their path points (a bent tube, a handle), **twist** along the way, and **scale** down or up towards the end.
 - **Sketching on a curved face:** click the round side of a cylinder, a tube, a revolve or any extruded circle. The face opens **unrolled**: across is the distance round it, up is along it. Draw lines, arcs, splines, shapes or text as on a flat face. When you finish, it is **wrapped** round the face and either **embossed** (joined, standing out by the depth) or **engraved** (cut in). The face doesn't have to be a cylinder primitive: its axis and radius are fitted from the facets. On a cylinder part, the wrap follows the diameter when it changes.
+  - **Any other curved face** (a sphere, a cone, a loft, a fillet) opens a view square to the surface where you clicked. What you draw or type is **projected** onto the surface and embossed or engraved square to it. It's built on the part as it is at that point in the history, and it moves with the part.
 - **Threads are real geometry:** an ISO 60° profile with a chamfered lead-in, so they print, mesh and show in sections.
   - **More ▾ → Bolt (threaded)…:** M2–M24, length, hex or socket head, thread length. Mate its *seat* to the face it goes into.
   - **More ▾ → Nut (threaded)…:** hex, round or knurled. It can be custom (any diameter and pitch), e.g. a screw cap for a bottle neck.
@@ -336,7 +341,7 @@ These build on the same joint model:
 - slider and prismatic joints, gears and springs in the motion solver
 - the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, sketching on doubly-curved faces (spheres, tori), constraints on spline fit points
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, constraints on spline fit points, multi-user editing
 
 ## Tests
 

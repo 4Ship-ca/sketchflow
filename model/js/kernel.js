@@ -328,7 +328,8 @@ function ringSolid(rings, capIdx, sidSide, smooth, sidA, sidB) {
       const j = (i + 1) % n, a = r0[i], b = r0[j], c = r1[j], d = r1[i];
       const quadPlanar = (() => { const pl = planeOf([a, b, c]); return pl && Math.abs(V.dot(pl.n, d) - pl.w) < 1e-6; })();
       const sid = typeof sidSide === 'function' ? sidSide(i) : sidSide;
-      if (quadPlanar) push([a, b, c, d], sid); else { push([a, b, c], sid); push([a, c, d], sid); }
+      /* a twisted quad: the diagonal alternates like a checkerboard, so the triangles' error cancels between neighbours instead of piling up */
+      if (quadPlanar) push([a, b, c, d], sid); else if ((i + k) % 2) { push([a, b, d], sid); push([b, c, d], sid); } else { push([a, b, c], sid); push([a, c, d], sid); }
     }
   }
   const capA = rings[0], capB = rings[rings.length - 1];
@@ -416,9 +417,8 @@ export function extrude(profile, o) {
 export function loft(profA, profB, o) {
   o = o || {}; const L = +o.length || 10, tw = (+o.twist || 0) * Math.PI / 180, n = Math.max(profA.length, profB.length, o.samples || 48);
   const A = resample(ccw(cleanProfile(profA)), n); let B = resample(ccw(cleanProfile(profB)), n);
-  /* align start of B to A (min total distance) */
-  let best = 0, bd = Infinity; for (let s = 0; s < n; s++) { let d = 0; for (let i = 0; i < n; i += Math.max(1, n >> 4)) { const q = B[(i + s) % n]; d += Math.hypot(q[0] - A[i][0], q[1] - A[i][1]); } if (d < bd) { bd = d; best = s; } }
-  B = B.slice(best).concat(B.slice(0, best));
+  /* start B at the point matching A's start (compared as shapes) */
+  B = alignRing(A, B);
   const steps = Math.max(1, o.divisions || 8), rings = [], cap = triangulate(A);
   for (let k = 0; k <= steps; k++) {
     const t = k / steps, a = tw * t, c = Math.cos(a), s = Math.sin(a);
@@ -431,6 +431,105 @@ export function loft(profA, profB, o) {
   s.polys = s.polys.filter(p => p.sid !== 'end');
   for (const [i, j, k] of capB) { const p = poly([last[i], last[j], last[k]], 'end'); if (p) s.polys.push(p); }
   return s;
+}
+/* the shift of ring B that best lines it up with ring A (same point count): compared as shapes — each centred and scaled to
+   unit size first — so a bigger, smaller or moved section still starts at the matching corner and the sides don't twist */
+function alignRing(A, B) {
+  const n = A.length, norm = (R) => { let cx = 0, cy = 0; for (const q of R) { cx += q[0]; cy += q[1]; } cx /= n; cy /= n; let s2 = 0; for (const q of R) s2 += (q[0] - cx) ** 2 + (q[1] - cy) ** 2; const k = 1 / (Math.sqrt(s2 / n) || 1); return R.map(q => [(q[0] - cx) * k, (q[1] - cy) * k]); };
+  const a = norm(A), b = norm(B); let best = 0, bd = Infinity;
+  for (let sft = 0; sft < n; sft++) { let dd = 0; for (let i = 0; i < n; i++) { const q = b[(i + sft) % n]; dd += (q[0] - a[i][0]) ** 2 + (q[1] - a[i][1]) ** 2; } if (dd < bd - 1e-12) { bd = dd; best = sft; } }
+  return B.slice(best).concat(B.slice(0, best));
+}
+/* monotone cubic (Fritsch–Carlson) through (xs, ys): smooth, passes through every knot, never overshoots between them */
+export function pchip(xs, ys) {
+  const n = xs.length; if (n === 1) return () => ys[0];
+  const h = [], dl = []; for (let k = 0; k < n - 1; k++) { h.push(xs[k + 1] - xs[k]); dl.push((ys[k + 1] - ys[k]) / h[k]); }
+  const m = new Array(n);
+  if (n === 2) { m[0] = m[1] = dl[0]; }
+  else {
+    m[0] = dl[0]; m[n - 1] = dl[n - 2];
+    for (let k = 1; k < n - 1; k++) { if (dl[k - 1] * dl[k] <= 0) m[k] = 0; else { const w1 = 2 * h[k] + h[k - 1], w2 = h[k] + 2 * h[k - 1]; m[k] = (w1 + w2) / (w1 / dl[k - 1] + w2 / dl[k]); } }
+  }
+  return (x) => {
+    let k = 0; if (x <= xs[0]) k = 0; else if (x >= xs[n - 1]) k = n - 2; else while (k < n - 2 && x > xs[k + 1]) k++;
+    const t = Math.max(0, Math.min(1, (x - xs[k]) / h[k])), t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * ys[k] + (t3 - 2 * t2 + t) * h[k] * m[k] + (-2 * t3 + 3 * t2) * ys[k + 1] + (t3 - t2) * h[k] * m[k + 1];
+  };
+}
+/* the plane map that takes points P onto G: one pair moves, two move + turn + scale (exact), three or more are an affine
+   least-squares fit with the leftovers blended in by inverse distance, so every guided point lands on its guide */
+function guideWarp(P, G) {
+  const k = P.length;
+  if (!k) return (q) => q;
+  if (k === 1) { const dx = G[0][0] - P[0][0], dy = G[0][1] - P[0][1]; return (q) => [q[0] + dx, q[1] + dy]; }
+  let fit;
+  if (k === 2) {
+    const px = P[1][0] - P[0][0], py = P[1][1] - P[0][1], gx = G[1][0] - G[0][0], gy = G[1][1] - G[0][1], L2 = px * px + py * py;
+    if (L2 < 1e-18) { const dx = (G[0][0] + G[1][0] - P[0][0] - P[1][0]) / 2, dy = (G[0][1] + G[1][1] - P[0][1] - P[1][1]) / 2; return (q) => [q[0] + dx, q[1] + dy]; }
+    const ar = (gx * px + gy * py) / L2, ai = (gy * px - gx * py) / L2;
+    fit = (q) => { const ux = q[0] - P[0][0], uy = q[1] - P[0][1]; return [G[0][0] + ar * ux - ai * uy, G[0][1] + ai * ux + ar * uy]; };
+    return fit;
+  }
+  /* affine: [x', y'] = A [x, y, 1] by least squares */
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], bx = [0, 0, 0], by = [0, 0, 0];
+  for (let i = 0; i < k; i++) { const r = [P[i][0], P[i][1], 1]; for (let a = 0; a < 3; a++) { bx[a] += r[a] * G[i][0]; by[a] += r[a] * G[i][1]; for (let b = 0; b < 3; b++) M[a][b] += r[a] * r[b]; } }
+  const solve3 = (A, b) => { const m = A.map((row, i) => row.concat([b[i]])); for (let c = 0; c < 3; c++) { let piv = c; for (let r = c + 1; r < 3; r++) if (Math.abs(m[r][c]) > Math.abs(m[piv][c])) piv = r; [m[c], m[piv]] = [m[piv], m[c]]; if (Math.abs(m[c][c]) < 1e-12) return null; for (let r = 0; r < 3; r++) if (r !== c) { const f = m[r][c] / m[c][c]; for (let q = c; q < 4; q++) m[r][q] -= f * m[c][q]; } } return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]]; };
+  const cx = solve3(M, bx), cy = solve3(M, by);
+  const aff = cx && cy ? (q) => [cx[0] * q[0] + cx[1] * q[1] + cx[2], cy[0] * q[0] + cy[1] * q[1] + cy[2]] : guideWarp(P.slice(0, 2), G.slice(0, 2));
+  const res = P.map((q, i) => { const a = aff(q); return [G[i][0] - a[0], G[i][1] - a[1]]; });
+  return (q) => {
+    const a = aff(q); let sw = 0, rx = 0, ry = 0;
+    for (let i = 0; i < k; i++) { const d2 = (q[0] - P[i][0]) ** 2 + (q[1] - P[i][1]) ** 2; if (d2 < 1e-18) return [a[0] + res[i][0], a[1] + res[i][1]]; const w = 1 / d2; sw += w; rx += w * res[i][0]; ry += w * res[i][1]; }
+    return [a[0] + rx / sw, a[1] + ry / sw];
+  };
+}
+/* a loft through any number of sections: {profile, z, scale, rot (°), offset:[x, y]} at increasing heights.
+   smooth: a monotone cubic through the sections (no overshoot); otherwise ruled (straight between them).
+   guides: curves [[x, y, z]…] from the first section to the last; each pins the section point nearest its start, and the
+   section follows: one guide moves it, two move / turn / scale it, three or more also skew it (the rest blends in). */
+export function loftSections(sections, o) {
+  o = o || {};
+  if (!Array.isArray(sections) || sections.length < 2) throw new Error('a loft needs at least two sections');
+  const S = sections.map(q => Object.assign({}, q, { z: +q.z })).sort((a, b) => a.z - b.z);
+  for (let k = 1; k < S.length; k++) if (!(S[k].z > S[k - 1].z + 1e-6)) throw new Error(`two loft sections are at the same height (${S[k].z})`);
+  const n = Math.max(o.samples || 48, ...S.map(q => q.profile.length));
+  let R2 = S.map(q => {
+    const P = resample(ccw(cleanProfile(q.profile)), n), sc = q.scale == null ? 1 : +q.scale, a = (+q.rot || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), off = q.offset || [0, 0];
+    if (!(sc > 0)) throw new Error('a loft section scale must be above 0');
+    return P.map(([x, y]) => [(x * c - y * sn) * sc + (+off[0] || 0), (x * sn + y * c) * sc + (+off[1] || 0)]);
+  });
+  /* start each section where the one before starts (least total distance), so the sides don't twist */
+  for (let k = 1; k < R2.length; k++) R2[k] = alignRing(R2[k - 1], R2[k]);
+  const zs = S.map(q => q.z), z0 = zs[0], z1 = zs[zs.length - 1], smooth = o.smooth !== false && S.length > 2, tw = (+o.twist || 0) * Math.PI / 180;
+  const guides = (o.guides || []).filter(g => Array.isArray(g) && g.length >= 2).map(g => g.map(q => q.map(Number)).sort((a, b) => a[2] - b[2]));
+  const per = o.divisions || (smooth || guides.length || tw ? 12 : 1);
+  const vx = [], vy = [];
+  for (let i = 0; i < n; i++) {
+    const xs = R2.map(r => r[i][0]), ys = R2.map(r => r[i][1]);
+    if (smooth) { vx.push(pchip(zs, xs)); vy.push(pchip(zs, ys)); }
+    else { const lin = (vals) => (z) => { let k = 0; while (k < zs.length - 2 && z > zs[k + 1]) k++; const t = (z - zs[k]) / (zs[k + 1] - zs[k]); return vals[k] + (vals[k + 1] - vals[k]) * t; }; vx.push(lin(xs)); vy.push(lin(ys)); }
+  }
+  /* guides: each pins the section point nearest its start */
+  const G = guides.map(g => {
+    const gx = pchip(g.map(q => q[2]), g.map(q => q[0])), gy = pchip(g.map(q => q[2]), g.map(q => q[1]));
+    let at = 0, bd = Infinity; R2[0].forEach((q, i) => { const dd = Math.hypot(q[0] - g[0][0], q[1] - g[0][1]); if (dd < bd) { bd = dd; at = i; } });
+    if (o.warn && (Math.abs(g[0][2] - z0) > 1e-3 || bd > 0.05 * Math.max(1, ...R2[0].map(q => Math.hypot(q[0], q[1]))))) o.warn(`a guide starts ${bd.toFixed(2)} mm from the first section (it pulls the nearest point to it)`);
+    if (o.warn && Math.abs(g[g.length - 1][2] - z1) > 1e-3) o.warn(`a guide ends at height ${g[g.length - 1][2]}, not at the last section (${z1}) — it is held straight beyond its ends`);
+    return { at, x: gx, y: gy, z0: g[0][2], z1: g[g.length - 1][2] };
+  });
+  const stations = []; for (let k = 0; k < zs.length - 1; k++) for (let j = 0; j < per; j++) stations.push(zs[k] + (zs[k + 1] - zs[k]) * j / per); stations.push(z1);
+  const rings = [], flat2 = [];
+  for (const z of stations) {
+    let ring = vx.map((fx, i) => [fx(z), vy[i](z)]);
+    if (G.length) { const P = G.map(g => ring[g.at]), T = G.map(g => { const zz = Math.max(g.z0, Math.min(g.z1, z)); return [g.x(zz), g.y(zz)]; }), f = guideWarp(P, T); ring = ring.map(f); }
+    if (tw) { const a = tw * (z - z0) / (z1 - z0), c = Math.cos(a), sn = Math.sin(a); ring = ring.map(([x, y]) => [x * c - y * sn, x * sn + y * c]); }
+    flat2.push(ring); rings.push(ring.map(([x, y]) => [x, y, z]));
+  }
+  for (const r of flat2) if (area2(r) <= 0) throw new Error('the loft turns inside out between its sections (a guide or a section pulls it across itself)');
+  const sol = ringSolid(rings, triangulate(flat2[0]), 'side', true, 'start', 'end'), last = rings[rings.length - 1];
+  sol.polys = sol.polys.filter(q => q.sid !== 'end');
+  for (const [i, j, k] of triangulate(flat2[flat2.length - 1])) { const q = poly([last[i], last[j], last[k]], 'end'); if (q) sol.polys.push(q); }
+  return sol;
 }
 /* revolve a 2D profile (x = radius ≥ 0, y = height) around local Z */
 export function revolve(profile, o) {
@@ -459,9 +558,34 @@ export function revolve(profile, o) {
   const s = new Solid(polys); fixOrientation(s); return s;
 }
 /* sweep a 2D profile along a 3D polyline path (parallel-transport frames, mitred corners) */
+/* a smooth path through the points: centripetal Catmull–Rom in 3D, about every 2 mm (at least 8 per leg) */
+export function smoothPath(P, step) {
+  if (P.length < 3) return P.map(q => q.slice());
+  const out = [P[0].slice()], d = (a, b) => Math.pow(Math.max(1e-12, V.len(V.sub(b, a))), 0.5);
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = i > 0 ? P[i - 1] : V.sub(V.mul(P[0], 2), P[1]), p1 = P[i], p2 = P[i + 1], p3 = i + 2 < P.length ? P[i + 2] : V.sub(V.mul(P[i + 1], 2), P[i]);
+    const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3), L = V.len(V.sub(p2, p1)), m = Math.max(8, Math.ceil(L / (step || 2)));
+    for (let k = 1; k <= m; k++) {
+      const t = t1 + (t2 - t1) * k / m, lerp = (a, b, ta, tb) => V.add(V.mul(a, (tb - t) / (tb - ta)), V.mul(b, (t - ta) / (tb - ta)));
+      const A1 = lerp(p0, p1, t0, t1), A2 = lerp(p1, p2, t1, t2), A3 = lerp(p2, p3, t2, t3), B1 = lerp(A1, A2, t0, t2), B2 = lerp(A2, A3, t1, t3);
+      out.push(lerp(B1, B2, t1, t2));
+    }
+  }
+  return out;
+}
 export function sweep(profile, path, o) {
-  o = o || {}; const pts = ccw(cleanProfile(profile)); const P = path.map(p => p.map(Number));
+  o = o || {}; const pts = ccw(cleanProfile(profile)); let P = path.map(p => p.map(Number));
   if (P.length < 2) throw new Error('A sweep path needs at least 2 points');
+  if (o.smooth) P = smoothPath(P, o.step);
+  /* twist (° over the whole path) and scale (at the end), by distance along it */
+  const tw = (+o.twist || 0) * Math.PI / 180, sc1 = o.scale == null ? 1 : +o.scale; if (!(sc1 > 0)) throw new Error('the sweep end scale must be above 0');
+  if ((tw || sc1 !== 1) && !o.smooth) {
+    /* the sides follow the change only with enough rings: at most 2 mm and 2° of twist apart */
+    let tot = 0; for (let i = 1; i < P.length; i++) tot += V.len(V.sub(P[i], P[i - 1]));
+    const Q = [P[0]]; for (let i = 1; i < P.length; i++) { const a = P[i - 1], b = P[i], l = V.len(V.sub(b, a)), m = Math.max(12, Math.ceil(l / 2), Math.ceil(Math.abs(o.twist || 0) * (l / (tot || 1)) / 2)); for (let k = 1; k <= m; k++) Q.push(V.lerp(a, b, k / m)); } P = Q;
+  }
+  const acc = [0]; for (let i = 1; i < P.length; i++) acc.push(acc[i - 1] + V.len(V.sub(P[i], P[i - 1])));
+  const total = acc[acc.length - 1] || 1, shape = (i) => { const f = acc[i] / total, a = tw * f, c = Math.cos(a), sn = Math.sin(a), k = 1 + (sc1 - 1) * f; return pts.map(([x, y]) => [(x * c - y * sn) * k, (x * sn + y * c) * k]); };
   const T = P.map((p, i) => { const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; return V.norm(V.sub(b, a)); });
   let up = Math.abs(T[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
   let X = V.norm(V.cross(up, T[0])), Y = V.cross(T[0], X);
@@ -472,13 +596,15 @@ export function sweep(profile, path, o) {
     if (i > 0 && i < P.length - 1) { const d0 = V.norm(V.sub(P[i], P[i - 1])), d1 = V.norm(V.sub(P[i + 1], P[i])); const c = V.dot(d0, T[i]); k = 1 / Math.max(0.25, c); void d1; }
     /* mitre: stretch the profile across the corner bisector */
     const bend = i > 0 && i < P.length - 1 ? V.norm(V.sub(V.norm(V.sub(P[i + 1], P[i])), V.norm(V.sub(P[i], P[i - 1])))) : null;
-    rings.push(pts.map(([x, y]) => {
+    rings.push(shape(i).map(([x, y]) => {
       let q = V.add(V.mul(X, x), V.mul(Y, y));
       if (bend && V.len(bend) > 1e-9) { const along = V.dot(q, bend); q = V.add(q, V.mul(bend, along * (k - 1))); }
       return V.add(P[i], q);
     }));
   }
-  const s = ringSolid(rings, triangulate(pts), 'side', false, 'start', 'end'); fixOrientation(s); return s;
+  const s = ringSolid(rings, triangulate(pts), 'side', !!o.smooth, 'start', 'end');
+  if (sc1 !== 1) { const last = rings[rings.length - 1], endShape = shape(rings.length - 1); s.polys = s.polys.filter(q => q.sid !== 'end'); for (const [i, j, k] of triangulate(endShape)) { const q = poly([last[i], last[j], last[k]], 'end'); if (q) s.polys.push(q); } }
+  fixOrientation(s); return s;
 }
 /* make sure polygons face outward (positive volume) */
 function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
@@ -529,6 +655,67 @@ export function wrapSolid(flat, R, stepDeg = 2) {
   const polys = [];
   for (const q of pieces) { const pts = q.v.map(v => map(v.p)); for (let i = 1; i < pts.length - 1; i++) { const t = poly([pts[0], pts[i], pts[i + 1]], q.sid); if (t) polys.push(t); } }
   const s = new Solid(polys); fixOrientation(s); return s;
+}
+/* cut a solid into a grid of cells (planes x = c and y = c, every step) so it can be bent onto a surface. Every
+   polygon crossing a plane is cut at it, so neighbours share their new corners and the result stays closed */
+export function gridSplit(sol, step) {
+  const bb = sol.bbox(); let pieces = sol.polys.map(q => q.clone());
+  for (const k of [0, 1]) {
+    const lo = bb.min[k], hi = bb.max[k], m = Math.max(1, Math.ceil((hi - lo) / step));
+    for (let j = 1; j < m; j++) { const n = [0, 0, 0]; n[k] = 1; const pl = new Plane(n, lo + (hi - lo) * j / m), next = []; for (const q of pieces) pl.split(q, next, next, next, next); pieces = next; }
+  }
+  return new Solid(pieces);
+}
+/* drape: lay a flat solid onto any surface. The flat solid is in sketch coordinates (x, y in the sketch plane, z = height
+   above the surface); frame {O, X, Y, N} is the sketch plane in the world, and the projection runs along −N. Each corner
+   lands on the first surface below it (faces of target that look back at the sketch) and is lifted along that surface's
+   smoothed normal by its z, so depth is square to the surface wherever it is curved. */
+export function drapeSolid(flat, target, frame, o) {
+  o = o || {};
+  const { O, X, Y, N } = frame, loc = (p) => { const d = V.sub(p, O); return [V.dot(d, X), V.dot(d, Y), V.dot(d, N)]; };
+  const fb = flat.bbox(), cell = Math.max(0.5, Math.min(8, Math.max(fb.max[0] - fb.min[0], fb.max[1] - fb.min[1]) / 24));
+  const gx0 = fb.min[0] - cell, gy0 = fb.min[1] - cell, GX = Math.ceil((fb.max[0] - gx0 + cell) / cell) + 1, GY = Math.ceil((fb.max[1] - gy0 + cell) / cell) + 1, bins = new Map();
+  for (const q of target.polys) {
+    if (V.dot(q.plane.n, N) <= 1e-4) continue;
+    const L = q.v.map(v => loc(v.p)); let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const p of L) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    const i0 = Math.max(0, Math.floor((x0 - gx0) / cell)), i1 = Math.min(GX - 1, Math.floor((x1 - gx0) / cell)), j0 = Math.max(0, Math.floor((y0 - gy0) / cell)), j1 = Math.min(GY - 1, Math.floor((y1 - gy0) / cell));
+    if (i0 > i1 || j0 > j1) continue;
+    const f = { q, L, nl: [V.dot(q.plane.n, X), V.dot(q.plane.n, Y), V.dot(q.plane.n, N)], w: V.dot(q.plane.n, q.v[0].p) - V.dot(q.plane.n, O) };
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const key = i * GY + j; if (!bins.has(key)) bins.set(key, []); bins.get(key).push(f); }
+  }
+  const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const hit = (x, y) => {
+    const list = bins.get(Math.floor((x - gx0) / cell) * GY + Math.floor((y - gy0) / cell)) || []; let best = null;
+    for (const f of list) {
+      const z = (f.w - f.nl[0] * x - f.nl[1] * y) / f.nl[2]; if (best && z <= best.z) continue;
+      /* inside the face seen along N: a fan of triangles from its first corner, which also gives the blend of corner normals */
+      const L = f.L, p = [x, y];
+      for (let t = 1; t < L.length - 1; t++) {
+        const a = L[0], b = L[t], c = L[t + 1], A = cr(a, b, c); if (Math.abs(A) < 1e-14) continue;
+        const u = cr(p, b, c) / A, v = cr(a, p, c) / A, w = 1 - u - v, tol = -1e-9;
+        if (u < tol || v < tol || w < tol) continue;
+        const n0 = f.q.v[0].n || f.q.plane.n, n1 = f.q.v[t].n || f.q.plane.n, n2 = f.q.v[t + 1].n || f.q.plane.n;
+        best = { z, n: V.norm(V.add(V.add(V.mul(n0, u), V.mul(n1, v)), V.mul(n2, w))) }; break;
+      }
+    }
+    return best;
+  };
+  const memo = new Map(), map = (p) => {
+    const key = p[0].toFixed(6) + ',' + p[1].toFixed(6) + ',' + p[2].toFixed(6); if (memo.has(key)) return memo.get(key);
+    const h = hit(p[0], p[1]);
+    if (!h) throw new Error(o.offMessage || `the sketch runs off the surface (at ${p[0].toFixed(1)}, ${p[1].toFixed(1)} in the sketch) — keep it on the face, or make it smaller`);
+    const base = V.add(V.add(O, V.add(V.mul(X, p[0]), V.mul(Y, p[1]))), V.mul(N, h.z)), out = { p: V.add(base, V.mul(h.n, p[2])), n: h.n };
+    memo.set(key, out); return out;
+  };
+  const polys = [];
+  for (const q of flat.polys) {
+    const m = q.v.map(v => map(v.p)), cap = Math.abs(q.plane.n[2]) > 0.9, sg = q.plane.n[2] > 0 ? 1 : -1;
+    for (let i = 1; i < m.length - 1; i++) {
+      const tri = [m[0], m[i], m[i + 1]], t = poly(tri.map(x => x.p), q.sid, cap ? tri.map(x => V.mul(x.n, sg)) : null);   /* its top and bottom shade as smoothly as the surface */
+      if (t) polys.push(t);
+    }
+  }
+  const sol = new Solid(polys); fixOrientation(sol); return sol;
 }
 /* ---------- 2D offsets (draft, thin walls, ribs) ---------- */
 /* a closed polygon moved outward by d (inward when d < 0), corners mitred; null when it turns inside out */
