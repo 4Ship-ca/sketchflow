@@ -81,8 +81,8 @@ export class Views {
   }
   paneAt(x, y) { return this.panes().find(p => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h) || null; }
   /* a view square to any face (normal n, pointing at the viewer): the 'face' pane, for sketching on that face */
-  setFaceView(n, label, centre) {
-    const f = V.norm(n), up0 = Math.abs(f[2]) > 0.99 ? [0, 1, 0] : [0, 0, 1], u = V.norm(V.sub(up0, V.mul(f, V.dot(up0, f)))), r = V.cross(u, f);
+  setFaceView(n, label, centre, up) {
+    const f = V.norm(n), up0 = up || (Math.abs(f[2]) > 0.99 ? [0, 1, 0] : [0, 0, 1]), u = V.norm(V.sub(up0, V.mul(f, V.dot(up0, f)))), r = V.cross(u, f);
     BASIS.face = { r, u, f }; LABEL.face = label || 'FACE'; if (centre) this.ortho.c = centre.slice();
     return BASIS.face;
   }

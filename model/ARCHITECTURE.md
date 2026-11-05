@@ -32,7 +32,7 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Onshape | SketchFlow 3D | Tweak for rapid prototyping / LLMs |
 |---|---|---|
 | Part Studio feature list | `doc.objects`, in order | Each feature is a self-contained object, so an LLM can add, edit or delete one without replaying a script |
-| Parasolid kernel (exact B-rep) | Own BSP CSG over faceted polygons with surface ids | Zero dependencies and runs everywhere. Precision is that of the faceted surfaces (48 segments) |
+| Parasolid kernel (exact B-rep) | Own BSP CSG over faceted polygons with surface ids | Zero dependencies and runs everywhere. Precision is that of the faceted surfaces (48 segments). Booleans use lazy, bounding-box-culled classification trees (below), so a bolt against its nut (30k polygons) takes about 0.3 s |
 | Sketch + constraint solver | *Profile* tool: click points on a view plane with grid and Shift-straight snapping | No solver yet (see gaps) |
 | Extrude / Revolve / Loft / Sweep | `extrude {length, twist, scale, direction}`, `revolve {degrees}`, `loft {profile2, twist}`, `sweep {path}` | Loft is "extrude with a different end": scale, twist, or a second profile of any point count |
 | Mate connectors | Connectors on every object: faces, centre, corners, edge midpoints, round sides, feature start/end, bbox faces | Named, so the AI can say `a: 'top', b: 'bottom'`. Errors list the valid names |
@@ -48,6 +48,10 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Sketch arcs | `arcs: [{i, c, ccw}]` on a profile: segment i is an arc around centre c | Arcs are entities, not segments. The solver treats each centre as two unknowns held equidistant from both ends, so an arc adds one freedom: its radius. Profiles are cut into 6° chords only when the solid is built, and all chords of an arc share one surface id, so the arc is one smooth face |
 | Sketch on a plane / any face, mate connectors | Every flat face of a shape's own geometry is a face connector (`face:<surface>`, besides the named ones). A sketch on a face opens a view square to it. Reference `plane` objects come from a face, a gap and a tilt | Faces that a named connector covers are skipped, and so are curved surfaces. Connector u axes are local X projected onto the face, so they stay put when sizes change |
 | Extrude end conditions, draft, thin, rib | `end: blind / symmetric / through`, `draft`, `thin`, `open` | Through all is a fixed 4 m reach, so a cut stays through when the part grows. Draft offsets the end profile with mitred corners, refusing angles that close it. Thin subtracts the inward offset. Open thickens a polyline centred on its line |
+| Splines (sketch) | `splines: [{i, pts}]` on any profile (extrude, loft, revolve, wrap): segment i runs from point i through the fit points to point i+1 | Centripetal Catmull–Rom, so there are no cusps or overshoot on uneven spacing. The end tangents lean on the neighbouring segments, so a spline blends into lines and arcs. It is chorded only when the solid is built, under one smooth surface id (`spl<i>`), so it shades and selects as one face |
+| Threads (Onshape: cosmetic threads; here modelled) | `bolt`, `nut` types; `thread` op; cylinder `thread` / `bore`; `hole {kind: tapped, modelled: true}` | Built in one pass as a *radial solid*: star-shaped cross-sections stacked along z (the ISO 60° profile sampled at 16 stations per pitch, with a helical phase per angle). There are no booleans, so a thread costs about the same as a cylinder of the same facet count. Internal and external threads use the same table with 0.1 mm radial clearance, so they mesh without overlap |
+| Wrap (Onshape: wrap / sketch on a curved face) | `wrap {target, at + normal | angle + height, profile | shape | text, depth, mode}` | The flat sketch is extruded to the depth, cut into strips by x planes every 2° of arc, and each vertex is mapped (s, t, d) → (angle s/R, height t, radius R ± d). The cylinder is fitted from the facet normals (an axis from their covariance null vector, then a least-squares circle), so any round face works. On a cylinder part, R is the expression `=id.diameter / 2`, so the wrap follows the size |
+| Screw mate | `joint: 'screw'` with `pitch`; `drive {angle}` | Offset = base + pitch × angle / 360. The thread phase is kept, so a nut stays meshed at every angle (the motion sweep checks it) |
 | Helix / coil, split | `sweep` with `helix: {radius, pitch, turns, left}`, `helix` op; `split` op with `halfspace` tools | A split is a half-space block mated to the plane and subtracted, so it follows the plane. *Keep both* makes an in-place copy and cuts the other side |
 | Sketch constraints | `constraints` on a polyline profile; `constrain` / `unconstrain` ops | Levenberg–Marquardt from the drawn shape (the smallest change that satisfies everything), degrees of freedom by Jacobian rank, conflicts named. Values are ordinary parameters (d1, d2…) so they link, take formulas and switch per configuration |
 | Text (Onshape: sketch text + extrude) | `text {target, face \| at, text, height, depth, mode: emboss \| engrave, path: line \| arc \| arc-inside \| points}` | A single-stroke engraving font thickened to a stroke weight; characters placed rigidly along the path (each turned to its tangent). Emboss = boolean add, engrave = boolean remove. Anchored at its own origin, so editing the words never moves it |
@@ -62,6 +66,15 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Drawings | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
+
+### Fast booleans: culled, lazy classification trees
+
+csg.js-style booleans build a BSP tree of each solid and clip one against the other. That is quadratic in the worst case, and threads are the worst case: 40k long, thin facets. Three changes made it about 400× faster on those parts:
+1. **Splitter choice.** Seven candidate planes are scored on a 48-polygon sample: 4 × polygons split + |front − back|. A tree over a thread is then a few dozen levels deep, not thousands.
+2. **Lazy trees.** A node sorts its polygons into front and back lists only when something is first clipped against it. Parts of a tree that no query reaches are never built, which is most of a bolt when only its tip touches a nut.
+3. **Bounding-box culling.** Each tree keeps the box of its whole solid. A polygon that misses the box is classified at once (outside, or inside for an inverted tree) and never descends. When a nut meets a bolt, that is everything but the few turns they share.
+
+A boolean is then the clip-list algebra itself (A clipped by B, plus B clipped by A, with the inversions for subtract and intersect), concatenated. There is no tree merge. Exact interference is therefore the default up to 150k polygons per pair, and the voxel estimate is only a fallback.
 
 ### Shell: an offset, not a scale
 
@@ -149,16 +162,19 @@ Built so far, on top of the first version:
 - interference checks and collision detection during motion
 - shell on any shape (offset, with replay for features thinner than the walls)
 - text: emboss / engrave, straight, on an arc or along a path
+- splines in sketches; modelled threads (bolts, nuts, threaded cylinders and tubes, tapped holes) and a screw joint
+- sketches and text wrapped onto round faces
+- fast booleans (culled lazy trees); exact interference by default
 
 Still to come, roughly in order of how much each unlocks:
 
-1. **More sketch relations**: point-on-curve, symmetric, midpoint, arc length; splines.
+1. **More sketch relations**: point-on-curve, symmetric, midpoint, arc length; constraints on spline fit points (splines are free curves today, and h / v skip them).
 2. **Draft, rib and loft guide curves.** Taper an extrude with its scale for now.
 3. **Motion studies**: plots of position, speed and clearance over a sweep (first contact is reported today).
-4. **Text wrapped onto curved faces** (a cylinder's side), outline fonts from a file; sketching on curved faces (wrap / project).
+4. **Doubly-curved wraps** (spheres, tori, freeform) and projection of a sketch onto any surface. Cylinders and cones-as-cylinders are done. Outline fonts from a file.
 5. **Formulas on mate offsets and slides.** Driving dimensions cover most placement needs today.
 6. **More on drawings**: section views on the sheet, GD&T and notes.
-7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be 10–100× faster on large booleans.
+7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be faster on very large booleans, though the culled trees close most of that gap for parts under about 50k polygons.
 8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
 9. **More add-ons**: bearings and shafts, sheet metal, extrusion profiles, pipe and tube.
 
@@ -166,7 +182,7 @@ Still to come, roughly in order of how much each unlocks:
 
 ```bash
 node model/test/kernel.test.mjs   # volumes against closed forms: primitives, booleans, extrude/loft/revolve/sweep, edge pieces
-node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, undo
+node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, splines, threads, wrap, screw joint, the pump housing example, undo
 node model/test/gears.test.mjs    # gears mesh (no overlap; a half-tooth error overlaps), helical/herringbone/ring, trains, planetary, advisor
 node model/test/addons.test.mjs   # the add-on contract and the fasteners example
 node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact

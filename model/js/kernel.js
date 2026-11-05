@@ -87,6 +87,23 @@ function planeOf(pts) {
 }
 
 /* ---------- BSP (iterative) ---------- */
+/* the splitting plane for a BSP node: on big inputs, the best of a few spread-out candidates (few polygons cut, the rest
+   split evenly) — taking the first polygon's plane makes a list-shaped tree on long, ordered meshes (threads, rings) */
+function pickSplitter(ps) {
+  if (ps.length < 24) return ps[0].plane.clone();
+  const K = 7, S = Math.min(48, ps.length), stepC = ps.length / K, stepS = ps.length / S;
+  let best = null, bs = Infinity;
+  for (let c = 0; c < K; c++) {
+    const pl = ps[Math.floor(c * stepC + stepC / 2)].plane; let fr = 0, bk = 0, sp = 0;
+    for (let k = 0; k < S; k++) {
+      const q = ps[Math.floor(k * stepS)]; let pos = false, neg = false;
+      for (const v of q.v) { const t = V.dot(pl.n, v.p) - pl.w; if (t > EPS) pos = true; else if (t < -EPS) neg = true; if (pos && neg) break; }
+      if (pos && neg) sp++; else if (pos) fr++; else if (neg) bk++;
+    }
+    const score = sp * 4 + Math.abs(fr - bk); if (score < bs) { bs = score; best = pl; }
+  }
+  return best.clone();
+}
 class Node {
   constructor() { this.plane = null; this.front = null; this.back = null; this.polys = []; }
   nodes() { const out = [], st = [this]; while (st.length) { const n = st.pop(); out.push(n); if (n.front) st.push(n.front); if (n.back) st.push(n.back); } return out; }
@@ -111,7 +128,7 @@ class Node {
     while (st.length) {
       const [n, ps] = st.pop();
       if (!ps.length) continue;
-      if (!n.plane) n.plane = ps[0].plane.clone();
+      if (!n.plane) n.plane = pickSplitter(ps);
       const f = [], b = [];
       for (const p of ps) n.plane.split(p, n.polys, n.polys, f, b);
       if (f.length) { if (!n.front) n.front = new Node(); st.push([n.front, f]); }
@@ -120,29 +137,75 @@ class Node {
   }
 }
 
+/* A lazily built BSP of one solid, used only to classify other polygons against it (keep what is outside, drop what
+   is inside). A node is split only when a polygon reaches it, so the far side of a big mesh is never sorted, and
+   polygons outside the solid's bounding box are decided at once. invert() turns it into the solid's complement. */
+class CTree {
+  constructor(polys) {
+    this.root = { plane: null, front: null, back: null, pending: polys }; this.inv = false;
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (const p of polys) for (const v of p.v) for (let k = 0; k < 3; k++) { if (v.p[k] < mn[k]) mn[k] = v.p[k]; if (v.p[k] > mx[k]) mx[k] = v.p[k]; }
+    const pad = 1e-5 + 1e-9 * Math.max(1, ...mx.map((x, k) => Math.abs(x - mn[k]))); this.bb = { min: mn.map(x => x - pad), max: mx.map(x => x + pad) };
+  }
+  expand(n) {
+    const ps = n.pending; n.pending = null; if (!ps || !ps.length) return;
+    const pl = pickSplitter(ps); if (this.inv) pl.flip();
+    const f = [], b = [], skip = [];
+    for (const p of ps) pl.split(p, skip, skip, f, b);
+    n.plane = pl; n.front = f.length ? { plane: null, front: null, back: null, pending: f } : null; n.back = b.length ? { plane: null, front: null, back: null, pending: b } : null;
+  }
+  invert() {
+    const st = [this.root];
+    while (st.length) { const n = st.pop(); if (n.plane) { n.plane.flip(); const t = n.front; n.front = n.back; n.back = t; } if (n.front) st.push(n.front); if (n.back) st.push(n.back); }
+    this.inv = !this.inv;
+  }
+  clip(polys) {
+    const out = [], near = [], bb = this.bb;
+    for (const p of polys) {
+      let away = false;
+      for (let k = 0; k < 3 && !away; k++) { let lo = Infinity, hi = -Infinity; for (const v of p.v) { if (v.p[k] < lo) lo = v.p[k]; if (v.p[k] > hi) hi = v.p[k]; } if (hi < bb.min[k] || lo > bb.max[k]) away = true; }
+      if (away) { if (!this.inv) out.push(p); } else near.push(p);
+    }
+    const st = [[this.root, near]];
+    while (st.length) {
+      const [n, ps] = st.pop(); if (!ps.length) continue;
+      if (n.pending) this.expand(n);
+      if (!n.plane) { if (!this.inv) for (const p of ps) out.push(p); continue; }
+      const f = [], b = [];
+      for (const p of ps) n.plane.split(p, f, b, f, b);
+      if (n.front) st.push([n.front, f]); else for (const p of f) out.push(p);
+      if (n.back) st.push([n.back, b]);
+    }
+    return out;
+  }
+}
+const flipped = (ps) => ps.map(p => { const q = p.clone(); q.flip(); return q; });
 /* ---------- Solid ---------- */
 export class Solid {
   constructor(polys) { this.polys = polys || []; }
   clone() { return new Solid(this.polys.map(p => p.clone())); }
   static empty() { return new Solid([]); }
   isEmpty() { return this.polys.length === 0; }
+  /* booleans, as in csg.js (clip each solid by the other's tree, then join the lists), with lazy trees and culling */
   union(o) {
     if (this.isEmpty()) return o.clone(); if (o.isEmpty()) return this.clone();
-    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
-    a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert(); a.build(b.all());
-    return new Solid(a.all());
+    const A = this.clone().polys, B = o.clone().polys, ta = new CTree(A), tb = new CTree(B);
+    const a1 = tb.clip(A), b1 = ta.clip(B), b2 = flipped(ta.clip(flipped(b1)));
+    return new Solid(a1.concat(b2));
   }
   subtract(o) {
     if (this.isEmpty() || o.isEmpty()) return this.clone();
-    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
-    a.invert(); a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert(); a.build(b.all()); a.invert();
-    return new Solid(a.all());
+    const A = this.clone().polys, B = o.clone().polys, ta = new CTree(A), tb = new CTree(B);
+    ta.invert();
+    const a1 = flipped(tb.clip(flipped(A))), b1 = ta.clip(B), b2 = ta.clip(flipped(b1));
+    return new Solid(a1.concat(b2));
   }
   intersect(o) {
     if (this.isEmpty() || o.isEmpty()) return Solid.empty();
-    const a = new Node(), b = new Node(); a.build(this.clone().polys); b.build(o.clone().polys);
-    a.invert(); b.clipTo(a); b.invert(); a.clipTo(b); b.clipTo(a); a.build(b.all()); a.invert();
-    return new Solid(a.all());
+    const A = this.clone().polys, B = o.clone().polys, ta = new CTree(A), tb = new CTree(B);
+    ta.invert(); const b1 = ta.clip(B); tb.invert();
+    const a1 = tb.clip(flipped(A)), b2 = ta.clip(flipped(b1));
+    return new Solid(flipped(a1).concat(flipped(b2)));
   }
   transform(m) {
     const flip = M4det(m) < 0;
@@ -420,6 +483,53 @@ export function sweep(profile, path, o) {
 /* make sure polygons face outward (positive volume) */
 function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
 
+/* ---------- radial solids: threads, bolts, nuts, knurls ----------
+   A solid around the z axis whose cross-section at each station is star-shaped: radius r(θ) at N fixed angles, so
+   a thread (a fixed profile turning with height), a hex head and a plain shank are all one watertight solid with no
+   booleans. stations: [{ z, r: θ → radius, ri: θ → bore radius | null, sid, sidIn }] in increasing z (two stations at
+   the same z make a flat step, e.g. under a bolt head). The bore (ri) must be one run of stations; where it starts or
+   ends inside the solid it gets a flat floor. Faces: sid per station band (flats of a hex can be named by sidFlat). */
+export function radialSolid(N, stations, o = {}) {
+  N = Math.max(8, Math.round(N)); if (stations.length < 2) throw new Error('a radial solid needs two stations');
+  const th = Array.from({ length: N }, (_, j) => 2 * Math.PI * j / N), polys = [];
+  const ring = (z, f) => th.map(t => { const r = f(t); return [r * Math.cos(t), r * Math.sin(t), z]; });
+  const O = stations.map(s => ring(s.z, s.r)), I = stations.map(s => (s.ri ? ring(s.z, s.ri) : null));
+  const push = (pts, sid) => { const q = poly(pts, sid); if (q) polys.push(q); };
+  const quad = (a, b, c, d, sid) => { const pl = planeOf([a, b, c]); if (pl && Math.abs(V.dot(pl.n, d) - pl.w) < 1e-7) push([a, b, c, d], sid); else { push([a, b, c], sid); push([a, c, d], sid); } };
+  for (let k = 0; k < stations.length - 1; k++) {
+    const A = O[k], B = O[k + 1], sid = stations[k + 1].sid || stations[k].sid || 'side', flat = o.sidFlat && stations[k].flat;
+    for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; quad(A[j], A[j1], B[j1], B[j], flat ? o.sidFlat(j, N) : sid); }
+    if (I[k] && I[k + 1]) { const C = I[k], D = I[k + 1], sid2 = stations[k + 1].sidIn || stations[k].sidIn || 'bore'; for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; quad(C[j], D[j], D[j1], C[j1], sid2); } }
+  }
+  /* caps: a disc, or an annulus around the bore; a floor where the bore ends inside */
+  const facing = (pts, up) => { const pl = planeOf(pts); return pl && (pl.n[2] > 0) !== up ? pts.slice().reverse() : pts; };
+  const disc = (R, up, sid) => { const z = R[0][2], c = [0, 0, z]; for (let j = 0; j < N; j++) push(facing([c, R[j], R[(j + 1) % N]], up), sid); };
+  const annulus = (R, Ri, up, sid) => { for (let j = 0; j < N; j++) { const j1 = (j + 1) % N; const pts = facing([R[j], R[j1], Ri[j1], Ri[j]], up); const pl = planeOf(pts); if (pl && Math.abs(V.dot(pl.n, pts[3]) - pl.w) < 1e-7) push(pts, sid); else { push(facing([R[j], R[j1], Ri[j1]], up), sid); push(facing([R[j], Ri[j1], Ri[j]], up), sid); } } };
+  const last = stations.length - 1;
+  if (I[0]) annulus(O[0], I[0], false, o.sidBottom || 'bottom'); else disc(O[0], false, o.sidBottom || 'bottom');
+  if (I[last]) annulus(O[last], I[last], true, o.sidTop || 'top'); else disc(O[last], true, o.sidTop || 'top');
+  /* where the bore starts inside the solid its floor faces up into it; where it ends inside, its roof faces down */
+  for (let k = 0; k < stations.length; k++) { if (!I[k]) continue; if (k > 0 && !I[k - 1]) disc(I[k], true, 'floor'); if (k < last && !I[k + 1]) disc(I[k], false, 'floor'); }
+  const s = new Solid(polys); fixOrientation(s); return s;
+}
+/* wrap a flat solid onto a cylinder of radius R about the z axis: x is the distance around (arc length), y the height,
+   z the distance out from the surface. Polygons are cut into strips (about every stepDeg of turn) so the wrapped
+   faces follow the curve, then each strip piece is laid onto the cylinder (as triangles, which stay flat). */
+export function wrapSolid(flat, R, stepDeg = 2) {
+  if (!(R > 0)) throw new Error('wrap needs a radius above 0');
+  const bb = flat.bbox(), step = R * stepDeg * Math.PI / 180;
+  if (bb.max[0] - bb.min[0] > 2 * Math.PI * R * 0.98) throw new Error(`that is ${(bb.max[0] - bb.min[0]).toFixed(1)} mm around — more than once round a radius ${R} cylinder`);
+  let pieces = flat.polys.map(q => q.clone());
+  for (let x = Math.floor(bb.min[0] / step) * step; x <= bb.max[0]; x += step) {
+    const pl = new Plane([1, 0, 0], x), next = [];
+    for (const q of pieces) pl.split(q, next, next, next, next);
+    pieces = next;
+  }
+  const map = (p) => { const r = R + p[2], a = p[0] / R; return [r * Math.cos(a), r * Math.sin(a), p[1]]; };
+  const polys = [];
+  for (const q of pieces) { const pts = q.v.map(v => map(v.p)); for (let i = 1; i < pts.length - 1; i++) { const t = poly([pts[0], pts[i], pts[i + 1]], q.sid); if (t) polys.push(t); } }
+  const s = new Solid(polys); fixOrientation(s); return s;
+}
 /* ---------- 2D offsets (draft, thin walls, ribs) ---------- */
 /* a closed polygon moved outward by d (inward when d < 0), corners mitred; null when it turns inside out */
 export function offsetPolygon(pts, d) {

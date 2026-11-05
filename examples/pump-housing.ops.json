@@ -1,0 +1,52 @@
+[
+ { "label": "Base flange: rounded rectangle with tangent arcs, fully constrained", "ops": [
+  { "op": "extrude", "id": "flange", "name": "Base flange", "material": "aluminium",
+    "profile": [[-58,-45],[58,-45],[70,-33],[70,33],[58,45],[-58,45],[-70,33],[-70,-33]],
+    "arcs": [{ "i": 1, "c": [58,-33], "ccw": true }, { "i": 3, "c": [58,33], "ccw": true }, { "i": 5, "c": [-58,33], "ccw": true }, { "i": 7, "c": [-58,-33], "ccw": true }],
+    "constraints": [{ "type": "fix", "i": 0, "at": [-58,-45] }, { "type": "h", "i": 0 }, { "type": "v", "i": 2 }, { "type": "h", "i": 4 }, { "type": "v", "i": 6 },
+      { "type": "tangent", "i": 0, "j": 1 }, { "type": "tangent", "i": 1, "j": 2 }, { "type": "tangent", "i": 2, "j": 3 }, { "type": "tangent", "i": 3, "j": 4 },
+      { "type": "tangent", "i": 4, "j": 5 }, { "type": "tangent", "i": 5, "j": 6 }, { "type": "tangent", "i": 6, "j": 7 }, { "type": "tangent", "i": 7, "j": 0 },
+      { "type": "equal", "i": 1, "j": 3 }, { "type": "equal", "i": 1, "j": 5 }, { "type": "equal", "i": 1, "j": 7 }],
+    "length": 10, "at": [0, 0, 0], "fixed": true },
+  { "op": "constrain", "id": "flange", "type": "radius", "i": 1, "value": 12 },
+  { "op": "constrain", "id": "flange", "type": "length", "i": 0, "value": 116 },
+  { "op": "constrain", "id": "flange", "type": "length", "i": 2, "value": 66 }
+ ]},
+ { "label": "Housing tube on the flange", "ops": [
+  { "op": "add", "type": "cylinder", "id": "body", "name": "Housing", "params": { "diameter": 64, "height": 50, "bore": 52 }, "mate": { "to": "flange", "a": "end", "b": "bottom" }, "into": "flange", "mode": "union" }
+ ]},
+ { "label": "Spline gussets, patterned round the housing", "ops": [
+  { "op": "extrude", "id": "gusset", "name": "Gusset", "profile": [[31,0],[58,0],[31,30]], "splines": [{ "i": 1, "pts": [[39,9]] }], "length": 5, "end": "symmetric", "at": [0, 0, 10], "rot": [90, 0, 45], "fixed": true, "into": "flange", "mode": "union" },
+  { "op": "pattern", "of": "gusset", "kind": "circular", "count": 4, "about": { "obj": "flange", "conn": "end" } }
+ ]},
+ { "label": "Inclined inlet pad (a wedge) for the port", "ops": [
+  { "op": "add", "type": "wedge", "id": "pad", "name": "Inlet pad", "params": { "width": 22, "depth": 30, "height": 22 }, "mate": { "to": "flange", "a": "end", "b": "bottom", "slide": [-54, 0], "angle": 180 }, "into": "flange", "mode": "union" }
+ ]},
+ { "label": "Modelled M5 tapped hole square to the slope",
+   "note": "at and normal come from model_query {what:'faces', id:'pad'}: the slope face's centre and normal",
+   "ops": [
+  { "op": "hole", "id": "port", "target": "pad", "at": [-54, 0, 21], "normal": [-0.707, 0, 0.707], "size": "M5", "kind": "tapped", "modelled": true, "depth": 8, "through": false, "dims": false }
+ ] },
+ { "label": "Counterbored M6 mounting holes (a grid pattern) and engraved flange text", "ops": [
+  { "op": "hole", "id": "h1", "target": "flange", "at": [-58, -33, 10], "size": "M6", "kind": "counterbore" },
+  { "op": "pattern", "of": "h1", "kind": "linear", "count": 2, "spacing": 116, "direction": [1, 0, 0], "count2": 2, "spacing2": 66, "direction2": [0, 1, 0] },
+  { "op": "text", "id": "label", "target": "flange", "at": [0, -39, 10], "normal": [0, 0, 1], "text": "PUMP-01", "height": 5, "depth": 0.5, "mode": "engrave" }
+ ]},
+ { "label": "Wrapped text engraved round the housing (sketching on a curved face)", "ops": [
+  { "op": "wrap", "id": "brand", "target": "body", "angle": -90, "height": 6, "text": "SKETCHFLOW", "size": 7, "depth": 0.6, "mode": "engrave" }
+ ]},
+ { "label": "Threaded neck (custom 60 × 3 thread) joined on top", "ops": [
+  { "op": "add", "type": "cylinder", "id": "neck", "name": "Neck", "params": { "diameter": 60, "height": 16, "bore": 52 }, "mate": { "to": "body", "a": "top", "b": "bottom" }, "into": "flange", "mode": "union" },
+  { "op": "thread", "target": "neck", "size": "custom", "pitch": 3, "length": 12, "from": "top", "resize": false }
+ ]},
+ { "label": "Knurled cap with a matching internal thread, screwed on (screw joint)", "ops": [
+  { "op": "add", "type": "nut", "id": "cap", "name": "Cap", "params": { "size": "custom", "diameter": 60, "pitch": 3, "shape": "knurled", "od": 74, "thickness": 10 }, "mate": { "to": "neck", "a": "center", "b": "center", "flip": false, "offset": 3 }, "material": "petg" },
+  { "op": "add", "type": "cylinder", "id": "lid", "name": "Cap top", "params": { "diameter": 74, "height": 4 }, "mate": { "to": "cap", "a": "top", "b": "bottom" }, "into": "cap", "mode": "union" },
+  { "op": "text", "id": "turn", "target": "lid", "face": "top", "text": "TURN TO OPEN", "height": 4.5, "depth": 0.6, "path": "arc", "radius": 26, "mode": "emboss" },
+  { "op": "joint", "id": "cap", "joint": "screw", "pitch": 3, "limits": { "angle": [0, 1080] } }
+ ]},
+ { "label": "M6 socket screws in the counterbores (patterned with the holes)", "ops": [
+  { "op": "add", "type": "bolt", "id": "s1", "name": "M6 screw", "params": { "size": "M6", "length": 20, "head": "socket", "thread_length": 14 }, "mate": { "to": "flange", "a": "end", "b": "seat", "slide": [-58, -33], "offset": -6.4 }, "material": "stainless" },
+  { "op": "pattern", "of": "s1", "kind": "linear", "count": 2, "spacing": 116, "direction": [1, 0, 0], "count2": 2, "spacing2": 66, "direction2": [0, 1, 0] }
+ ]}
+]

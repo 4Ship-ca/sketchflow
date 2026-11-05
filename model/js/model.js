@@ -12,17 +12,23 @@ export { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText };
 export const TYPES = {
   box: { label: 'Box', params: { width: 40, depth: 30, height: 20 } },
   wedge: { label: 'Wedge', params: { width: 40, depth: 20, height: 20 } },
-  cylinder: { label: 'Cylinder', params: { diameter: 30, height: 40 } },
+  /* thread: none | M2…M24 | custom (with pitch): a modelled ISO thread on the outside, thread_length (0 = all of it) from the bottom or top; bore: a hole down the middle (a tube) */
+  cylinder: { label: 'Cylinder', params: { diameter: 30, height: 40, thread: 'none', pitch: 0, thread_length: 0, thread_from: 'bottom', bore: 0 } },
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
   /* end: blind | symmetric (both ways, half each) | through (through everything, for cuts); draft: taper ° (inward);
      thin: a wall of that thickness (a closed profile becomes a tube-like wall; an open one, open: true, a rib / thin plate) */
-  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], length: 20, end: 'blind', draft: 0, thin: 0, open: false, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
-  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], profile2: null, length: 30, twist: 0, constraints: [] } },
-  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], arcs: [], degrees: 360, constraints: [] } },
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], splines: [], length: 20, end: 'blind', draft: 0, thin: 0, open: false, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
+  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], splines: [], profile2: null, length: 30, twist: 0, constraints: [] } },
+  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], arcs: [], splines: [], degrees: 360, constraints: [] } },
   /* helix: {radius, pitch, turns, left} sweeps the profile along a helix instead of path (springs, coils, threads' cores) */
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], helix: null } },
+  /* fasteners with modelled ISO threads: a bolt (hex or socket head; thread_length 0 = threaded all the way) and a nut */
+  bolt: { label: 'Bolt', params: { size: 'M8', length: 25, head: 'hex', thread_length: 0 } },
+  nut: { label: 'Nut', params: { size: 'M8', shape: 'hex', thickness: 0, od: 0, diameter: 0, pitch: 0 } },
+  /* a sketch (or text) wrapped onto a cylindrical face: emboss stands out of it, engrave cuts in; radius follows the cylinder */
+  wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
   /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
   plane: { label: 'Plane', params: { size: 60 } },
   /* everything on one side of a plane (a big block): the tool a split uses */
@@ -33,7 +39,7 @@ export const TYPES = {
   /* an imported triangle mesh (STL / OBJ), stored in doc.meshes */
   mesh: { label: 'Mesh', params: { scale: 1 } },
   /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
-  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0 } },
+  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0, modelled: false } },
   /* text (single-stroke engraving font) along a line, an arc or a polyline; emboss = union it onto a face, engrave = subtract it */
   text: { label: 'Text', params: { text: 'TEXT', height: 10, depth: 1, weight: 1.2, spacing: 1, path: 'line', radius: 40, angle: 0, align: 'center', points: [[-40, 0], [40, 0]] } },
   /* hollow a part to a wall thickness, optionally open on one face */
@@ -64,6 +70,7 @@ export const MATERIALS = {
 const META = new Set(['edge', 'pattern', 'weld', 'shell']);
 export const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
+const fmt = (v) => String(Math.round(v * 100) / 100);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
 /* ---------- connectors (local frames): o = origin, n = normal / axis, u = in-plane reference ---------- */
@@ -102,6 +109,9 @@ function connectorsOf(o, solid) {
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
     case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
     case 'sweep': if (p.helix) { const h = p.helix, rw = Math.max(...(p.profile || [[1, 0]]).map(q => Math.hypot(q[0], q[1]))), H = (+h.pitch || 0) * (+h.turns || 0); return [conn('bottom', [0, 0, -rw], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, H + rw], [0, 0, 1], [1, 0, 0]), conn('axis', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')]; } break;
+    case 'bolt': { const T = threadSize(p.size), L = +p.length, k = p.head === 'socket' ? T.d : T.k; return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('seat', [0, 0, L], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, L + k], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, L / 2], [0, 0, 1], [1, 0, 0], 'center')]; }
+    case 'nut': { const m = nutThickness(p); return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, m], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, m / 2], [0, 0, 1], [1, 0, 0], 'center')]; }
+    case 'wrap': return [conn('base', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center')];
     case 'plane': return [conn('plane', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('back', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('center', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center')];
     case 'halfspace': return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0])];
     /* text: its anchor (the line's middle / start / end, an arc's centre) on the bottom and top faces, so editing the words never moves it */
@@ -189,12 +199,20 @@ export function holeSpec(p) {
   if (!d) throw new Error(`no heat-set insert size for ${p.size}`);
   const out = { d, kind, cb: H && H.cb ? [H.cb[0] + (fit === 'print' ? 0.3 : 0), H.cb[1]] : null, cs: H ? H.cs : null, tap: H ? H.tap : null, pitch: H ? H.pitch : null, insertDepth: H && H.insert ? H.insert[1] : null };
   if (!H) { out.label = `Ø${d} ${kind}`; return out; }
-  out.label = kind === 'tapped' ? `${p.size}×${H.pitch} tapped (Ø${H.tap} drill)` : kind === 'insert' ? `${p.size} heat-set insert Ø${d} × ${out.insertDepth}` : `${p.size} ${fit} clearance Ø${d}${kind === 'counterbore' ? `, counterbore Ø${out.cb[0]} × ${out.cb[1]}` : kind === 'countersink' ? `, countersink Ø${out.cs} × 90°` : ''}`;
+  out.label = kind === 'tapped' ? `${p.size}×${H.pitch} tapped (${p.modelled ? 'modelled thread' : 'Ø' + H.tap + ' drill'})` : kind === 'insert' ? `${p.size} heat-set insert Ø${d} × ${out.insertDepth}` : `${p.size} ${fit} clearance Ø${d}${kind === 'counterbore' ? `, counterbore Ø${out.cb[0]} × ${out.cb[1]}` : kind === 'countersink' ? `, countersink Ø${out.cs} × 90°` : ''}`;
   return out;
 }
 function buildHole(p) {
   const h = holeSpec(p), r = h.d / 2, depth = p.kind === 'insert' && !p.through ? (+p.depth || h.insertDepth) : Math.max(0.5, +p.depth || 10);
   const seg = 48, up = 1, tr = (sol, z) => sol.transform(M4.translate([0, 0, z]));
+  if (p.kind === 'tapped' && p.modelled && h.pitch) {
+    /* a modelled internal thread: the tool is the mating bolt's shape (plus clearance), entered at the full diameter */
+    const d = +String(p.size).slice(1), P = h.pitch, fn = threadR(d, P, { clear: 0.1 }), Rm = d / 2 + 0.1, tip = (h.tap / 2) / Math.tan(59 * Math.PI / 180);
+    const st = [];
+    if (!p.through) st.push({ z: -depth - tip, r: () => 0.05, sid: 'tip' });
+    st.push(...threadStations(-depth, 0, P, (t, z) => Math.max(fn(t, z), Rm + z, p.through ? Rm - (z + depth) : 0)), { z: 0, r: () => Rm, sid: 'entry' }, { z: up, r: () => Rm, sid: 'entry' });
+    return K.radialSolid(threadN(d * 2), st);
+  }
   let s = tr(K.cylinder(r, r, depth + up, seg), -depth);
   if (!p.through) { const tip = r / Math.tan(59 * Math.PI / 180); s = s.union(tr(K.cylinder(0.0001, r, tip, seg), -depth - tip)); }
   if (h.kind === 'counterbore' && h.cb) s = s.union(tr(K.cylinder(h.cb[0] / 2, h.cb[0] / 2, h.cb[1] + up, seg), -h.cb[1]));
@@ -305,6 +323,88 @@ function replayFor(start, steps, root, R, ok) {
   }
   return { base: b, skipped, blocked: null };
 }
+/* ---------- threads (ISO metric coarse), bolts, nuts, wrapped sketches ---------- */
+export const THREADS = {
+  M2: { p: 0.4, af: 4, k: 1.4, m: 1.6, dk: 3.8, s: 1.5 }, 'M2.5': { p: 0.45, af: 5, k: 1.7, m: 2, dk: 4.5, s: 2 }, M3: { p: 0.5, af: 5.5, k: 2, m: 2.4, dk: 5.5, s: 2.5 },
+  M4: { p: 0.7, af: 7, k: 2.8, m: 3.2, dk: 7, s: 3 }, M5: { p: 0.8, af: 8, k: 3.5, m: 4.7, dk: 8.5, s: 4 }, M6: { p: 1, af: 10, k: 4, m: 5.2, dk: 10, s: 5 },
+  M8: { p: 1.25, af: 13, k: 5.3, m: 6.8, dk: 13, s: 6 }, M10: { p: 1.5, af: 16, k: 6.4, m: 8.4, dk: 16, s: 8 }, M12: { p: 1.75, af: 18, k: 7.5, m: 10.8, dk: 18, s: 10 },
+  M14: { p: 2, af: 21, k: 8.8, m: 12.8, dk: 21, s: 12 }, M16: { p: 2, af: 24, k: 10, m: 14.8, dk: 24, s: 14 }, M20: { p: 2.5, af: 30, k: 12.5, m: 18, dk: 30, s: 17 }, M24: { p: 3, af: 36, k: 15, m: 21.5, dk: 36, s: 19 }
+};
+function threadSize(name) { const key = String(name || '').toUpperCase(), T = THREADS[key]; if (!T) throw new Error(`thread size is one of ${Object.keys(THREADS).join(', ')} (or custom, with a diameter and pitch)`); return Object.assign({ d: +key.slice(1) }, T); }
+/* the radius of an ISO 60° thread at angle t and height z: root (minor) flat P/4, crest flat P/8, 30° flanks; right-hand
+   unless left. clear grows it (a nut's bore, a tap). z0 / z1: chamfered free ends (45° lead-in from the minor diameter) */
+function threadR(d, P, o = {}) {
+  const c = o.clear || 0, R = d / 2 + c, r1 = (d - 1.0825 * P) / 2 + c, h = R - r1, sgn = o.left ? -1 : 1;
+  return (t, z) => {
+    let u = ((z - sgn * P * t / (2 * Math.PI)) / P) % 1; if (u < 0) u += 1;
+    let r = u < 0.125 ? r1 : u < 0.4375 ? r1 + h * (u - 0.125) / 0.3125 : u < 0.5625 ? R : u < 0.875 ? R - h * (u - 0.5625) / 0.3125 : r1;
+    if (o.z0 != null) r = Math.min(r, r1 + Math.max(0, z - o.z0));
+    if (o.z1 != null) r = Math.min(r, r1 + Math.max(0, o.z1 - z));
+    return r;
+  };
+}
+const threadN = (d) => Math.max(36, Math.min(96, Math.round(d * 4 / 12) * 12));   /* points round: a multiple of 12 so hex corners are exact */
+const PER_PITCH = 16;                                                              /* stations per turn */
+function threadStations(za, zb, P, fn, extra) {
+  const n = Math.max(1, Math.ceil((zb - za) / (P / PER_PITCH))), out = [];
+  for (let k = 0; k <= n; k++) { const z = za + (zb - za) * k / n; out.push(Object.assign({ z, r: (t) => fn(t, z), sid: 'thread' }, extra ? extra(z) : {})); }
+  return out;
+}
+const hexR = (af) => (t) => (af / 2) / Math.cos(((t % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3) - Math.PI / 6);
+const flatSid = (j, N) => 'flat' + (Math.floor((2 * Math.PI * (j + 0.5) / N) / (Math.PI / 3)) % 6);   /* hexR has its corners at 0°, 60°…: flat k spans 60k°…60(k+1)° */
+function buildCylinder(p) {
+  const R = p.diameter / 2, H = +p.height, thr = p.thread && p.thread !== 'none', bore = +p.bore || 0;
+  if (!(R > 0 && H > 0)) throw new Error('diameter and height must be above 0');
+  if (!thr && !bore) return K.cylinder(R, R, H, p.segments || SEG);
+  if (bore >= p.diameter) throw new Error('the bore must be smaller than the diameter');
+  const ri = bore > 0 ? () => bore / 2 : null, plain = (z) => ({ z, r: () => R, ri, sid: 'side', sidIn: 'bore' });
+  if (!thr) return K.radialSolid(p.segments || SEG, [plain(0), plain(H)]);
+  const P = p.thread === 'custom' ? +p.pitch : threadSize(p.thread).p; if (!(P > 0)) throw new Error('a custom thread needs a pitch');
+  if (bore > 0 && bore / 2 >= (p.diameter - 1.0825 * P) / 2 - 0.3) throw new Error(`a ${bore} bore leaves no wall under the thread (keep it under Ø${(p.diameter - 1.0825 * P - 0.6).toFixed(2)})`);
+  const L = Math.min(H, +p.thread_length > 0 ? +p.thread_length : H), top = p.thread_from === 'top', za = top ? H - L : 0, zb = top ? H : L;
+  const fn = threadR(p.diameter, P, { left: !!p.left_hand, z0: za === 0 ? 0 : null, z1: zb === H ? H : null });
+  const st = [];
+  if (za > 0) st.push(plain(0), plain(za));
+  st.push(...threadStations(za, zb, P, fn, () => ({ ri, sidIn: 'bore' })));
+  if (zb < H) st.push(plain(zb), plain(H));
+  return K.radialSolid(threadN(p.diameter), st);
+}
+function buildBolt(p) {
+  const T = threadSize(p.size), d = T.d, P = T.p, L = +p.length; if (!(L > 0)) throw new Error('length must be above 0');
+  const Lt = +p.thread_length > 0 ? Math.min(L, +p.thread_length) : L, R = d / 2, N = threadN(d), fn = threadR(d, P, { z0: 0 });
+  const st = threadStations(0, Lt, P, fn);
+  if (Lt < L) st.push({ z: Lt, r: () => R, sid: 'shank' }, { z: L, r: () => R, sid: 'shank' });
+  if (p.head === 'socket') {
+    const rk = T.dk / 2, k = d, dep = Math.min(k * 0.6, k - 0.5), hs = hexR(T.s);
+    st.push({ z: L, r: () => rk, sid: 'seat' }, { z: L + k - dep, r: () => rk, sid: 'head' }, { z: L + k - dep, r: () => rk, ri: hs, sid: 'head', sidIn: 'socket' }, { z: L + k, r: () => rk, ri: hs, sid: 'head', sidIn: 'socket' });
+  } else {
+    const hx = hexR(T.af);
+    st.push({ z: L, r: hx, sid: 'seat' }, { z: L, r: hx, sid: 'seat', flat: true }, { z: L + T.k, r: hx, sid: 'head', flat: true });
+  }
+  return K.radialSolid(N, st, { sidFlat: flatSid });
+}
+function nutThickness(p) { if (+p.thickness > 0) return +p.thickness; if (p.size === 'custom') return Math.max(2, +p.diameter * 0.8); return threadSize(p.size).m; }
+function buildNut(p) {
+  const custom = p.size === 'custom', T = custom ? null : threadSize(p.size), d = custom ? +p.diameter : T.d, P = custom ? +p.pitch : T.p, m = nutThickness(p);
+  if (!(d > 0 && P > 0)) throw new Error('a custom nut needs a diameter and a pitch');
+  const fn = threadR(d, P, { clear: 0.1 }), c = 0.1, Rm = d / 2 + c;
+  /* the bore: the mating thread's shape (plus clearance), opened 45° at both faces */
+  const bore = (z) => (t) => Math.max(fn(t, z), Rm - Math.min(z, m - z));
+  const shape = p.shape || 'hex', od = +p.od > 0 ? +p.od : (T ? T.af / Math.cos(Math.PI / 6) : d * 1.8);
+  if (od / 2 <= Rm + 0.5) throw new Error(`an outside of Ø${od} leaves no wall round a ${d} thread`);
+  const outer = shape === 'round' ? () => od / 2 : shape === 'knurled' ? (t) => od / 2 - Math.min(0.6, od * 0.02) * Math.abs(Math.sin(Math.round(od * 1.2) * t / 2)) : hexR(T ? T.af : od * Math.cos(Math.PI / 6));
+  const st = threadStations(0, m, P, fn, (z) => ({ r: outer, ri: bore(z), sid: shape === 'knurled' ? 'knurl' : 'outer', sidIn: 'thread', flat: shape === 'hex' }));
+  return K.radialSolid(Math.max(threadN(d), shape === 'knurled' ? 96 : 36), st, { sidFlat: shape === 'hex' ? flatSid : null });
+}
+function buildWrap(p) {
+  const R = +p.radius, depth = +p.depth, emboss = p.mode !== 'engrave', eps = Math.min(0.2, depth * 0.25);
+  if (!(depth > 0)) throw new Error('depth must be above 0');
+  let flat;
+  if (p.text) flat = textSolid({ text: p.text, height: +p.size || 8, depth: depth + eps, weight: +p.weight > 0 ? +p.weight : undefined, spacing: p.spacing, align: 'center', path: 'line' });
+  else flat = K.extrude(expandArcs(p.profile, p.arcs, { splines: p.splines }).pts, { length: depth + eps });
+  if (!emboss && depth >= R) throw new Error(`an engraving ${depth} deep goes through a radius ${R} cylinder`);
+  return K.wrapSolid(flat.transform(M4.translate([0, 0, emboss ? -eps : -depth])), R, 2);
+}
 /* ---------- extrude end conditions, draft and thin walls; helix paths ---------- */
 const THROUGH = 4000;   /* "through all": far enough to come out of any part */
 function buildExtrude(p) {
@@ -312,7 +412,7 @@ function buildExtrude(p) {
   const L = end === 'through' ? THROUGH : +p.length; if (!(L > 0)) throw new Error('length must be above 0');
   let prof, sides = null;
   if (shaped) prof = shapeProfile(p);
-  else { const X = expandArcs(p.profile, p.arcs, { open }); prof = X.pts; sides = X.sides; }
+  else { const X = expandArcs(p.profile, p.arcs, { open, splines: p.splines }); prof = X.pts; sides = X.sides; }
   if (open) { if (!(t > 0)) throw new Error('an open profile is a thin wall: give it a thickness (thin)'); prof = K.thickenPolyline(prof, t); sides = null; }
   /* keep each side face named after its own segment, whichever way round the profile was drawn */
   if (sides && K.area2(prof) < 0) { const N = prof.length, sd = sides; prof = prof.slice().reverse(); sides = prof.map((_, k) => sd[((N - 2 - k) % N + N) % N]); }
@@ -366,13 +466,16 @@ function buildLocal(o) {
   switch (o.type) {
     case 'box': return K.box(p.width, p.depth, p.height);
     case 'wedge': return K.wedge(p.width, p.depth, p.height);
-    case 'cylinder': return K.cylinder(p.diameter / 2, p.diameter / 2, p.height, p.segments || SEG);
+    case 'cylinder': return buildCylinder(p);
+    case 'bolt': return buildBolt(p);
+    case 'nut': return buildNut(p);
+    case 'wrap': return buildWrap(p);
     case 'cone': return K.cylinder(p.diameter / 2, Math.max(0, (p.top || 0) / 2), p.height, p.segments || SEG);
     case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
     case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
     case 'extrude': return buildExtrude(p);
-    case 'loft': { const A = expandArcs(p.profile, p.arcs).pts; return K.loft(A, p.profile2 || A, { length: p.length, twist: p.twist }); }
-    case 'revolve': return K.revolve(expandArcs(p.profile, p.arcs).pts, { degrees: p.degrees });
+    case 'loft': { const A = expandArcs(p.profile, p.arcs, { splines: p.splines }).pts; return K.loft(A, p.profile2 || A, { length: p.length, twist: p.twist }); }
+    case 'revolve': return K.revolve(expandArcs(p.profile, p.arcs, { splines: p.splines }).pts, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.helix ? helixPath(p.helix) : p.path);
     case 'plane': return K.Solid.empty();
     case 'halfspace': return K.box(+p.size || 4000, +p.size || 4000, (+p.size || 4000) / 2);
@@ -400,6 +503,8 @@ export function dimsOf(o) {
     case 'cone': { const o2 = [D('diameter', [-p.diameter / 2, 0, 0], [p.diameter / 2, 0, 0], 'front', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')]; if (p.top > 0) o2.push(D('top', [-p.top / 2, 0, p.height], [p.top / 2, 0, p.height], 'front', 'diameter')); return o2; }
     case 'sphere': return [D('diameter', [-p.diameter / 2, 0, p.diameter / 2], [p.diameter / 2, 0, p.diameter / 2], 'front', 'diameter')];
     case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
+    case 'bolt': { const d = threadSize(p.size).d; return [D('length', [d / 2 + 2, 0, 0], [d / 2 + 2, 0, +p.length], 'front')]; }
+    case 'wrap': return [D('depth', [+p.radius, 0, 0], [+p.radius + +p.depth, 0, 0], 'top')];
     case 'text': {
       const z = +p.depth || 0, out = [D('depth', [0, 0, 0], [0, 0, z], 'front')];
       if (p.path === 'arc' || p.path === 'arc-inside') out.push(D('radius', [0, 0, z], [0, p.path === 'arc' ? +p.radius : -p.radius, z], 'top'));
@@ -575,12 +680,15 @@ export const JOINTS = {
   revolute: [{ key: 'angle', unit: '°', min: -180, max: 180 }],
   slider: [{ key: 'travel', unit: 'mm', min: -50, max: 50 }],
   cylindrical: [{ key: 'angle', unit: '°', min: -180, max: 180 }, { key: 'offset', unit: 'mm', min: -50, max: 50 }],
-  planar: [{ key: 'u', unit: 'mm', min: -50, max: 50 }, { key: 'v', unit: 'mm', min: -50, max: 50 }, { key: 'angle', unit: '°', min: -180, max: 180 }]
+  planar: [{ key: 'u', unit: 'mm', min: -50, max: 50 }, { key: 'v', unit: 'mm', min: -50, max: 50 }, { key: 'angle', unit: '°', min: -180, max: 180 }],
+  /* screw: turning it moves it along the axis by the pitch per turn (a cap on a thread, a lead screw) */
+  screw: [{ key: 'angle', unit: '°', min: -720, max: 720 }]
 };
 const dofGet = (m, key) => key === 'angle' ? (m.angle || 0) : key === 'offset' ? (m.offset || 0) : key === 'u' ? (m.slide || [0, 0])[0] : key === 'v' ? (m.slide || [0, 0])[1]
   : key === 'travel' ? (m.axis === 'u' ? (m.slide || [0, 0])[0] : m.axis === 'v' ? (m.slide || [0, 0])[1] : (m.offset || 0)) : 0;
 function dofSet(m, key, v) {
   const sl = (m.slide || [0, 0]).slice();
+  if (key === 'angle' && m.joint === 'screw') { m.angle = v; m.offset = (m.base || 0) + (m.pitch || 1) * v / 360; return; }
   if (key === 'angle') m.angle = v; else if (key === 'offset') m.offset = v; else if (key === 'u') { sl[0] = v; m.slide = sl; } else if (key === 'v') { sl[1] = v; m.slide = sl; }
   else if (key === 'travel') { if (m.axis === 'u') { sl[0] = v; m.slide = sl; } else if (m.axis === 'v') { sl[1] = v; m.slide = sl; } else m.offset = v; }
 }
@@ -971,7 +1079,7 @@ export function findEdge(s, ref) {
   }
   return e;
 }
-const SMOOTH = /:(side|surface|rev\d+|arc\d*|bore|rim)$/;
+const SMOOTH = /:(side|surface|rev\d+|arc\d*|spl\d*|thread|shank|knurl|bore|rim)$/;
 /* all crease segments between the same two surfaces, chained into an ordered loop / polyline */
 function edgeLoop(s, segs, sids) {
   const want = sids.slice().sort().join('|'), mine = [];
@@ -1110,6 +1218,37 @@ export class Model {
     if (!c) return null;
     const d = V.sub(at, c.o);
     return { face: c.name, slide: [+V.dot(d, c.u).toFixed(3), +V.dot(d, V.cross(c.n, c.u)).toFixed(3)], off: Math.abs(V.dot(d, c.n)), conn: c };
+  }
+  /* the cylinder under a point on a curved face: a cylinder part's side, or any round surface (fitted from its facets,
+     whose normals are all square to one axis). Returns the axis, radius, and where the point is round it */
+  cylinderAt(id, at, normal) {
+    const o = this.get(id), R = this.result; if (!o) return null;
+    if (o.type === 'cylinder' && (!o.params.thread || o.params.thread === 'none') && R.world.has(id)) {
+      const M = R.world.get(id), q = M4.point(M4.inv(M), at), r = o.params.diameter / 2;
+      if (Math.abs(Math.hypot(q[0], q[1]) - r) > Math.max(0.6, r * 0.06) || q[2] < -1e-6 || q[2] > o.params.height + 1e-6) return null;
+      return { id, primitive: true, radius: r, axis: V.norm(M4.dir(M, [0, 0, 1])), angle: +(Math.atan2(q[1], q[0]) * 180 / Math.PI).toFixed(4), height: +(q[2] - o.params.height / 2).toFixed(4), point: at };
+    }
+    const body = this.bodyContaining(id); if (!body || !normal) return null;
+    /* the facets round the point (within a reach, facing within 50° of it): their normals all square to one axis */
+    const n0 = V.norm(normal), bb = body.solid.bbox(), reach = Math.max(5, 0.3 * V.len(V.sub(bb.max, bb.min)));
+    const fac = body.solid.polys.filter(q => { if (V.dot(q.plane.n, n0) < 0.64) return false; let c = [0, 0, 0]; for (const v of q.v) c = V.add(c, v.p); c = V.mul(c, 1 / q.v.length); return V.len(V.sub(c, at)) < reach; });
+    if (fac.length < 3) return null;
+    const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const q of fac) for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) C[r][c] += q.plane.n[r] * q.plane.n[c];
+    let axis = null, al = 0; for (const [r1, r2] of [[0, 1], [1, 2], [0, 2]]) { const x = V.cross(C[r1], C[r2]), l = V.len(x); if (l > al) { al = l; axis = x; } }
+    if (!axis || al < 1e-9) return null; axis = V.norm(axis);
+    if (fac.some(q => Math.abs(V.dot(q.plane.n, axis)) > 0.03)) return null;     /* not a cylinder (a cone, a sphere, a flat face) */
+    if (Math.max(...fac.map(q => V.len(V.cross(q.plane.n, n0)))) < 0.02) return null;   /* flat: no curvature to fit */
+    /* circle through the facets' corners, seen along the axis */
+    const e1 = V.norm(V.sub(n0, V.mul(axis, V.dot(n0, axis)))), e2 = V.cross(axis, e1), pts = [];
+    for (const q of fac) for (const v of q.v) pts.push([V.dot(v.p, e1), V.dot(v.p, e2)]);
+    let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, sz = 0; const m = pts.length;
+    for (const [x, y] of pts) { const z = x * x + y * y; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z; sz += z; }
+    const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, m]], b = [-sxz, -syz, -sz], det = (M) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    const D0 = det(A); if (Math.abs(D0) < 1e-12) return null; const col = (k) => A.map((row, r) => row.map((x, c) => (c === k ? b[r] : x)));
+    const Dd = det(col(0)) / D0, Ee = det(col(1)) / D0, Ff = det(col(2)) / D0, cx = -Dd / 2, cy = -Ee / 2, rad = Math.sqrt(Math.max(0, cx * cx + cy * cy - Ff));
+    if (!(rad > 0)) return null;
+    const along = V.dot(at, axis), centre = V.add(V.add(V.mul(e1, cx), V.mul(e2, cy)), V.mul(axis, along));
+    return { id: body.id, primitive: false, radius: +rad.toFixed(4), axis, origin: centre, point: at };
   }
   /* new features go at the rollback bar when it is up (and the bar moves down past them) */
   insert(ob) {
@@ -1260,7 +1399,7 @@ export class Model {
       case 'extrude': case 'loft': case 'revolve': case 'sweep': {
         const params = {}; for (const k of Object.keys(TYPES[o.op].params)) if (o[k] !== undefined) params[k] = o[k];
         if (o.params) Object.assign(params, o.params);
-        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false };
+        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta };
         /* sketch on a face: the feature starts on that face and follows it */
         if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
         return this.op(add);
@@ -1353,12 +1492,13 @@ export class Model {
         return { label: `${mover.name}: ${+value.toFixed(3)} from ${other ? other.name : 'it'}`, id: o.id, moved: mover.id, value: after ? +after.value.toFixed(4) : null };
       }
       case 'joint': {
-        /* make a mate a moving joint: {id, joint: fixed|revolute|slider|cylindrical|planar, axis: n|u|v (slider), limits: {angle:[lo,hi], travel:[..], offset, u, v}} */
+        /* make a mate a moving joint: {id, joint: fixed|revolute|slider|cylindrical|planar|screw (pitch), axis: n|u|v (slider), limits: {angle:[lo,hi], travel:[..], offset, u, v}} */
         const x = need(o.id); if (!x.mate) throw new Error(`${x.name} is not mated: mate it first, then make the mate a joint`);
         if (x.mate.kind) throw new Error(`${x.name} is placed by a ${x.mate.kind} mate; make its partner a joint instead and it will follow`);
         const j = o.joint || 'revolute'; if (j !== 'fixed' && !JOINTS[j]) throw new Error(`joint is one of fixed, ${Object.keys(JOINTS).join(', ')}`);
         x.mate = Object.assign({}, x.mate); if (j === 'fixed') { delete x.mate.joint; delete x.mate.limits; delete x.mate.axis; }
         else { x.mate.joint = j; if (o.axis) x.mate.axis = o.axis; else if (j === 'slider' && !x.mate.axis) x.mate.axis = 'n'; if (o.limits !== undefined) x.mate.limits = o.limits || undefined; }
+        if (j === 'screw') { const P = +o.pitch || +x.mate.pitch; if (!(P > 0)) throw new Error('a screw joint needs a pitch (mm per turn; negative for a left-hand thread)'); x.mate.pitch = P; x.mate.base = (x.mate.offset || 0) - P * (x.mate.angle || 0) / 360; }
         this.recompute(); return { label: `${x.name}: ${j} joint`, id: x.id, joints: jointsOf(d).find(q => q.id === x.id) };
       }
       case 'drive': {
@@ -1377,7 +1517,7 @@ export class Model {
         const face = faces.filter(c => V.dot(c.n, n) > 0.999).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0];
         /* through unless a depth is given (an insert is blind by default) */
         const through = o.through !== undefined ? !!o.through : !(+o.depth > 0) && o.kind !== 'insert';
-        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0 };
+        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0, modelled: !!o.modelled && (o.kind === 'tapped') };
         holeSpec(params);
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('hol'), add = { op: 'add', type: 'hole', id, name: o.name || `${params.size} ${params.kind === 'simple' ? 'hole' : params.kind}`, params, into: root.id, mode: 'subtract', stack: false };
         if (face) { const d0 = V.sub(at, face.o), vv = V.cross(face.n, face.u); add.mate = { to: root.id, a: face.name, b: 'top', flip: false, slide: [+V.dot(d0, face.u).toFixed(4), +V.dot(d0, vv).toFixed(4)] }; }
@@ -1392,6 +1532,34 @@ export class Model {
           for (const c2 of picks) { const dr = this.op({ op: 'dim', a: { obj: r.id, conn: 'top' }, b: { obj: root.id, conn: c2.name }, view, axis: 'normal' }); if (dr.value != null) { this.op({ op: 'setdim', id: dr.id, value: Math.round(dr.value * 2) / 2 }); out.dims.push({ id: dr.id, from: c2.name, value: Math.round(dr.value * 2) / 2 }); } }
         }
         return out;
+      }
+      case 'wrap': {
+        /* a sketch or text wrapped onto a cylindrical face: emboss (a boolean add) or engrave (a boolean remove). Placed by a
+           point on the face (at + normal), or on a cylinder part by angle (° round from its x axis) and height (from its middle) */
+        const t = need(o.target), root = (this.bodyContaining(t.id) || {}).id || t.id;
+        let cyl = o.at ? this.cylinderAt(t.id, W(o.at), o.normal) : t.type === 'cylinder' ? { id: t.id, primitive: true, radius: t.params.diameter / 2, angle: +o.angle || 0, height: +o.height || 0 } : null;
+        if (!cyl) throw new Error(`${t.name}: wrap works on round (cylindrical) faces — give a point on its round side (at + normal)`);
+        const mode = /^(engrave|cut|subtract|remove)$/.test(o.mode || '') ? 'engrave' : 'emboss', params = { depth: +o.depth || 1, mode, radius: cyl.radius };
+        for (const k of ['profile', 'arcs', 'splines', 'text', 'size', 'weight', 'spacing']) if (o[k] !== undefined) params[k] = o[k];
+        if (o.shape) params.profile = shapeProfile(o);
+        if (!params.text && !(Array.isArray(params.profile) && params.profile.length >= 3)) throw new Error('give text, a profile [[s,t]…] (s round the face, t along it) or a shape');
+        if (cyl.primitive && cyl.id === t.id) params.radius = `=${t.id}.diameter / 2`;   /* follows the cylinder */
+        const name = o.name || `${mode === 'engrave' ? 'Engrave' : 'Emboss'} wrap${params.text ? ' “' + String(params.text).slice(0, 14) + '”' : ''}`;
+        let place;
+        if (cyl.primitive) place = { mate: { to: cyl.id, a: 'center', b: 'base', flip: false, angle: cyl.angle, offset: cyl.height } };
+        else { const x = V.norm(V.sub(cyl.point, cyl.origin)), M = M4.frame(cyl.origin, V.sub(x, V.mul(cyl.axis, V.dot(x, cyl.axis))), cyl.axis), pose = poseFromMatrix(M); place = { at: pose.at, rot: pose.rot, fixed: true }; }
+        const r = this.op(Object.assign({ op: 'add', type: 'wrap', id: o.id, name, params, into: root, mode: mode === 'engrave' ? 'subtract' : 'union', stack: false }, place));
+        return { label: `${name} on ${t.name} (R${fmt(cyl.radius)})`, id: r.id, name };
+      }
+      case 'thread': {
+        /* a modelled thread on a cylinder part: size M2…M24 (or custom with pitch), length (0 = all), from bottom | top */
+        const t = need(o.target); if (t.type !== 'cylinder') throw new Error(`${t.name} is not a cylinder: threads go on cylinder parts (or use a bolt, nut, or a tapped hole with modelled: true)`);
+        const size = o.size || 'M8', patch = { thread: size, thread_length: +o.length || 0, thread_from: o.from === 'top' ? 'top' : 'bottom' };
+        if (size === 'custom') { if (!(+o.pitch > 0)) throw new Error('a custom thread needs a pitch'); patch.pitch = +o.pitch; if (o.diameter) patch.diameter = +o.diameter; }
+        else { const T = threadSize(size); if (o.resize !== false) patch.diameter = T.d; }
+        this.op({ op: 'set', id: t.id, params: patch });
+        if (this.result.errors.has(t.id)) throw new Error(this.result.errors.get(t.id));
+        return { label: `Thread ${size === 'custom' ? 'Ø' + t.params.diameter + '×' + patch.pitch : size} on ${t.name}`, id: t.id };
       }
       case 'plane': {
         /* a reference plane on a face (gap along its normal, tilt about its u axis, turn about the normal), or at a pose */
@@ -1427,7 +1595,7 @@ export class Model {
         const wire = +o.wire || 2, seg = 24, prof = o.profile || Array.from({ length: seg }, (_, k) => [wire / 2 * Math.cos(2 * Math.PI * k / seg), wire / 2 * Math.sin(2 * Math.PI * k / seg)]);
         const helix = { radius: +o.radius || 10, pitch: +o.pitch || 5, turns: +o.turns || 5, left: !!o.left };
         if (!o.profile && helix.pitch <= wire) throw new Error(`a pitch of ${helix.pitch} is no more than the ${wire} wire: the coils would overlap (use a pitch above ${wire})`);
-        const r = this.op({ op: 'add', type: 'sweep', id: o.id, name: o.name || 'Spring', params: { profile: prof, helix, path: [[0, 0, 0], [0, 0, 1]] }, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, fixed: o.fixed, stack: o.stack });
+        const r = this.op({ op: 'add', type: 'sweep', id: o.id, name: o.name || 'Spring', params: { profile: prof, helix, path: [[0, 0, 0], [0, 0, 1]] }, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, fixed: o.fixed, stack: o.stack, material: o.material, meta: o.meta });
         return { label: `Helix: ${helix.turns} turns, pitch ${helix.pitch}, R${helix.radius}`, id: r.id, name: r.name };
       }
       case 'feature': {

@@ -3,6 +3,8 @@ import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim, dimsOf
 import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
 import { textSolid, layoutText } from '../js/text.js';
 import * as K0 from '../js/kernel.js';
+import { EXAMPLES, exampleDoc } from '../js/examples.js';
+import { interference } from '../js/collide.js';
 const { V, M4 } = K0;
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { cond ? pass++ : fail++; console.log((cond ? 'ok  ' : 'FAIL') + ' ' + name + (info !== undefined ? ' → ' + JSON.stringify(info) : '')); };
@@ -392,6 +394,33 @@ for (const [keep, want] of [['below', [[0, 10]]], ['above', [[10, 20]]], ['both'
 const Pt_n = new Model(); Pt_n.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }, { op: 'plane', id: 'p2', target: 'b', face: 'top', tilt: 30 }]);
 const ptn_n = worldConnectors(Pt_n.result, 'p2').find(c => c.name === 'plane').n;
 ok('a plane tilts about the face', near(ptn_n[2], Math.cos(Math.PI / 6), 1e-9) && near(Math.abs(ptn_n[1]), 0.5, 1e-9));
+/* splines, modelled threads (bolts, nuts, threaded cylinders, tapped holes), and sketches wrapped onto curved faces */
+const Sl_t = new Model(); Sl_t.apply([{ op: 'extrude', id: 's', profile: [[0, 0], [40, 0], [40, 20], [0, 20]], splines: [{ i: 2, pts: [[30, 30], [10, 26]] }], length: 5, fixed: true }]);
+const slb_t = Sl_t.result.bodies[0].solid.bbox();
+ok('a spline segment bulges smoothly through its fit points', slb_t.max[1] > 29.5 && slb_t.max[1] < 31.5 && Sl_t.result.bodies[0].solid.volume() > 40 * 20 * 5 && !worldConnectors(Sl_t.result, 's').some(c => c.name === 'face:spl2'), slb_t);
+const Bt_t = new Model(); Bt_t.apply([{ op: 'add', type: 'bolt', id: 'b', params: { size: 'M8', length: 25 } }, { op: 'add', type: 'nut', id: 'n', params: { size: 'M8' }, mate: { to: 'b', a: 'bottom', b: 'bottom', flip: false, offset: 5 } }]);
+const bolt_t = Bt_t.result.bodies.find(x => x.id === 'b').solid, nut_t = Bt_t.result.bodies.find(x => x.id === 'n').solid, bbb_t = bolt_t.bbox();
+ok('an M8 × 25 hex bolt_t: 13 across flats, head 5.3, threaded shank', near(bbb_t.max[1], 6.5, 1e-6) && near(bbb_t.max[2], 30.3, 1e-6) && bolt_t.volume() > Math.PI * 3.32 * 3.32 * 25 && bolt_t.volume() < Math.PI * 16 * 25 + 13 * 13 * 5.3 * 1.2, { v: bolt_t.volume(), bbb_t });
+const tI_t = performance.now(), ov_t = Math.abs(bolt_t.intersect(nut_t).volume()), tIms_t = performance.now() - tI_t;
+ok('a nut_t screws onto its bolt_t: the threads mesh without overlapping (and checking is fast)', ov_t < 1e-6 && tIms_t < 5000, { ov_t, tIms_t });
+ok('bolt connectors: tip, seat under the head, top; the head flats are faces', ['bottom', 'seat', 'top'].every(n => worldConnectors(Bt_t.result, 'b').some(c => c.name === n)) && worldConnectors(Bt_t.result, 'b').filter(c => /^face:flat/.test(c.name)).length === 6);
+const Tc_t = new Model(); Tc_t.apply([{ op: 'add', type: 'cylinder', id: 'c', params: { diameter: 10, height: 30 } }, { op: 'thread', target: 'c', size: 'M10', length: 15 }]);
+const tcV_t = Tc_t.result.bodies[0].solid.volume(), r1t_t = (10 - 1.0825 * 1.5) / 2;
+ok('threading a cylinder keeps the plain part and cuts the thread (between minor and major)', tcV_t < Math.PI * 25 * 30 && tcV_t > Math.PI * 25 * 15 + Math.PI * r1t_t * r1t_t * 15 && Tc_t.get('c').params.thread === 'M10', tcV_t);
+const Th2_t = new Model(); Th2_t.apply([{ op: 'add', type: 'box', id: 'p', params: { width: 40, depth: 30, height: 12 } }, { op: 'hole', target: 'p', at: [0, 0, 12], size: 'M6', kind: 'tapped', modelled: true, depth: 10, through: false, dims: false }]);
+const tapRemoved_t = 14400 - Th2_t.result.bodies[0].solid.volume();
+ok('a modelled tapped hole cuts a real thread (more than the tap drill, less than the full diameter)', tapRemoved_t > Math.PI * 2.5 * 2.5 * 10 && tapRemoved_t < Math.PI * 3.2 * 3.2 * 11 + 10, tapRemoved_t);
+const Wr_t = new Model(); Wr_t.apply([{ op: 'add', type: 'cylinder', id: 'c', params: { diameter: 40, height: 30 } }]); const wv0_t = Wr_t.result.bodies[0].solid.volume();
+Wr_t.apply([{ op: 'wrap', target: 'c', at: [0, -20, 15], normal: [0, -1, 0], profile: [[-10, -5], [10, -5], [10, 5], [-10, 5]], depth: 2 }]);
+ok('a sketch wrapped onto a cylinder stands out of it (curved, the right size)', near(Wr_t.result.bodies[0].solid.volume() - wv0_t, 20 * 10 * 2 * 21 / 20, 0.02) && Wr_t.result.bodies[0].solid.bbox().min[1] < -21.9);
+Wr_t.apply([{ op: 'set', id: 'c', params: { diameter: 60 } }]);
+ok('the wrap follows the cylinder when it changes size', near(Wr_t.result.bodies[0].solid.bbox().min[1], -32, 0.02));
+const Wt_t = new Model(); Wt_t.apply([{ op: 'add', type: 'cylinder', id: 'c', params: { diameter: 40, height: 30 } }]); const wtv_t = Wt_t.result.bodies[0].solid.volume();
+Wt_t.apply([{ op: 'wrap', target: 'c', text: 'SKETCH', size: 8, depth: 0.8, mode: 'engrave' }]);
+ok('text engraved round a cylinder', Wt_t.result.bodies[0].solid.volume() < wtv_t - 20 && Wt_t.result.bodies.length === 1);
+const Wf_t = new Model(); Wf_t.apply([{ op: 'extrude', id: 'e', shape: 'circle', diameter: 30, length: 20, fixed: true }]);
+const fitc_t = Wf_t.cylinderAt('e', [15, 0, 10], [1, 0, 0]);
+ok('any round face is found as a cylinder (axis, radius) to wrap onto', fitc_t && near(fitc_t.radius, 15, 1e-3) && Math.abs(fitc_t.axis[2]) > 0.9999);
 /* sketch constraints on a polyline profile */
 const Sc = new Model();
 Sc.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [61, 1.5], [60, 9], [11, 10.5], [9, 41], [1, 40]], length: 10, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'h', i: 2 }, { type: 'v', i: 3 }, { type: 'h', i: 4 }, { type: 'v', i: 5 }] }]);
@@ -403,6 +432,16 @@ Sc.apply([{ op: 'var', name: 'leg', value: 25 }, { op: 'set', id: 'L', params: {
 ok('a sketch dimension can be a formula', near(LP()[1][0], 100, 1e-6));
 Sc.apply([{ op: 'constrain', id: 'L', type: 'length', i: 0, value: 10 }]);
 ok('conflicting constraints are reported, not forced', Sc.result.warnings.some(w => /can't satisfy/.test(w.text)));
+/* the bundled pump housing (built over MCP) still rebuilds: constrained flange, threads, wrap, screw joint */
+const Ex_t = new Model(); Ex_t.load(exampleDoc('pump-housing'));
+const exFl_t = Ex_t.describe().objects.find(o => o.id === 'flange').sketch, exMass_t = massReport(Ex_t.doc, Ex_t.result);
+ok('the pump housing example rebuilds with no warnings and a fully defined flange sketch', EXAMPLES.length >= 1 && !Ex_t.result.warnings.length && exFl_t.ok && exFl_t.dof === 0, { warnings: Ex_t.result.warnings, dof: exFl_t.dof });
+ok('its parts: housing, cap and four socket screws (≈ 600 g)', Ex_t.result.bodies.length === 6 && near(exMass_t.total_mass_g, 600.6, 0.01), exMass_t.total_mass_g);
+ok('nothing in it interferes (cap threads on the neck, screws in their counterbores)', interference(Ex_t).length === 0);
+const capZ_t = () => Ex_t.result.bodies.find(b => b.id === 'cap').solid.bbox().max[2], cz0_t = capZ_t();
+Ex_t.apply([{ op: 'drive', id: 'cap', key: 'angle', value: 360 }]);
+ok('one turn of the screw-jointed cap lifts it by the thread pitch (3 mm)', near(capZ_t() - cz0_t, 3, 1e-3), capZ_t() - cz0_t);
+ok('…and it stays clear of the neck threads while it turns', interference(Ex_t).length === 0);
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);

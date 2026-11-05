@@ -73,7 +73,7 @@ export function checkPairs(model) {
 }
 /* one-click interference check */
 export function interference(model, opts = {}) {
-  const out = [], maxExact = opts.maxExact || 7000;
+  const out = [], maxExact = opts.maxExact != null ? opts.maxExact : 150000;   /* booleans are fast now (lazy, culled BSP): exact unless huge */
   for (const [a, b] of checkPairs(model)) {
     const ob = overlapBox(a.solid.bbox(), b.solid.bbox(), 1e-6); if (!ob) continue;
     const exact = a.solid.polys.length + b.solid.polys.length <= maxExact;

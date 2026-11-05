@@ -88,7 +88,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_build` | add / set / mate / boolean / edge / extrude / loft / revolve / sweep / delete / origin / ground / fix / cleanup / dim, as one atomic batch; `look:true` returns a picture |
 | `model_describe` | parameters, positions from the origin, mates, connector names (with positions and normals on request), volumes, warnings |
 | `model_view` | a picture of the four views or one view, from any direction |
-| `model_session` | undo, redo, new, demo, load a `.sf3d.json`, select, say |
+| `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
 | `model_import` | an STL / OBJ file from disk as a mesh part |
@@ -96,6 +96,16 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_query` | geometry questions: every face of a part with the connector name to target it by, its normal, centre and area; edges; distances and angles between faces; section areas; bounding boxes |
 | `model_reference` | the op reference: every op in one line, or one op / topic in full with a worked example (works without the browser) |
 | `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
+
+**The pump housing example** ([examples/](examples/README.md)). Claude built it in one session using nothing but MCP calls. Load it from File → *Example: Pump housing*, or with `model_session {action:"example", id:"pump-housing"}`. It shows:
+- a fully constrained flange sketch, with arcs, tangents, equal radii and driving dimensions (0 degrees of freedom);
+- spline-profile gussets in a circular pattern, and a counterbored M6 hole pattern;
+- a wedge pad with a modelled M5 tapped hole. Claude placed the hole after asking `model_query` for the pad's sloped face;
+- text engraved flat (PUMP-01) and wrapped round the housing (SKETCHFLOW);
+- a threaded neck with a knurled screw cap on a **screw joint**, with "TURN TO OPEN" embossed on an arc;
+- four stainless M6 socket screws.
+
+The checks Claude ran: no interference; a motion sweep of two turns of the cap with no contact; section areas; a measured 80 mm from the flange underside to the cap top; mass 600.6 g; drawing and parts-list exports.
 
 **In the browser:**
 - Add a shape with the toolbar: Box, Wedge, Cylinder, Cone, Sphere, Strip (a fillet strip). If a part is selected, the new shape lands on top of it, and Properties → **Combine** joins it, cuts it or keeps the overlap.
@@ -109,10 +119,11 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 
   The Features group in the toolbar has the same tools. Bosses, cuts, holes, text and face sketches are mated to their face, so they follow it when the part changes.
 - **Sketch**: draw in FRONT, TOP or RIGHT with the sketch bar.
-  - **Lines:** Line, Arc and Tangent arc, mixed freely.
+  - **Lines:** Line, Arc, Tangent arc and **Spline**, mixed freely.
     - An arc is its end point, then a point it passes through.
     - A tangent arc carries on smoothly from the last segment and stays tangent.
     - Arcs are real sketch arcs, not short segments: give them an **R dimension**, make two **tangent** or **concentric**, set radii **equal**, or turn any segment into an arc (⌒ in Properties → Sketch).
+    - A spline is a smooth curve through the points you click. It leaves the last segment tangent and blends into the next one. Switch back to Line or Arc, or close the shape, to end it. Its fit points are editable in Properties → Sketch, and one spline is one smooth face on the solid.
   - **Shapes:** Rectangle, Circle, Slot, Polygon.
   - **Snap ▾:** grid on or off, with a step of 0.5–25 mm; points, corners and centres; edge midpoints; horizontal / vertical only; 15° angles. A green marker shows what you snapped to, with the length so far.
   - **Undo point**, **Close shape**, **Cancel**.
@@ -122,6 +133,13 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
   - **Finish open** leaves the outline open: a **rib** or thin plate of a thickness you choose.
 - **Sketch on a face** (*On face* in the toolbar, or *On a face…* in the sketch bar): click **any** flat face, inclined ones included, and a view square to it opens with the grid on the face. Then choose *Extrude · join*, *Cut into*, *Cut through* or *New part*. The result is mated to that face.
 - Every flat face of a shape can be a target: a wedge's slope, an extrude's side faces, the flat ring of a revolve. That covers holes, text, bosses, cuts, sketches and mates.
+- **Sketching on a curved face:** click the round side of a cylinder, a tube, a revolve or any extruded circle. The face opens **unrolled**: across is the distance round it, up is along it. Draw lines, arcs, splines, shapes or text as on a flat face. When you finish, it is **wrapped** round the face and either **embossed** (joined, standing out by the depth) or **engraved** (cut in). The face doesn't have to be a cylinder primitive: its axis and radius are fitted from the facets. On a cylinder part, the wrap follows the diameter when it changes.
+- **Threads are real geometry:** an ISO 60° profile with a chamfered lead-in, so they print, mesh and show in sections.
+  - **More ▾ → Bolt (threaded)…:** M2–M24, length, hex or socket head, thread length. Mate its *seat* to the face it goes into.
+  - **More ▾ → Nut (threaded)…:** hex, round or knurled. It can be custom (any diameter and pitch), e.g. a screw cap for a bottle neck.
+  - **Thread a cylinder or tube:** Properties → Thread, an ISO size or a custom pitch, over all or part of its length, from the top or bottom. *Bore* makes it a tube.
+  - **Tapped holes:** the hole wizard's *thread* choice is *drill only* (just the tap-drill hole) or *modelled* (the thread is cut).
+  - A nut on its bolt, or a cap on its neck, meshes with 0.1 mm clearance and doesn't count as interference.
 - **More ▾** (in the Add bar):
   - **Spring / coil**: wire Ø, coil radius, pitch, turns, hand.
   - **Plane on a face**: a reference plane on a face, with a gap and a tilt. Sketch on it, mate to it, or split with it.
@@ -145,7 +163,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - *Shell…* (Properties) hollows **any** part to an even wall thickness, open on one of its faces or closed. This includes booleans, filleted parts and imported meshes. Every face moves inward by the wall (an offset, not a scale), so walls stay even on any shape, with mitred corners. A rounding smaller than the wall gets a sharp inner corner. A boss or rib thinner than two walls stays solid, and a note names it. A cut that would leave a section thinner than two walls is refused, by name.
 - **Text** (T): type the words, the height and depth, then pick emboss (a boolean add standing on the face) or engrave (a boolean remove cut into it), and a path: straight, round an arc (reading over the top), or the inside of an arc (reading along the bottom, as on a badge). Click a flat face to place it. The words, sizes, radius, angle, alignment, or a polyline path are all editable later. The built-in font is a single-stroke engraving font, the kind CNC engravers and laser markers use. It covers capitals, digits and the usual symbols, including Ø ± ° ×; lower case prints as capitals.
 - **Interference check** (I): one click lists every pair of parts that overlap, with the overlap volume, and shows the overlap in red. Parts that only touch, and welds on the parts they join, don't count.
-- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar, with limits), then drag its slider or press play. Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
+- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar or **screw**, with limits), then drag its slider or press play. A screw joint turns and advances by its pitch per turn, so a nut or cap runs along its thread in step (keeping the thread phase). Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
 - **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
 - **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
 - File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
@@ -315,11 +333,11 @@ These build on the same joint model:
 - slider and prismatic joints, gears and springs in the motion solver
 - the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, text wrapped onto curved faces, sketch constraints between arcs
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, sketching on doubly-curved faces (spheres, tori), constraints on spline fit points
 
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model, gears, add-ons, collisions
+npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions
 node build.mjs                                                      # rebuild dist/
 ```

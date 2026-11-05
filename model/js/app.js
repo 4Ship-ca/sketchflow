@@ -1,11 +1,12 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } from './model.js';
+import { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 import { drawingSVG, drawingDXF } from './drawing.js';
-import { autoConstraints, KINDS as SKETCH_KINDS, expandArcs, arcThrough, arcTangent, arcMid } from './sketch.js';
+import { autoConstraints, KINDS as SKETCH_KINDS, expandArcs, arcThrough, arcTangent, arcMid, splinePoints } from './sketch.js';
 import { interference, collisions, restBaseline } from './collide.js';
+import { EXAMPLES, exampleDoc } from './examples.js';
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -87,6 +88,9 @@ function subOf(o) {
     case 'hole': { try { return holeSpec(p).label + (p.through ? ' · through' : ` · ${fmt(p.depth)} deep`); } catch (e) { return p.size + ' ' + p.kind; } }
     case 'instance': return `linked copy of ${name(o.of)}`;
     case 'mesh': { const mm = (model.doc.meshes || {})[p.ref || o.id]; return `imported mesh${mm && mm.tris ? ' · ' + mm.tris.toLocaleString() + ' triangles' : ''}${p.scale !== 1 ? ' · ×' + p.scale : ''}`; }
+    case 'bolt': return `${p.size} × ${fmt(p.length)} ${p.head === 'socket' ? 'socket head' : 'hex'} · modelled thread`;
+    case 'nut': return `${p.size === 'custom' ? 'Ø' + fmt(p.diameter) + ' × ' + fmt(p.pitch) : p.size} ${p.shape || 'hex'} nut`;
+    case 'wrap': return `${p.text ? '“' + String(p.text).slice(0, 18) + '”' : (p.profile || []).length + ' pts'} wrapped ${p.mode === 'engrave' ? 'in' : 'on'} R${fmt(typeof p.radius === 'number' ? p.radius : 0)} · ${fmt(p.depth)} deep`;
     case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
     case 'text': return `“${String(p.text).slice(0, 24)}” · ${fmt(p.height)} mm${p.path && p.path !== 'line' ? ' · ' + (p.path === 'points' ? 'on a path' : p.path === 'arc' ? 'arc R' + fmt(p.radius) : 'arc (inside) R' + fmt(p.radius)) : ''}${o.into ? (o.op === 'subtract' ? ' · engraved ' : ' · embossed ') + fmt(p.depth) + ' on ' + name(o.into) : ''}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
@@ -315,7 +319,7 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
+const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'], nut: ['hex', 'round', 'knurled'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { wrap: ['emboss', 'engrave'], '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES), bolt: Object.keys(THREADS), nut: [...Object.keys(THREADS), 'custom'] }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, thread: { cylinder: ['none', ...Object.keys(THREADS), 'custom'] }, thread_from: { cylinder: ['bottom', 'top'] }, head: { bolt: ['hex', 'socket'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -357,7 +361,7 @@ function massSection(o, sec) {
 /* the profile's constraints: status, per segment H / V / length, relations between segments, fixed points */
 function sketchSection(o, sec) {
   const q = o.params, P = q.profile, n = P.length, cons = q.constraints || [], arcs = q.arcs || [], open = !!q.open, st = model.result.sketch && model.result.sketch.get(o.id);
-  const nseg = open ? n - 1 : n, arcOf = (i) => arcs.find(a => a.i === i);
+  const nseg = open ? n - 1 : n, arcOf = (i) => arcs.find(a => a.i === i), splines = q.splines || [], splOf = (i) => splines.find(z => z.i === i);
   const s = sec('Sketch'), add = (c) => { try { apply([Object.assign({ op: 'constrain', id: o.id }, c)]); } catch (e) { /* toast */ } };
   const status = !cons.length ? ['note', 'No constraints: the profile is exactly as drawn.'] : st && !st.ok ? ['warnline', 'Conflict — remove one of the highlighted constraints'] : st && st.dof === 0 ? ['ok', 'Fully defined'] : ['note', `${st ? st.dof : '?'} degree${st && st.dof === 1 ? '' : 's'} of freedom left (it keeps the drawn shape there)`];
   s.append(el('div', { class: status[0] }, status[1]));
@@ -372,7 +376,11 @@ function sketchSection(o, sec) {
   const tbl = el('table', { class: 'cfg sk' });
   tbl.append(el('tr', null, el('th', null, '#'), el('th', null, 'size'), el('th', null, ''), el('th', null, 'dimension')));
   for (let i = 0; i < nseg; i++) {
-    const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
+    const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), spl = splOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
+    if (spl) {
+      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono' }, `spline · ${spl.pts.length + 2} pts`), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))), el('td', null, el('span', { class: 'note' }, 'through its points'))));
+      continue;
+    }
     if (arc) {
       const r = Math.hypot(a[0] - arc.c[0], a[1] - arc.c[1]), ri = cons.findIndex(c => c.type === 'radius' && c.i === i);
       const dimCell = ri >= 0 ? el('span', { class: 'pin' }, el('span', { class: 'note' }, 'R'), paramInput(o, cons[ri].p), el('button', { class: 'chain', title: 'Remove the radius', onclick: () => apply([{ op: 'unconstrain', id: o.id, index: ri }]) }, '×')) : el('button', { class: 'btn', onclick: () => add({ type: 'radius', i }) }, '+ radius');
@@ -480,7 +488,7 @@ function renderProps() {
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
     : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'end', 'draft', 'thin', 'twist', 'scale'] : ['length', 'end', 'draft', 'thin', 'open', 'twist', 'scale', 'direction'])
       : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs'].includes(k) && !/^d\d+$/.test(k))
-        : o.type === 'sweep' && o.params.helix ? [] : Object.keys(o.params);
+        : o.type === 'sweep' && o.params.helix ? [] : o.type === 'wrap' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'radius', 'mode'] : ['depth', 'radius', 'mode']) : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
   if (o.type === 'sweep' && o.params.helix) {
     /* a helix sweep (spring): its coil sizes */
@@ -687,7 +695,7 @@ $('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else cl
 $('#moreBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
   m.append(el('div', { class: 'mh' }, 'Shapes and reference'));
-  for (const [t, f] of [['Spring / coil…', () => coilHint()], ['Plane on a face…', () => setTool('plane')], ['Fillet strip', () => addShape('fillet')]]) m.append(el('button', { onclick: () => { m.remove(); f(); } }, t));
+  for (const [t, f] of [['Bolt (threaded)…', () => fastenerHint('bolt')], ['Nut (threaded)…', () => fastenerHint('nut')], ['Spring / coil…', () => coilHint()], ['Plane on a face…', () => setTool('plane')], ['Fillet strip', () => addShape('fillet')]]) m.append(el('button', { onclick: () => { m.remove(); f(); } }, t));
   for (const a of listAddons()) {
     m.append(el('div', { class: 'mh' }, a.name));
     for (const [t, d] of Object.entries(a.types)) m.append(el('button', { onclick: () => { m.remove(); addShape(t); } }, 'Add ' + d.label.toLowerCase()));
@@ -717,6 +725,7 @@ $('#fileBtn').onclick = (e) => {
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
   item('Versions…', showVersions);
   item('Load the demo model', demo);
+  for (const ex of EXAMPLES) item('Example: ' + ex.name, () => loadExample(ex.id));
   if (/^\/3d\b/.test(location.pathname)) item('2D sketch board ↗', () => { location.href = '/'; });
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
@@ -818,6 +827,17 @@ function splitHint(target, planeId) {
   hint(`Split ${t.name} with a plane (“above” is the side its arrow points to):`, [['Keep below', go('below')], ['Keep above', go('above')], ['Keep both', go('both')]], [['plane', 'plane', planeId || planes[planes.length - 1].id, planes.map(p => p.id)]]);
   const sel = document.querySelector('#hint select[data-k="plane"]'); if (sel) [...sel.options].forEach(op => { op.textContent = (model.get(op.value) || {}).name || op.value; });
 }
+/* bolts and nuts with modelled ISO threads: a bolt seats under its head on the selected part's top face; a nut sits on it */
+function fastenerHint(kind) {
+  setTool(null);
+  const sizes = Object.keys(THREADS), fields = kind === 'bolt' ? [['size', 'size', prefs.boltSize || 'M8', sizes], ['length', 'length mm', prefs.boltL || 25], ['head', 'head', prefs.boltHead || 'hex', ['hex', 'socket']]] : [['size', 'size', prefs.boltSize || 'M8', sizes], ['shape', 'shape', 'hex', ['hex', 'round', 'knurled']]];
+  hint(kind === 'bolt' ? 'Bolt with a modelled thread (ISO metric coarse):' : 'Nut with a modelled thread (ISO metric coarse):', [['Add ' + kind, (v) => {
+    prefs.boltSize = v.size; if (kind === 'bolt') { prefs.boltL = v.length; prefs.boltHead = v.head; } savePrefs();
+    const on = placeOn(selected), first = !model.result.ground, op = { op: 'add', type: kind, params: kind === 'bolt' ? { size: v.size, length: v.length || 25, head: v.head } : { size: v.size, shape: v.shape } };
+    if (on) op.mate = kind === 'bolt' ? { to: on, a: 'top', b: 'seat' } : { to: on, a: 'top', b: 'bottom' }; else if (first) op.mate = { to: 'origin', a: 'xy', b: 'bottom' }; else op.fixed = true;
+    try { const r = apply([op])[0]; hint(null); select(r.id); if (first) setTimeout(() => views.fitAll(), 0); toast(`${v.size} ${kind} added${on ? ' on ' + model.get(on).name : ''} — mate it into a hole (its seat / bottom connector)`, 2600); } catch (e) { /* toast shown */ }
+  }]], fields);
+}
 /* a spring: wire diameter, coil radius, pitch, turns — on the selected part, or at the origin */
 function coilHint() {
   setTool(null);
@@ -848,7 +868,7 @@ function setTool(name, arg) {
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
   }
   else if (name === 'hole') {
-    hint(`Hole: click a face${tool.data.only ? ' of ' + model.get(tool.data.only).name : ''} to place it — it is dimensioned from the two nearest edges (click a dimension to change it)`, [['Done', () => setTool(null)]], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
+    hint(`Hole: click a face${tool.data.only ? ' of ' + model.get(tool.data.only).name : ''} to place it — it is dimensioned from the two nearest edges (click a dimension to change it)`, [['Done', () => setTool(null)]], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0], ['thread', 'thread (tapped)', prefs.holeThread || 'drill only', ['drill only', 'modelled']]]);
     document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
   }
   else if (name === 'text') {
@@ -857,7 +877,7 @@ function setTool(name, arg) {
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
   else if (name === 'sketch') {
-    const d = tool.data; d.points = []; d.hist = []; d.arcs = []; d.tangents = []; d.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); d.seg = pendingLoft ? 'line' : (prefs.sketchSeg || 'line');
+    const d = tool.data; d.points = []; d.hist = []; d.arcs = []; d.tangents = []; d.splines = []; d.spl = []; d.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); d.seg = pendingLoft ? 'line' : (prefs.sketchSeg || 'line');
     if (arg && arg.on) { d.on = arg.on; d.prevLayout = arg.prevLayout; d.pane = arg.on.pane; d.basis = BASISof(arg.on.pane); }
     if (arg !== true) pendingLoft = null;
     sketchHint();
@@ -884,6 +904,7 @@ const SKETCH_STEP = { rect: 'Click one corner, then the opposite corner', circle
 function sketchStepText(d) {
   if (d.mode !== 'polyline') return SKETCH_STEP[d.mode];
   if (d.seg === 'arc') return !d.points.length ? 'Arc: click where it starts' : d.arcEnd ? 'Arc: click a point it passes through' : 'Arc: click where it ends';
+  if (d.seg === 'spline') return !d.points.length ? 'Spline: click where it starts' : !d.spl.length ? 'Spline: click the points it runs through' : 'Spline: more points — or switch to Line / Arc, or Close shape, to end it here';
   if (d.seg === 'tarc') return d.points.length < 2 ? 'Tangent arc: draw a line (or arc) first — the arc then carries on smoothly from its end' : 'Tangent arc: click where it ends';
   return !d.points.length ? 'Line: click the first point' : d.points.length < 2 ? 'Line: click the next point' : d.points.length < 3 ? 'Click the next point — or Finish open for a rib / thin wall' : 'Click the next point — the first point (or Close shape) closes it; Finish open makes a rib / thin wall';
 }
@@ -903,29 +924,38 @@ function sketchHint() {
   const h = $('#hint'), d = tool.data, o = snapOpts(); h.hidden = false; h.innerHTML = '';
   views.sketchGrid = o.grid && o.show ? o.step : 0; views.sketchPane = d.on ? d.on.pane : d.pane || null; views.sketchGridAt = d.on ? d.on.gridAt : null;
   const grp = (label, ...kids) => el('span', { class: 'skgrp' }, el('span', { class: 'sklbl' }, label), ...kids);
-  const reset = () => { d.points = []; d.arcs = []; d.tangents = []; d.hist = []; d.arcEnd = null; if (!d.on) d.pane = null; views.preview = null; };
-  const lineBtn = (seg, label, tip) => el('button', { class: d.mode === 'polyline' && (d.seg || 'line') === seg ? 'on' : '', title: tip, onclick: () => { prefs.sketchMode = 'polyline'; prefs.sketchSeg = seg; savePrefs(); if (d.mode !== 'polyline') reset(); d.mode = 'polyline'; d.seg = seg; d.arcEnd = null; sketchHint(); views.draw(); } }, label);
+  const reset = () => { d.points = []; d.arcs = []; d.tangents = []; d.splines = []; d.spl = []; d.hist = []; d.arcEnd = null; if (!d.on) d.pane = null; views.preview = null; };
+  const lineBtn = (seg, label, tip) => el('button', { class: d.mode === 'polyline' && (d.seg || 'line') === seg ? 'on' : '', title: tip, onclick: () => { commitSpline(d); prefs.sketchMode = 'polyline'; prefs.sketchSeg = seg; savePrefs(); if (d.mode !== 'polyline') reset(); d.mode = 'polyline'; d.seg = seg; d.arcEnd = null; sketchHint(); views.draw(); } }, label);
   const shapeBtn = (k, label) => el('button', { class: d.mode === k ? 'on' : '', disabled: pendingLoft ? true : null, onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; reset(); sketchHint(); views.draw(); } }, label);
-  const where = d.on ? `on ${d.on.name} · ${d.on.faceName} (the view is square to it)` : pendingLoft ? `the END profile, in the ${pendingLoft.pane.toUpperCase()} view` : d.pane ? `in the ${d.pane.toUpperCase()} view` : 'in FRONT, TOP or RIGHT';
+  const where = d.on && d.on.wrap ? `on ${d.on.name} · ${d.on.faceName} — drawn unrolled (across = round the face, up = along it)` : d.on ? `on ${d.on.name} · ${d.on.faceName} (the view is square to it)` : pendingLoft ? `the END profile, in the ${pendingLoft.pane.toUpperCase()} view` : d.pane ? `in the ${d.pane.toUpperCase()} view` : 'in FRONT, TOP or RIGHT';
   const row = el('div', { class: 'skrow' }, el('b', null, pendingLoft ? 'Loft' : 'Sketch'), el('span', { class: 'note' }, where));
   if (!d.on && !pendingLoft) row.append(el('button', { title: 'Sketch on a flat face of a part (any angle): the profile starts on that face, joins or cuts that part, and follows it', onclick: () => setTool('sketch-face') }, 'On a face…'));
-  row.append(grp('Lines', lineBtn('line', 'Line', 'Straight segments, point after point'), lineBtn('arc', 'Arc', 'Three-point arc: its end, then a point it passes through'), lineBtn('tarc', 'Tangent arc', 'An arc that carries on smoothly from the last segment: click its end')),
+  row.append(grp('Lines', lineBtn('line', 'Line', 'Straight segments, point after point'), lineBtn('arc', 'Arc', 'Three-point arc: its end, then a point it passes through'), lineBtn('tarc', 'Tangent arc', 'An arc that carries on smoothly from the last segment: click its end'), lineBtn('spline', 'Spline', 'A smooth curve through the points you click; switch to another line type (or close) to end it')),
     grp('Shapes', shapeBtn('rect', 'Rectangle'), shapeBtn('circle', 'Circle'), shapeBtn('slot', 'Slot'), shapeBtn('polygon', 'Polygon')));
   if (d.mode === 'polygon') { const i = el('input', { type: 'number', min: 3, step: 1, value: prefs.sides || 6, 'aria-label': 'sides', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.sides = Math.max(3, Math.round(+i.value)); savePrefs(); }); row.append(el('label', { class: 'hf' }, 'sides', i)); }
   if (d.mode === 'slot') { const i = el('input', { type: 'number', min: 1, step: 'any', value: prefs.slotW || 10, 'aria-label': 'slot width', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.slotW = +i.value; savePrefs(); }); row.append(el('label', { class: 'hf' }, 'width', i)); }
   row.append(el('button', { class: 'snapbtn', title: 'Snapping: grid, points, midpoints, horizontal / vertical, angles', onclick: (e) => snapMenu(e.currentTarget) }, 'Snap: ' + snapLabel(o) + ' ▾'));
-  row.append(el('button', { disabled: d.points.length || d.arcEnd ? null : true, title: 'Take back the last point (or arc)', onclick: () => undoSketchPoint() }, 'Undo point'));
-  if (d.mode === 'polyline' && !pendingLoft) row.append(el('button', { disabled: d.points.length >= 2 && !d.arcEnd ? null : true, title: 'Leave the outline open: it becomes a rib or thin wall of a thickness you choose', onclick: () => finishOpen() }, 'Finish open'));
-  if (d.mode === 'polyline') row.append(el('button', { class: d.points.length >= 3 ? 'pri' : '', disabled: d.points.length >= 3 && !d.arcEnd ? null : true, title: 'Close the profile and make it 3D', onclick: () => finishSketch() }, 'Close shape'));
+  row.append(el('button', { disabled: d.points.length || d.arcEnd || d.spl.length ? null : true, title: 'Take back the last point (or arc)', onclick: () => undoSketchPoint() }, 'Undo point'));
+  if (d.mode === 'polyline' && !pendingLoft) row.append(el('button', { disabled: d.points.length >= 2 && !d.arcEnd ? null : true, title: 'Leave the outline open: it becomes a rib or thin wall of a thickness you choose', onclick: () => { commitSpline(d); finishOpen(); } }, 'Finish open'));
+  if (d.mode === 'polyline') row.append(el('button', { class: d.points.length >= 3 ? 'pri' : '', disabled: d.points.length >= 3 && !d.arcEnd ? null : true, title: 'Close the profile and make it 3D', onclick: () => { commitSpline(d); finishSketch(); } }, 'Close shape'));
   row.append(el('button', { onclick: () => setTool(null) }, 'Cancel'));
   h.append(row, el('div', { class: 'sknote' }, sketchStepText(d)));
 }
 const sk2 = (d) => { const B = d.basis || BASISof(d.pane); return { B, P2: (q) => [V.dot(q, B.r), V.dot(q, B.u)], P3: (q) => V.add(V.mul(B.r, q[0]), V.mul(B.u, q[1])) }; };
-function pushHist(d) { d.hist.push({ n: d.points.length, a: d.arcs.length, t: d.tangents.length }); }
+function pushHist(d) { d.hist.push({ n: d.points.length, a: d.arcs.length, t: d.tangents.length, s: d.splines.length, sp: d.spl.length }); }
+/* end the spline being drawn: its last point becomes a corner of the outline (or closes it on the first point) */
+function commitSpline(d) {
+  if (!d.spl || !d.spl.length) return false;
+  const pts = d.spl.slice(), end = pts.pop(), i = d.points.length - 1; d.spl = [];
+  const closes = d.points.length >= 2 && V.len(V.sub(d.points[0], end)) < 1e-6;
+  if (pts.length) d.splines.push({ i, pts });
+  if (!closes) d.points.push(end);
+  return closes;
+}
 function undoSketchPoint() {
   const d = tool.data;
   if (d.arcEnd) d.arcEnd = null;
-  else if (d.hist.length) { const hh = d.hist.pop(); d.points.length = hh.n; d.arcs.length = hh.a; d.tangents.length = hh.t; }
+  else if (d.hist.length) { const hh = d.hist.pop(); d.points.length = hh.n; d.arcs.length = hh.a; d.tangents.length = hh.t; d.splines.length = hh.s || 0; d.spl.length = hh.sp || 0; }
   else d.points.pop();
   if (!d.points.length && !d.on) d.pane = null;
   views.preview = d.points.length ? { pane: d.pane, points: sketchPath(d) } : null; sketchHint(); views.draw();
@@ -933,13 +963,19 @@ function undoSketchPoint() {
 /* the outline drawn so far, arcs as short chords (3D, for the preview); closed adds the closing segment */
 function sketchPath(d, closed, extra) {
   if (!d.points.length || !(d.basis || d.pane)) return d.points.slice();
-  const { P2, P3 } = sk2(d), pts = d.points.concat(extra ? [extra.p] : []), arcs = d.arcs.concat(extra && extra.arc ? [extra.arc] : []);
-  return expandArcs(pts.map(P2), arcs.map(a => ({ i: a.i, c: P2(a.c), ccw: a.ccw })), { open: !closed }).pts.map(P3);
+  const { P2, P3 } = sk2(d), arcs = d.arcs.concat(extra && extra.arc ? [extra.arc] : []), spl = (d.splines || []).slice();
+  const pts = d.points.slice();
+  /* the spline being drawn runs on from the last corner through its points (and the cursor) */
+  const pend = (d.spl || []).concat(extra && extra.p && d.seg === 'spline' ? [extra.p] : []);
+  if (pend.length) { const end = pend[pend.length - 1]; if (pend.length > 1) spl.push({ i: pts.length - 1, pts: pend.slice(0, -1) }); pts.push(end); }
+  else if (extra && extra.p) pts.push(extra.p);
+  return expandArcs(pts.map(P2), arcs.map(a => ({ i: a.i, c: P2(a.c), ccw: a.ccw })), { open: !closed, splines: spl.map(q => ({ i: q.i, pts: q.pts.map(P2) })) }).pts.map(P3);
 }
 /* the direction the outline leaves its last point in: along the last line, or along the last arc at its end */
 function lastTangent(d) {
   const n = d.points.length; if (n < 2) return null;
-  const { P2 } = sk2(d), s = n - 2, a = P2(d.points[s]), b = P2(d.points[n - 1]), arc = d.arcs.find(x => x.i === s);
+  const { P2 } = sk2(d), s = n - 2, a = P2(d.points[s]), b = P2(d.points[n - 1]), arc = d.arcs.find(x => x.i === s), sp = (d.splines || []).find(x => x.i === s);
+  if (sp && sp.pts.length) { const q = P2(sp.pts[sp.pts.length - 1]); return [b[0] - q[0], b[1] - q[1]]; }
   if (!arc) return [b[0] - a[0], b[1] - a[1]];
   const c = P2(arc.c), rv = [b[0] - c[0], b[1] - c[1]]; return arc.ccw ? [-rv[1], rv[0]] : [rv[1], -rv[0]];
 }
@@ -965,7 +1001,7 @@ function snapSketch(pane, pp, straight) {
   const d = tool.data, B = BASISof(pane.id), o = snapOpts(), pts = d.points;
   const ppm = Math.abs(views.project(pane, B.r).x - views.project(pane, [0, 0, 0]).x) || 1, tol = 10 / ppm;
   let x = pp.x, y = pp.y, snap = null;
-  const lastP = d.arcEnd || (pts.length ? pts[pts.length - 1] : null), last = lastP ? [V.dot(lastP, B.r), V.dot(lastP, B.u)] : null;
+  const lastP = d.arcEnd || (d.spl && d.spl.length ? d.spl[d.spl.length - 1] : null) || (pts.length ? pts[pts.length - 1] : null), last = lastP ? [V.dot(lastP, B.r), V.dot(lastP, B.u)] : null;
   const g0 = d.on && d.on.gridAt ? [V.dot(d.on.gridAt, B.r), V.dot(d.on.gridAt, B.u)] : [0, 0];   /* on a face the grid starts at the face's centre */
   if (o.points || o.mids) {
     let best = null, bd = tol;
@@ -985,20 +1021,20 @@ function snapSketch(pane, pp, straight) {
 }
 /* a profile drawn on a face: its points (and arc centres) in the face's own frame, and the mate that puts them back where
    they were drawn, standing out of the face (boss, new part) or going into it (cut). Without a face connector: a fixed pose. */
-function onFace(d, pts3, cut, centre3, arcs3) {
+function onFace(d, pts3, cut, centre3, arcs3, spl3) {
   const R = model.result, O = R.originPoint, on = d.on, B = BASISof(on.pane), depth = V.dot(V.sub(on.point, O), B.f);
   const Wd = (p) => V.add(V.add(O, p), V.mul(B.f, depth)), W = pts3.map(Wd);
   let c = [0, 0, 0]; if (centre3) c = Wd(centre3); else { for (const w of W) c = V.add(c, w); c = V.mul(c, 1 / W.length); }
   const n = on.n, yAx = V.cross(n, B.r), loc = (w) => [+V.dot(V.sub(w, c), B.r).toFixed(6), +V.dot(V.sub(w, c), yAx).toFixed(6)];
-  let prof = W.map(loc), arcs = (arcs3 || []).map(a => ({ i: a.i, c: loc(Wd(a.c)), ccw: a.ccw }));
+  let prof = W.map(loc), arcs = (arcs3 || []).map(a => ({ i: a.i, c: loc(Wd(a.c)), ccw: a.ccw })), splines = (spl3 || []).map(q => ({ i: q.i, pts: q.pts.map(pp => loc(Wd(pp))) }));
   if (on.conn) {
     const f = on.conn, v = V.cross(f.n, f.u), d0 = V.sub(c, f.o), slide = [+V.dot(d0, f.u).toFixed(4), +V.dot(d0, v).toFixed(4)];
     const ru = V.dot(B.r, f.u), rv = V.dot(B.r, v), angle = +(Math.atan2(cut ? rv : -rv, ru) * 180 / Math.PI).toFixed(6);
-    return { prof, arcs, centre: c, mate: cut ? { to: on.id, a: f.name, b: 'end', flip: false, slide, angle, offset: 0 } : { to: on.id, a: f.name, b: 'start', flip: true, slide, angle, offset: 0 } };
+    return { prof, arcs, splines, centre: c, mate: cut ? { to: on.id, a: f.name, b: 'end', flip: false, slide, angle, offset: 0 } : { to: on.id, a: f.name, b: 'start', flip: true, slide, angle, offset: 0 } };
   }
   const frame = M4.frame(c, B.r, cut ? V.neg(n) : n), pose = poseFromMatrix(frame);
-  if (cut) { prof = prof.map(([x, y]) => [x, -y]); arcs = arcs.map(a => ({ i: a.i, c: [a.c[0], -a.c[1]], ccw: !a.ccw })); }
-  return { prof, arcs, centre: c, pose };
+  if (cut) { prof = prof.map(([x, y]) => [x, -y]); arcs = arcs.map(a => ({ i: a.i, c: [a.c[0], -a.c[1]], ccw: !a.ccw })); splines = splines.map(q => ({ i: q.i, pts: q.pts.map(([x, y]) => [x, -y]) })); }
+  return { prof, arcs, splines, centre: c, pose };
 }
 /* start a sketch on any flat face of a part: {id, point (world), normal}. A view square to that face opens for drawing */
 function startFaceSketch(pk, only) {
@@ -1008,6 +1044,18 @@ function startFaceSketch(pk, only) {
   const n = V.norm(pk.normal);
   let f = model.faceAt(id, pk.point, n), owner = id;
   if (!(f && f.off < 1e-3)) { const g = root !== id ? model.faceAt(root, pk.point, n) : null; if (g && g.off < 1e-3) { f = g; owner = root; } else f = null; }
+  if (!f) {
+    /* a round face: sketch on it unrolled, then wrap the result round it */
+    const cyl = model.cylinderAt(id, pk.point, n);
+    if (cyl) {
+      const tid = cyl.primitive ? cyl.id : rootOf(id), nr = V.norm(V.sub(n, V.mul(cyl.axis, V.dot(n, cyl.axis)))), O = model.result.originPoint, name = model.get(tid).name;
+      views.setFaceView(nr, `ON ${name.toUpperCase()} · ROUND FACE R${fmt(cyl.radius)} (UNROLLED)`, V.sub(pk.point, O), cyl.axis);
+      const on = { id: tid, root: rootOf(tid), n: nr, point: pk.point, pane: 'face', conn: null, faceName: `round face R${fmt(cyl.radius)}`, name, gridAt: V.sub(pk.point, O), wrap: cyl };
+      const prevLayout = views.layout; setTool('sketch', { on, prevLayout }); views.layout = 'face'; views.draw();
+      toast(`Sketching on the round face of ${name}: draw it unrolled — it is wrapped round when you finish`, 3000);
+      return true;
+    }
+  }
   const name = model.get(owner).name, faceName = f ? (f.face === 'plane' ? 'plane' : f.face.replace(/^face:/, '') + ' face') : 'face';
   const O = model.result.originPoint, centre = V.sub(f && o.type !== 'plane' ? f.conn.o : pk.point, O);
   views.setFaceView(n, `ON ${name.toUpperCase()} · ${faceName.toUpperCase()}`, centre);
@@ -1016,6 +1064,15 @@ function startFaceSketch(pk, only) {
   const prevLayout = views.layout; setTool('sketch', { on, prevLayout }); views.layout = 'face'; views.draw();
   toast(`Sketching on ${name} — the view is square to the ${faceName}. View menu → 4 views to see the rest`, 2600);
   return true;
+}
+/* a sketch on a round face: wrap it round and emboss (join) or engrave (cut). Its coordinates are measured from the
+   point clicked: across = round the face, up = along its axis */
+function wrapActions(d, geo, label) {
+  const on = d.on, { P2 } = sk2(d), c = P2(V.sub(on.point, model.result.originPoint)), rel = (q) => [+(q[0] - c[0]).toFixed(5), +(q[1] - c[1]).toFixed(5)];
+  const g = { profile: geo.profile.map(rel), arcs: (geo.arcs || []).map(a => ({ i: a.i, c: rel(a.c), ccw: a.ccw })), splines: (geo.splines || []).map(q => ({ i: q.i, pts: q.pts.map(rel) })) };
+  const go = (mode) => (v) => { try { const r = apply([Object.assign({ op: 'wrap', target: on.id, at: on.point, normal: on.n, depth: Number.isFinite(v.depth) && v.depth > 0 ? v.depth : 1, mode }, g)], `${label} wrapped (${mode})`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ } };
+  hint(`${label} on ${on.name} (${on.faceName}) — wrap it round the face:`, [['Wrap · emboss', go('emboss')], ['Wrap · engrave', go('engrave')]], [['depth', 'depth mm', 1]]);
+  tool.step = 9;
 }
 /* the choices for a profile on a face: join it to the part, cut it in, cut through, or make a new part there */
 function faceActions(d, label, build, extraFields) {
@@ -1043,6 +1100,7 @@ function finishShape(spec) {
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]), pose = poseFromMatrix(frame);
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt), name = { rect: 'Rectangle', circle: 'Circle', slot: 'Slot', polygon: 'Polygon' }[spec.shape];
   const sizeText = `${name} ${spec.shape === 'rect' || spec.shape === 'slot' ? fmt(spec.width) + ' × ' + fmt(spec.height) : 'Ø' + fmt(spec.diameter)}`;
+  if (d.on && d.on.wrap) { wrapActions(d, { profile: shapePoints3(spec, B).map(q => [V.dot(q, B.r), V.dot(q, B.u)]) }, name); return; }
   if (d.on) {
     /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
     const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
@@ -1064,18 +1122,19 @@ function finishShape(spec) {
 }
 /* the sketch's points and arcs in the view's 2D coordinates, and the constraints a fresh sketch gets */
 function sketchData(d, open) {
-  const { P2 } = sk2(d), pts2 = d.points.map(P2), arcs2 = d.arcs.map(a => ({ i: a.i, c: P2(a.c), ccw: a.ccw }));
-  const cons = autoConstraints(pts2, 4, arcs2, open).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j })));
-  return { pts2, arcs2, cons };
+  const { P2 } = sk2(d), pts2 = d.points.map(P2), arcs2 = d.arcs.map(a => ({ i: a.i, c: P2(a.c), ccw: a.ccw })), spl2 = (d.splines || []).map(q => ({ i: q.i, pts: q.pts.map(P2) }));
+  const cons = autoConstraints(pts2, 4, arcs2.concat(spl2), open).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j })));
+  return { pts2, arcs2, spl2, cons };
 }
 function finishSketch() {
-  const d = tool.data; if (!d.points || d.points.length < (d.arcs && d.arcs.length ? 2 : 3)) { toast('A closed profile needs at least 3 points (or 2 with an arc)'); return; }
-  const B = d.basis, { pts2, arcs2, cons } = sketchData(d, false);
+  const d = tool.data; if (!d.points || d.points.length < ((d.arcs && d.arcs.length) || (d.splines && d.splines.length) ? 2 : 3)) { toast('A closed profile needs at least 3 points (or 2 with an arc or spline)'); return; }
+  const B = d.basis, { pts2, arcs2, spl2, cons } = sketchData(d, false);
   views.preview = { pane: d.pane, points: sketchPath(d, true), closed: true }; views.draw();
+  if (d.on && d.on.wrap) { wrapActions(d, { profile: pts2, arcs: arcs2, splines: spl2 }, 'Sketch'); return; }
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
   /* a fresh sketch gets horizontal / vertical constraints where it nearly is (not on its arcs), its first point fixed, and its tangent arcs tangent (edit them in Properties → Sketch) */
-  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, splines: spl2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
   if (pendingLoft) {
     if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');
@@ -1086,7 +1145,7 @@ function finishSketch() {
     tool.step = 9; return;
   }
   if (d.on) {
-    hint(`Profile on ${d.on.name} (${d.on.faceName}), ${pts2.length} points${d.arcs.length ? ', ' + d.arcs.length + ' arc' + (d.arcs.length > 1 ? 's' : '') : ''}:`, faceActions(d, 'Extrude', (cut) => { const place = onFace(d, d.points, cut, null, d.arcs); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, constraints: autoConstraints(place.prof, 4, place.arcs).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j }))) } }; }), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
+    hint(`Profile on ${d.on.name} (${d.on.faceName}), ${pts2.length} points${d.arcs.length ? ', ' + d.arcs.length + ' arc' + (d.arcs.length > 1 ? 's' : '') : ''}:`, faceActions(d, 'Extrude', (cut) => { const place = onFace(d, d.points, cut, null, d.arcs, d.splines); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, splines: place.splines, constraints: autoConstraints(place.prof, 4, place.arcs.concat(place.splines)).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j }))) } }; }), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
     tool.step = 9; return;
   }
   hint('Profile closed (' + pts2.length + ' points' + (arcs2.length ? ', ' + arcs2.length + ' arc' + (arcs2.length > 1 ? 's' : '') : '') + ') — make it 3D:', [
@@ -1099,15 +1158,16 @@ function finishSketch() {
 /* an open outline: a rib or thin wall of a thickness, extruded (joined to a face's part, cut, or a new part) */
 function finishOpen() {
   const d = tool.data; if (!d.points || d.points.length < 2) { toast('An open profile needs at least 2 points'); return; }
-  const B = d.basis, { pts2, arcs2, cons } = sketchData(d, true), ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt);
+  if (d.on && d.on.wrap) { toast('On a round face, close the outline: it is wrapped round and embossed or engraved'); return; }
+  const B = d.basis, { pts2, arcs2, spl2, cons } = sketchData(d, true), ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt);
   views.preview = { pane: d.pane, points: sketchPath(d, false) }; views.draw();
   const fields = [['thin', 'thickness mm', prefs.ribT || 3], ['length', 'height mm', 10]];
   if (d.on) {
-    hint(`Open profile on ${d.on.name} (${d.on.faceName}) — a rib or thin wall:`, faceActions(d, 'Rib', (cut, v) => { const place = onFace(d, d.points, cut, null, d.arcs); prefs.ribT = ok(v.thin, 3); savePrefs(); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, open: true, thin: ok(v.thin, 3), constraints: autoConstraints(place.prof, 4, place.arcs, true) } }; }), fields);
+    hint(`Open profile on ${d.on.name} (${d.on.faceName}) — a rib or thin wall:`, faceActions(d, 'Rib', (cut, v) => { const place = onFace(d, d.points, cut, null, d.arcs, d.splines); prefs.ribT = ok(v.thin, 3); savePrefs(); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, splines: place.splines, open: true, thin: ok(v.thin, 3), constraints: autoConstraints(place.prof, 4, place.arcs, true) } }; }), fields);
     tool.step = 9; return;
   }
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]), pose = poseFromMatrix(frame);
-  hint(`Open profile (${pts2.length} points) — a thin wall:`, [['Extrude thin', (v) => { prefs.ribT = ok(v.thin, 3); savePrefs(); const r = apply([{ op: 'extrude', name: 'Thin wall', profile: pts2, arcs: arcs2, open: true, thin: ok(v.thin, 3), length: ok(v.length, 10), end: v.end === 'symmetric' ? 'symmetric' : 'blind', constraints: cons, at: pose.at, rot: pose.rot, fixed: true }])[0]; select(r.id); setTool(null); }]], fields.concat([['end', 'direction', 'blind', ['blind', 'symmetric']]]));
+  hint(`Open profile (${pts2.length} points) — a thin wall:`, [['Extrude thin', (v) => { prefs.ribT = ok(v.thin, 3); savePrefs(); const r = apply([{ op: 'extrude', name: 'Thin wall', profile: pts2, arcs: arcs2, splines: spl2, open: true, thin: ok(v.thin, 3), length: ok(v.length, 10), end: v.end === 'symmetric' ? 'symmetric' : 'blind', constraints: cons, at: pose.at, rot: pose.rot, fixed: true }])[0]; select(r.id); setTool(null); }]], fields.concat([['end', 'direction', 'blind', ['blind', 'symmetric']]]));
   tool.step = 9;
 }
 
@@ -1144,6 +1204,7 @@ stage.addEventListener('pointermove', (e) => {
     if (d.mode && d.mode !== 'polyline' && d.points.length === 1) { const spec = shapeFrom(d.mode, P2(d.points[0]), P2(p)); views.preview = { pane: pane.id, points: shapePoints3(spec, B), closed: true, snap }; }
     else if (d.seg === 'arc' && d.arcEnd && d.points.length) { const arc = arcTo(d, d.arcEnd, p); views.preview = { pane: pane.id, points: sketchPath(d, false, { p: d.arcEnd, arc }), snap }; }
     else if (d.seg === 'tarc' && d.points.length >= 2) { const arc = arcTo(d, p, null); views.preview = { pane: pane.id, points: arc ? sketchPath(d, false, { p, arc }) : sketchPath(d), cursor: arc ? null : p, snap }; }
+    else if (d.seg === 'spline' && d.points.length) views.preview = { pane: pane.id, points: sketchPath(d, false, { p }), snap };
     else views.preview = { pane: pane.id, points: sketchPath(d), cursor: d.seg === 'arc' && d.points.length ? null : p, snap };
   }
   stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube') ? 'pointer' : tool ? 'crosshair' : 'default';
@@ -1205,6 +1266,13 @@ function clickTool(pane, x, y, hit, e) {
     if (d.seg === 'arc' && d.points.length) {
       if (!d.arcEnd) { d.arcEnd = p; sketchHint(); views.draw(); return; }
       const end = d.arcEnd; addArc(end, arcTo(d, end, p), null); return;
+    }
+    if (d.seg === 'spline') {
+      if (!d.points.length) { pushHist(d); d.points.push(p); views.preview = { pane: pane.id, points: [p] }; sketchHint(); views.draw(); return; }
+      /* clicking the first point closes the outline with this spline */
+      const f0 = views.project(pane, d.points[0]);
+      if (d.points.length + d.spl.length >= 2 && Math.hypot(f0.x - x, f0.y - y) < 10) { pushHist(d); d.spl.push(d.points[0]); if (commitSpline(d)) { finishSketch(); return; } }
+      pushHist(d); d.spl.push(p); views.preview = { pane: pane.id, points: sketchPath(d) }; sketchHint(); views.draw(); return;
     }
     if (d.seg === 'tarc') {
       if (d.points.length < 2) { if (!d.points.length) { pushHist(d); d.points.push(p); views.preview = { pane: pane.id, points: [p] }; } toast('Tangent arc: draw a line first — the arc carries on from its end'); sketchHint(); views.draw(); return; }
@@ -1282,6 +1350,11 @@ function clickTool(pane, x, y, hit, e) {
     if (t.data.only && rootOf(id) !== t.data.only) { toast(`Click a face of ${model.get(t.data.only).name}`); return; }
     const f = Object.fromEntries([...document.querySelectorAll('#hint [data-k]')].map(i => [i.dataset.k, i.dataset.str || i.tagName === 'SELECT' ? i.value : parseFloat(i.value)]));
     const snap = (v) => Math.round(v * 2) / 2, at = V.add(V.sub(pk.point, R.originPoint).map(snap), R.originPoint);
+    const flatHere = (() => { const g = model.faceAt(id, pk.point, pk.normal); return g && g.off < 1e-3; })(), cyl = !flatHere && model.cylinderAt(id, pk.point, pk.normal);
+    if (cyl) {
+      try { const r = apply([{ op: 'wrap', target: cyl.primitive ? cyl.id : id, at: pk.point, normal: pk.normal, text: f.text || 'TEXT', size: f.height || 8, depth: f.depth || 1, mode: f.mode === 'engrave' ? 'engrave' : 'emboss' }])[0]; setTool(null); select(r.id); toast(`Text wrapped round the face (${f.mode === 'engrave' ? 'engraved' : 'embossed'}) — edit it in Properties`, 2400); } catch (e) { /* toast shown */ }
+      return;
+    }
     try {
       const r = apply([{ op: 'text', target: id, at, normal: pk.normal, text: f.text || 'TEXT', height: f.height || 8, depth: f.depth || 1, weight: +((f.height || 8) * 0.12).toFixed(2), mode: f.mode, path: f.path, radius: f.radius }])[0];
       setTool(null); select(r.id); toast(`${f.mode === 'engrave' ? 'Engraved' : 'Embossed'} — edit the words, size, path or radius in Properties`, 2400);
@@ -1294,7 +1367,7 @@ function clickTool(pane, x, y, hit, e) {
     if (t.data.only && rootOf(id) !== t.data.only) { toast(`Click a face of ${model.get(t.data.only).name}`); return; }
     const snap = (v) => Math.round(v * 2) / 2, at = V.add(V.sub(pk.point, R.originPoint).map(snap), R.originPoint), dep = +(prefs.holeDepth || 0);
     try {
-      const r = apply([{ op: 'hole', target: id, at, normal: pk.normal, size: prefs.holeSize || 'M6', kind: prefs.holeKind || 'simple', fit: prefs.holeFit || 'normal', through: !(dep > 0), depth: dep > 0 ? dep : undefined }], `Hole ${prefs.holeSize || 'M6'}`)[0];
+      const r = apply([{ op: 'hole', target: id, at, normal: pk.normal, size: prefs.holeSize || 'M6', kind: prefs.holeKind || 'simple', fit: prefs.holeFit || 'normal', through: !(dep > 0), depth: dep > 0 ? dep : undefined, modelled: (prefs.holeKind || 'simple') === 'tapped' && prefs.holeThread === 'modelled' }], `Hole ${prefs.holeSize || 'M6'}`)[0];
       toast(`${r.spec}${r.dims && r.dims.length ? ` — ${r.dims.map(d => fmt(d.value) + ' from ' + d.from).join(', ')}` : ''}. Click a blue dimension to change it.`, 3200);
     } catch (e) { /* toast shown */ }
     return;
@@ -1403,6 +1476,11 @@ window.addEventListener('keydown', (e) => {
 });
 
 /* ---------- demo ---------- */
+function loadExample(id) {
+  const ex = EXAMPLES.find(e => e.id === id);
+  model.load(Object.assign(newDoc(ex.doc.name || ex.name), exampleDoc(id)));
+  select(null); views.fitAll(); toast(ex.name + ' — ' + ex.blurb, 3600);
+}
 function demo() {
   model.load(newDoc('Bracket demo'));
   apply([
@@ -1476,6 +1554,7 @@ async function runCmd(cmd, a) {
     case 'model.select': select(a.id || null); return { selected };
     case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }
+    case 'model.example': { if (!a.id) return { examples: EXAMPLES.map(e => ({ id: e.id, name: e.name, about: e.blurb })) }; loadExample(a.id); return { model: model.describe() }; }
     case 'model.new': model.load(newDoc(a.name || 'Untitled model')); select(null); views.fitAll(); return { model: model.describe() };
     case 'model.load': { const doc = typeof a.doc === 'string' ? JSON.parse(a.doc) : a.doc; if (!doc || !Array.isArray(doc.objects)) throw new Error('Not a SketchFlow 3D model (needs objects[])'); model.load(Object.assign(newDoc(doc.name || 'Model'), doc)); select(null); views.fitAll(); return { model: model.describe() }; }
     case 'model.demo': demo(); return { model: model.describe() };

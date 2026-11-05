@@ -21,7 +21,8 @@ const g = new Model();
 g.apply([{ op: 'add', type: 'gear', id: 'a', params: { module: 2, teeth: 15, width: 10, style: 'herringbone', helix: 25, bore: 5 } }, { op: 'add', type: 'gear', id: 'b', params: { module: 2, teeth: 30, width: 10, style: 'herringbone', helix: -25, bore: 5 }, mate: { to: 'a', kind: 'gear' } }]);
 ok('meshed herringbone gears (big parts, voxel path) are clear', interference(g).length === 0);
 g.apply([{ op: 'mate', id: 'b', to: 'a', kind: 'gear', phase: 6 }]);
-ok('half a tooth out of phase they clash', interference(g).length === 1 && !interference(g)[0].exact);
+const clash = interference(g), clashV = interference(g, { maxExact: 0 });
+ok('half a tooth out of phase they clash (exact volume; the voxel estimate agrees)', clash.length === 1 && clash[0].exact && clash[0].volume > 1 && clashV.length === 1 && !clashV[0].exact && Math.abs(clashV[0].volume - clash[0].volume) < clash[0].volume * 0.6 + 20, { exact: clash.map(x => x.volume), voxel: clashV.map(x => x.volume) });
 /* motion: a door hinged on its corner swings into a wall */
 const d = new Model();
 d.apply([{ op: 'add', type: 'box', id: 'floor', params: { width: 200, depth: 200, height: 5 } }, { op: 'add', type: 'box', id: 'wall', params: { width: 100, depth: 5, height: 60 }, mate: { to: 'floor', a: 'top', b: 'bottom', slide: [0, 42.5] } },

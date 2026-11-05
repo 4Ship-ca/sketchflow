@@ -149,11 +149,20 @@ export function arcMid(a, b, c, ccw) { const { start, sweep, r } = arcSweep(a, b
 /* the outline as straight segments: each arc split into short chords (about every 6°). sides[k] names the face that
    segment k makes when extruded: 'side<i>' for line i, 'arc<i>' for every chord of arc i (one smooth face) */
 export function expandArcs(points, arcs, opts = {}) {
-  const n = points.length, open = !!opts.open, step = (opts.stepDeg || 6) * Math.PI / 180, by = new Map((arcs || []).map(a => [a.i, a]));
+  const n = points.length, open = !!opts.open, step = (opts.stepDeg || 6) * Math.PI / 180, by = new Map((arcs || []).map(a => [a.i, a])), spl = new Map((opts.splines || []).map(q => [q.i, q]));
   const pts = [], sides = [];
   for (let i = 0; i < n; i++) {
     pts.push(points[i]);
     if (open && i === n - 1) break;
+    const sp = spl.get(i);
+    if (sp) {
+      /* a spline: through its fit points, smooth; its ends lean on the neighbouring points so it blends in */
+      const prev = open && i === 0 ? null : points[(i - 1 + n) % n], next = open && i + 1 === n - 1 ? null : points[(i + 2) % n];
+      const curve = splinePoints([points[i], ...sp.pts, points[(i + 1) % n]], prev && !spl.has((i - 1 + n) % n) && !by.has((i - 1 + n) % n) ? prev : null, next && !spl.has((i + 1) % n) && !by.has((i + 1) % n) ? next : null, opts.splineSteps || 10);
+      for (let k = 1; k < curve.length - 1; k++) pts.push(curve[k]);
+      for (let k = 0; k < curve.length - 1; k++) sides.push('spl' + i);
+      continue;
+    }
     const a = by.get(i);
     if (!a) { sides.push('side' + i); continue; }
     const b = points[(i + 1) % n], { start, sweep, r } = arcSweep(points[i], b, a.c, a.ccw), k = Math.max(2, Math.ceil(Math.abs(sweep) / step));
@@ -176,4 +185,21 @@ export function arcTangent(a, t, b) {
   if (Math.abs(den) < 1e-9) return null;
   const s = -(d[0] * d[0] + d[1] * d[1]) / den;
   return { c: [a[0] + nx * s, a[1] + ny * s], ccw: s > 0 };
+}
+/* a smooth curve through points (centripetal Catmull–Rom, no loops or cusps); before / after are the neighbouring
+   points beyond each end (or null: the curve then starts straight at its end) */
+export function splinePoints(P, before, after, steps = 10) {
+  if (P.length < 2) return P.slice();
+  const ext = [before || [2 * P[0][0] - P[1][0], 2 * P[0][1] - P[1][1]], ...P, after || [2 * P[P.length - 1][0] - P[P.length - 2][0], 2 * P[P.length - 1][1] - P[P.length - 2][1]]];
+  const out = [P[0]];
+  for (let k = 1; k < ext.length - 2; k++) {
+    const p0 = ext[k - 1], p1 = ext[k], p2 = ext[k + 1], p3 = ext[k + 2], d = (a, b) => Math.max(1e-9, Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), 0.5));
+    const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3), L = (a, b, ta, tb, t) => [(a[0] * (tb - t) + b[0] * (t - ta)) / (tb - ta), (a[1] * (tb - t) + b[1] * (t - ta)) / (tb - ta)];
+    for (let s = 1; s <= steps; s++) {
+      const t = t1 + (t2 - t1) * s / steps;
+      const A1 = L(p0, p1, t0, t1, t), A2 = L(p1, p2, t1, t2, t), A3 = L(p2, p3, t2, t3, t), B1 = L(A1, A2, t0, t2, t), B2 = L(A2, A3, t1, t3, t);
+      out.push(s === steps ? p2 : L(B1, B2, t1, t2, t));
+    }
+  }
+  return out;
 }
