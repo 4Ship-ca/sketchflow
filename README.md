@@ -90,7 +90,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_view` | a picture of the four views or one view, from any direction |
 | `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say, **share** (a link for live editing together), **room** (who's in it and what they're doing) |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
-| `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
+| `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process), `gears/pair`, `welding/advise` (weld, bond or laminate suggestions for light, regular and heavy service) or `welding/apply` |
 | `model_import` | an STL, OBJ or STEP file from disk as mesh parts (STEP: planar faces, each solid kept in place) |
 | `model_check` | interference (which parts overlap, by how much, exact for moderate parts) and a motion sweep that reports the first contact of a joint |
 | `model_query` | geometry questions: every face of a part with the connector name to target it by, its normal, centre and area; edges; distances and angles between faces; section areas; bounding boxes |
@@ -152,7 +152,7 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
 - **More ▾** (in the Add bar):
   - **Spring / coil**: wire Ø, coil radius, pitch, turns, hand.
   - **Plane on a face**: a reference plane on a face, with a gap and a tilt. Sketch on it, mate to it, or split with it.
-  - Fillet strip, and the add-ons (gears).
+  - Fillet strip, and the add-ons (gears, and the weld / join wizard).
 - **Split** (Features): cut a part with a plane, keeping the side below, above, or both as two parts.
 - Mates take a **tilt** too, so parts and planes can sit at an angle to a face.
 - **Sketch constraints**: a drawn polyline gets horizontal / vertical relations and its first point fixed automatically, so a sloppy sketch comes out square. In Properties → Sketch, give any segment a driving dimension, or relate two segments (parallel, perpendicular, equal, angle). The status line says how many degrees of freedom are left and names any conflicting constraint.
@@ -160,6 +160,7 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
 - *Union / Subtract / Intersect*: click the target, then the tool.
 - *Fillet / Chamfer*: set the size and click near an edge. Outer edges are trimmed and inner corners are filled; round edges get the treatment all the way round. On the seam between two parts, a fillet merges them into one piece.
 - *Weld*: click where two separate parts meet. The bead joins them and they stay separate parts (**E** pulls the assembly apart to show it). Mixing materials that can't be welded gets a warning.
+- **Weld wizard**: click the seam where two parts meet (or one part, then the other). It reads the joint (butt, tee, corner, lap; thicknesses; torch access and welding position on each side) and the materials, asks what service the joint is for, and shows a light, a regular and a heavy suggestion side by side: the edge preparation (square, V, X, bevel, K, J, U), root gap, process, filler, position, quality level and inspection, time (fit-up, prep and machining, welding, grinding, inspection), cost at your labour rate, ease, the reasons, and a section through the joint with its ISO 2553 symbol. Materials that do not weld together get bonded, brazed, filled or fibre-tabbed joints instead (or pick one). *Build* cuts the preparation, opens the gap, places the weld metal and pins the weld symbol to the part; drawings show the symbols with a weld schedule.
 - *Pattern* (**P**, or Properties → Pattern…): a row, grid, circle or mirror of the selected part or feature. Copies follow the original.
 - *Material & mass* in Properties: pick a material, or set density, fill %, part no., supplier and notes. With nothing selected you see the total mass, the centre of gravity (the toolbar button marks it in the views), whether the model stands, and a parts list button.
 - *Add-ons* menu: gears (single, pair, train, planetary, and an advisor that picks the right gear for the job and the process). Drop your own into `model/addons/`: see [model/ADDONS.md](model/ADDONS.md).
@@ -361,6 +362,6 @@ These build on the same joint model:
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference, STEP, shared editing
+npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, welding, add-ons, collisions, the MCP op reference, STEP, shared editing
 node build.mjs                                                      # rebuild dist/
 ```

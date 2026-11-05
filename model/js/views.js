@@ -3,6 +3,7 @@
    hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
 import * as K from './kernel.js';
 import { dimsOf, worldConnectors, massReport, measureDim } from './model.js';
+import { weldSymbol, weldSymbolCanvas } from './weldsymbol.js';
 const { V } = K, M4point = (m, p) => K.M4.point(m, p);
 
 const PANES = ['top', '3d', 'front', 'right'];
@@ -259,6 +260,7 @@ export class Views {
       if (this.showCoG && still) this.drawCoG(c, pane, cam);
       if (still && pane.id !== '3d') this.drawSketchGlyphs(c, pane, cam);
       if (still) this.drawPlanes(c, pane, cam);
+      if (still && this.showCallouts !== false) this.drawCallouts(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -269,7 +271,7 @@ export class Views {
   drawDims(c, pane, cam, R, O) {
     const C = this.colors, doc = this.model.doc, list = [];
     for (const ob of doc.objects) {
-      if (ob.type === 'edge' || !R.world.has(ob.id)) continue;
+      if (ob.type === 'edge' || ob.type === 'callout' || (ob.meta && ob.meta.joint) || !R.world.has(ob.id)) continue;   /* weld metal / prep cuts: their symbol sizes them */
       const M = R.world.get(ob.id);
       for (const d of dimsOf(ob)) {
         const a = V.sub(K.M4.point(M, d.a), O), b = V.sub(K.M4.point(M, d.b), O), dir = V.norm(V.sub(b, a));
@@ -356,6 +358,45 @@ export class Views {
       }
     }
     c.restore();
+  }
+  /* weld symbols and joint notes (ISO 2553): an arrow onto the joint, the reference line with its symbol, sizes and tail;
+     the notes under it when it (or the part it labels) is selected. Click one to select it. */
+  drawCallouts(c, pane, cam) {
+    let list; try { list = this.model.callouts(); } catch (e) { return; }
+    if (!list.length) return;
+    const O = this.O, ink = this.dark ? '#ecebe8' : '#1c1d21', placed = [];
+    for (const k of list) {
+      const p = this.project(pane, V.sub(k.point, O), cam); if (p.behind) continue;
+      if (p.x < pane.x - 40 || p.x > pane.x + pane.w + 40 || p.y < pane.y - 40 || p.y > pane.y + pane.h + 40) continue;
+      /* the leader leaves along the joint's open side as this pane sees it (to the right, so the reference line reads) */
+      const q = this.project(pane, V.add(V.sub(k.point, O), k.dir), cam), r = this.project(pane, V.add(V.sub(k.point, O), k.along), cam);
+      let dx = q.x - p.x, dy = q.y - p.y; const l = Math.hypot(dx, dy), lr = Math.hypot(r.x - p.x, r.y - p.y);
+      if (l < 0.35 * Math.max(lr, 1e-9) || l < 1e-9) { dx = 0.75; dy = -0.66; } else { dx /= l; dy /= l; }
+      if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6;
+      const n = Math.hypot(dx, dy); dx /= n; dy /= n;
+      /* the reference line runs away from the joint: to the left when the leader leaves to the left */
+      const left = dx < -0.05, spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' };
+      const sel = this.sel && (this.sel === k.id || this.sel === k.on), col = sel ? '#ff7b3d' : ink, scale = 3.4, P = weldSymbol(spec, { left });
+      let len = 38, kx, ky, box;
+      for (let tries = 0; tries < 6; tries++) {
+        kx = p.x + dx * len; ky = p.y + dy * len; box = { x: kx + P.box.x0 * scale - 4, y: ky - 7 * scale, w: P.box.w * scale + 8, h: 13 * scale };
+        if (!placed.some(b => b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h)) break;
+        len += 18;
+      }
+      placed.push(box);
+      c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = sel ? 1.6 : 1.2;
+      c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(kx, ky); c.stroke();
+      const s = 7, w = 2.6; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + dx * s - dy * w, p.y + dy * s + dx * w); c.lineTo(p.x + dx * s + dy * w, p.y + dy * s - dx * w); c.closePath(); c.fill();
+      weldSymbolCanvas(c, spec, kx, ky, scale, col, { left });
+      if (sel && k.lines.length) {
+        c.font = '600 10.5px "Figtree", system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+        const lw = Math.max(...k.lines.map(t => c.measureText(t).width)), bx = Math.max(pane.x + 6, Math.min(left ? kx - lw : kx, pane.x + pane.w - lw - 6)), by = ky + 6 * scale + 4;
+        c.fillStyle = this.dark ? 'rgba(20,21,25,0.86)' : 'rgba(255,255,255,0.9)'; c.fillRect(bx - 3, by - 11, lw + 6, k.lines.length * 13 + 4);
+        c.fillStyle = col; k.lines.forEach((t, i) => c.fillText(t, bx, by + i * 13));
+      }
+      c.restore();
+      this.overlayHits.push({ kind: 'callout', id: k.id, x: box.x, y: box.y, w: box.w, h: box.h, pane: pane.id });
+    }
   }
   /* centre of gravity: the assembly's (large) and the selected part's (small), as the drafting symbol */
   drawCoG(c, pane, cam) {

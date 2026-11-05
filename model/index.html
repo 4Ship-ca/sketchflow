@@ -96,6 +96,29 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
 #people .feed{display:flex;flex-direction:column;gap:3px;font:500 11.5px var(--f-ui)} #people .fe{display:grid;grid-template-columns:40px auto 1fr;gap:6px;align-items:baseline} #people .fe.bad{color:var(--warn)} #people input{min-width:0;flex:1}
 .peerdot{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;color:#fff;font:700 9px var(--f-ui);margin-left:4px;flex:none}
 .peerban{display:flex;gap:8px;align-items:center;border:1px solid;border-left-width:4px;border-radius:8px;padding:6px 8px;margin:8px 10px 0;font:500 12px var(--f-ui);color:var(--ink-2)}
+#weldwiz{position:absolute;left:12px;right:12px;bottom:12px;max-height:min(74%, calc(100% - 24px));overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;box-shadow:0 10px 30px #0000003a;z-index:8;display:flex;flex-direction:column;gap:8px;-webkit-user-select:text;user-select:text}
+.wwhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .wwhead b{font:700 13px var(--f-brand)} .wwhead .sp{flex:1}
+.wwparts{font:600 12px var(--f-ui);color:var(--ink-2);white-space:pre} .wwparts i{color:var(--ink-3);font-style:normal}
+.wwchips{display:flex;flex-wrap:wrap;gap:6px} .wwchip{border:1px solid var(--line);border-radius:999px;padding:4px 9px;font:600 11.5px var(--f-ui);color:var(--ink-2);background:var(--panel-2)} .wwchip b{color:var(--ink)} .wwchip.bad{color:var(--warn);border-color:color-mix(in srgb, var(--warn) 45%, var(--line))}
+.wwin{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px} .wwin .f{grid-template-columns:84px 1fr}
+.wwq{display:flex;align-items:center;gap:10px;flex-wrap:wrap} .wwq b{font:700 12.5px var(--f-ui)} .wwq .seg{margin:0} .wwq .seg button{padding:6px 16px;font-size:12.5px}
+.wwcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width: 1100px){ .wwcards{grid-template-columns:1fr} }
+.wwcard{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px;background:var(--panel-2);min-width:0}
+.wwcard.pick{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.wwct{display:flex;justify-content:space-between;align-items:baseline;gap:8px} .wwct b{font:700 13px var(--f-brand)} .wwct .ease{font:600 11px var(--f-mono);color:var(--accent);letter-spacing:1px;white-space:nowrap}
+.wwduty{font-size:11.5px;color:var(--ink-3)}
+.wwbig{display:flex;gap:14px;align-items:baseline;font-size:11.5px;color:var(--ink-2)} .wwbig b{font:700 18px var(--f-brand);color:var(--ink)}
+.wwweld{font:700 12.5px var(--f-ui)}
+.wwsec{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;justify-content:center} .wwsec svg{display:block;max-width:100%;height:auto}
+.wwsym{color:var(--ink);display:flex;overflow-x:auto} .wwsym svg{display:block;max-width:100%;height:auto}
+.wwiso{font-size:11px;color:var(--ink-2);word-break:break-word}
+.wwdl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:11.5px} .wwdl dt{color:var(--ink-3);font-weight:600} .wwdl dd{margin:0;color:var(--ink);min-width:0;word-break:break-word}
+.wwbar{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--line)} .wwbar i{display:block;height:100%}
+.wwleg{display:flex;flex-wrap:wrap;gap:3px 10px;font:500 10.5px var(--f-mono);color:var(--ink-2)} .wwleg span{display:inline-flex;align-items:center;gap:4px} .wwleg i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.wwcard details{font-size:11.5px;color:var(--ink-2);line-height:1.4} .wwcard summary{cursor:pointer;font-weight:700;color:var(--ink)} .wwcard details ul,.wwcard details ol{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px} .wwcard details.notes summary{color:var(--warn)}
+.wwcard .btn{align-self:flex-start} .btn[disabled]{opacity:.45;cursor:default}
+.wwdone{border:1px solid var(--ok);border-radius:9px;padding:8px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:600 12px var(--f-ui)}
 #check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
 #check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
 #check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
@@ -164,6 +187,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
       <button class="tb" data-tool="edge-fillet" title="Fillet an edge: rounds outer edges, fills inner corners; on the seam between two parts it merges them into one" data-icon="fillet">Fillet</button>
       <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
       <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
+      <button class="tb" id="weldWizBtn" title="Weld / join wizard: click the seam between two parts — suggested welds (or bonded, filled, laminated joints) for light, regular and heavy service, with edge prep, gap, process, time, cost and ease; builds the prep, gap, weld and ISO 2553 symbol" data-icon="weldwiz">Weld wizard</button>
       <button class="tb" data-tool="split" title="Split: cut a part with a plane — keep one side, or both as two parts" data-icon="split">Split</button>
       <button class="tb" id="shellBtn" title="Shell: hollow a part to an even wall thickness, open on a face or closed" data-icon="shell">Shell</button>
       <button class="tb" id="patternBtn" title="Pattern / mirror: rows, grids, circles or mirror copies of a part or feature (P)" data-icon="pattern">Pattern</button>
@@ -186,7 +210,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><div id="people" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><div id="weldwiz" hidden role="dialog" aria-label="Weld / join wizard"></div><div id="people" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>

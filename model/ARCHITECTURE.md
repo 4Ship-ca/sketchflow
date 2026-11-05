@@ -16,8 +16,8 @@ model/
 ├── js/step.js        STEP (AP214) export as exact planar B-reps, its reader / vetting, planar STEP import
 ├── js/collab.js      shared editing: document diffs, merging and conflict rules (run by the server and every browser)
 ├── js/app.js         tools, panels, autosave, export, AI bridge, add-on loading
-├── addons/           gears.js (built in) · examples/fasteners.js — see ADDONS.md
-└── test/             kernel · model · gears · addons · collide · reference · step · collab · rooms  (npm test)
+├── addons/           gears.js, welding.js (built in) · examples/fasteners.js — see ADDONS.md
+└── test/             kernel · model · gears · welding · addons · collide · reference · step · collab · rooms  (npm test)
 ```
 
 The MCP server is `server.mjs`; its op reference (`model_reference`) is `mcp-reference.mjs`, and `test/reference.test.mjs` runs every worked example in it, so the reference can't drift from what the model accepts.
@@ -149,6 +149,12 @@ How a joint is made decides how it is modelled:
 - **Fillet or chamfer: one part.** The corner is blended because the part is printed, cast or machined as one piece. Filleting where two parts meet first unions them (the tool says so), so they can no longer be pulled apart.
 - **Weld: two parts.** The parts are made separately and joined. Each keeps its own definition, material and mass. The bead is its own body with its own mass, and **E** (pull apart) shows the components separately. Deleting the weld leaves both parts whole. A weld between parts that a boolean already merged is refused, and a weld across unweldable materials is flagged.
 
+### Welding & joining: advice from the geometry, built as parts
+
+The welding add-on works from the evaluated solids, not from what the parts are called. The joint is the largest pair of faces of the two parts that look at each other within 6 mm; whether each part *ends* there (its face is the whole contact) tells butt from tee from lap, and a tee whose stem is flush with the plate's edge is a corner. Thickness is a ray through the part from the contact. Torch access is 25 rays per side, fanned ±25° round the approach direction from five points along the seam, against every other part's facets (bounding boxes first). The ISO 6947 position comes from the seam direction and the approach against world Z.
+
+The suggestion for each duty is a small rule set by joint, thickness, material, access and position, drawn from ISO 9692, AWS D1.1, EN 1993-1-8 and ISO 5817 practice. Every bead and groove is a 2D section in the seam's frame (x out of the surface, y across the joint), so the same polygons give the weld metal volume for the time and cost estimate, the section in the wizard, and the solids that are built. Building it is ordinary ops in one batch: extrude cuts into each part on a frame mate (the preparation), a changed mate offset (the root gap), extrudes on frame mates to the fixed part (the weld metal, inset 0.02 mm so booleans and the interference check do not see coincident faces as overlap), and a `callout` carrying the ISO 2553 symbol. So it undoes in one step, follows the parts, merges in shared editing, exports to STEP and shows in the parts list and the mass.
+
 ### The fillet / chamfer rule ("proper math")
 
 The rule doesn't use angle thresholds. At the picked edge, take the two faces' outward normals `n1, n2` and the directions `u1, u2` that run along each face away from the edge. The edge is **convex** (an outside edge, enclosed angle < 180°) when `u1 · n2 < 0`. A convex edge gets the piece **subtracted** (it is trimmed or rounded). Otherwise the edge is **concave** (an inside corner, > 180° seen from the material) and the piece is **added** (filled).
@@ -174,7 +180,7 @@ For a round edge, the same cross-section is swept along the actual faceted loop,
 | `model_view` | PNG of the views (4-up or one pane, any 3D direction). The user's view is restored afterwards |
 | `model_session` | undo / redo / new / demo / example (bundled models) / load / select / say / save_version / versions / restore_version |
 | `model_mass` | Per part and assembly: mass, centre of gravity, inertia, balance; the parts list; the material library |
-| `model_addon` | List add-ons, or run one of their actions (e.g. `gears/advise`, `gears/pair`) |
+| `model_addon` | List add-ons, or run one of their actions (e.g. `gears/advise`, `gears/pair`, `welding/advise`, `welding/apply`) |
 | `model_import` | An STL / OBJ file from disk as a mesh part |
 | `model_check` | Interference (pairs, overlap volumes) and a motion sweep of a joint that reports the first contact |
 | `model_query` | Geometry questions: faces with their connector names, normals, centres and areas; edges; distances and angles; section areas; bounding boxes |
@@ -199,7 +205,7 @@ Built so far, on top of the first version:
 - patterns and mirror
 - welds as assembly joints
 - per-part metadata with mass and balance, and a parts list
-- add-ons (gears)
+- add-ons (gears; welding & joining with its wizard, weld symbols and drawings)
 - variables, formulas and leader/follower links
 - driving dimensions
 - suppress, rollback and reorder
@@ -246,6 +252,7 @@ Still to come, roughly in order of how much each unlocks:
 node model/test/kernel.test.mjs   # volumes against closed forms: primitives, booleans, extrude/loft/revolve/sweep, edge pieces
 node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, splines (and how they follow dimensions), threads (left- and right-hand), wrap, screw joint, mate formulas, path sweeps, the pump housing example, undo
 node model/test/gears.test.mjs    # gears mesh (no overlap; a half-tooth error overlaps), helical/herringbone/ring, trains, planetary, advisor
+node model/test/welding.test.mjs  # joints found (butt, tee, corner, lap), advice by duty and material, torch access, building the prep / gap / weld metal / symbol, symbols, sections, drawings
 node model/test/addons.test.mjs   # the add-on contract and the fasteners example
 node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact
 node model/test/reference.test.mjs # every op has a reference entry, and every worked example in mcp-reference.mjs runs

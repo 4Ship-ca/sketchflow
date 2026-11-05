@@ -37,6 +37,9 @@ export const TYPES = {
   wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], constraints: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
   /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
   plane: { label: 'Plane', params: { size: 60 } },
+  /* an annotation on a part (a weld symbol, a joint note): `on` = the part; at / dir / along in that part's own coordinates, so it
+     moves with it; symbol = what the weld-symbol drawer needs (ISO 2553); lines = the note's text */
+  callout: { label: 'Callout', params: { at: [0, 0, 0], dir: [0, 0, 1], along: [1, 0, 0], symbol: null, lines: [], kind: 'note' } },
   /* everything on one side of a plane (a big block): the tool a split uses */
   halfspace: { label: 'Half-space', params: { size: 4000 } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
@@ -69,11 +72,12 @@ export const MATERIALS = {
   copper: { name: 'Copper', density: 8.96, color: '#c27a4e', family: 'metal' }, titanium: { name: 'Titanium Ti-6Al-4V', density: 4.43, color: '#a4a29d', family: 'metal' },
   oak: { name: 'Oak', density: 0.75, color: '#b8895a', family: 'wood' }, pine: { name: 'Pine', density: 0.50, color: '#d9b77e', family: 'wood' },
   plywood: { name: 'Plywood (birch)', density: 0.68, color: '#d6b98a', family: 'wood' }, mdf: { name: 'MDF', density: 0.75, color: '#b49a78', family: 'wood' },
-  carbon_fibre: { name: 'Carbon fibre (CFRP)', density: 1.60, color: '#2d2f33', family: 'composite' }, concrete: { name: 'Concrete', density: 2.40, color: '#a9a79f', family: 'other' },
+  carbon_fibre: { name: 'Carbon fibre (CFRP)', density: 1.60, color: '#2d2f33', family: 'composite' }, gfrp: { name: 'Glass fibre (GFRP laminate)', density: 1.80, color: '#d9dcc8', family: 'composite' },
+  adhesive: { name: 'Structural adhesive (epoxy)', density: 1.20, color: '#e0c36a', family: 'plastic' }, filler: { name: 'Epoxy filler (silica / microfibre)', density: 1.00, color: '#e8dcc0', family: 'plastic' }, concrete: { name: 'Concrete', density: 2.40, color: '#a9a79f', family: 'other' },
   glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
 };
 /* object types that are not shapes of their own */
-const META = new Set(['edge', 'pattern', 'weld', 'shell', 'drape']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell', 'drape', 'callout']);
 export const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -869,6 +873,7 @@ export function evaluate(doc, opts) {
       }
       if (!m) { /* keep its own pose */ }
       else if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
+      else if (Array.isArray(m.frame) && m.frame.length === 16) M = M4.mul(m.to === 'origin' ? M4.ident() : worldOf(m.to), m.frame);   /* attached: a fixed place in the target's own frame */
       else {
         const tConns = m.to === 'origin' ? ORIGIN_CONNS : (R.conns.get(m.to) || []), tc = tConns.find(c => c.name === m.a), sc = (R.conns.get(id) || []).find(c => c.name === m.b);
         if (!tc || !sc) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate connector “${!tc ? m.a : m.b}” no longer exists` });
@@ -962,6 +967,7 @@ export function evaluate(doc, opts) {
   };
   for (const o of doc.objects) {
     if (o.into && !byId.has(o.into)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: its boolean target was deleted` });
+    if (o.type === 'callout' && !byId.has(o.on)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: the part it labels was deleted` });
   }
   /* body cache: a body is rebuilt only when something it is made of changed (shape, size, place, booleans, edges, patterns) */
   const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
@@ -1494,6 +1500,11 @@ export class Model {
           mk.solve({ self: x, target: need(o.to), mate: extra, api: addonApi });   /* throws a helpful error now rather than a warning later */
           x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
         }
+        /* attached: a fixed place in the target's own frame (16 numbers, column-major) — it moves with the target */
+        if (o.frame) {
+          if (!Array.isArray(o.frame) || o.frame.length !== 16 || o.frame.some(v => !isFinite(+v))) throw new Error('frame is a 4×4 matrix: 16 numbers, column-major');
+          x.mate = { to: o.to, frame: o.frame.map(Number) }; this.recompute(); return { label: 'Attach ' + x.name, id: x.id };
+        }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
         if (!this.result.conns.has(x.id) && x.type !== 'instance') this.recompute();   /* a part added in this batch: build it first so its own connectors exist */
         const sconns = this.result.conns.get(x.id) || (x.type === 'instance' ? this.result.conns.get(x.of) : null) || connectorsOf(x, null);
@@ -1576,6 +1587,14 @@ export class Model {
         const mat = (x) => (x.meta && x.meta.material) || d.material || null, advice = weldAdvice(mat(this.get(ba.id) || A), mat(this.get(bb.id) || B));
         return { label: `Weld ${A.name} to ${B.name}`, id, seams: r.seams || 0, length: r.length || 0, round: !!r.round, other_seams: concave.length - 1, material_advice: advice || undefined };
       }
+      case 'callout': {
+        /* {on: part, at:[x,y,z] (world, origin-relative with relative ops), dir (leader direction), along (the joint's direction), symbol, lines, kind} */
+        const t = need(o.on), M = this.result.world.get(t.id); if (!M) throw new Error(`${t.name} has no position`);
+        const Mi = M4.inv(M), id = o.id && !this.get(o.id) ? String(o.id) : uid('cal');
+        const params = defaultParams('callout', { at: M4.point(Mi, W(o.at) || [0, 0, 0]).map(r6), dir: V.norm(M4.dir(Mi, o.dir || [0, 0, 1])).map(r6), along: V.norm(M4.dir(Mi, o.along || [1, 0, 0])).map(r6), symbol: o.symbol || null, lines: (o.lines || []).map(String), kind: o.kind || 'note' });
+        this.insert({ id, name: o.name || (o.kind === 'weld' ? 'Weld symbol' : 'Callout') + ' ' + (d.objects.filter(x => x.type === 'callout').length + 1), type: 'callout', on: t.id, params, mate: null, pose: null, into: null, op: null, color: null });
+        return { label: 'Label ' + t.name, id };
+      }
       case 'addon': {
         const a = ADDONS.get(o.addon); if (!a) throw new Error(`No add-on “${o.addon}”. Loaded: ${[...ADDONS.keys()].join(', ') || 'none'}`);
         const act = (a.actions || {})[o.action]; if (!act) throw new Error(`Add-on ${a.id} has no action “${o.action}”. Try: ${Object.keys(a.actions || {}).join(', ')}`);
@@ -1585,7 +1604,7 @@ export class Model {
         return { label: res.label || `${a.name || a.id}: ${o.action}`, info: res.info, results };
       }
       case 'delete': {
-        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id);
+        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id && !(y.type === 'callout' && y.on === x.id));   /* a label goes with the part it labels */
         if (Number.isInteger(d.rollback) && xi < d.rollback) d.rollback = Math.max(0, d.rollback - 1);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
         if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
@@ -1597,7 +1616,7 @@ export class Model {
       case 'fix': { const x = need(o.id); const M = this.result.world.get(x.id); if (M) x.pose = poseFromMatrix(M); x.mate = null; x.fixed = true; this.recompute(); return { label: 'Fix ' + x.name + ' in place', id: x.id }; }
       case 'cleanup': {
         let n = 0; const ids = new Set(d.objects.map(y => y.id));
-        d.objects = d.objects.filter(y => { if (y.type === 'edge' && !ids.has(y.into)) { n++; return false; } return true; });
+        d.objects = d.objects.filter(y => { if ((y.type === 'edge' && !ids.has(y.into)) || (y.type === 'callout' && !ids.has(y.on))) { n++; return false; } return true; });
         for (const y of d.objects) {
           if (y.into && !ids.has(y.into)) { y.into = null; y.op = null; n++; }
           if (y.mate && y.mate.to !== 'origin' && !ids.has(y.mate.to)) { const M = this.result.world.get(y.id); y.mate = null; if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; }
@@ -1934,9 +1953,24 @@ export class Model {
   /* the object a picked body / id stands for: pattern copies resolve to their pattern */
   resolveId(id) { if (!id || this.get(id)) return id; const v = this.result.virtual && this.result.virtual.get(id); return v ? v.pattern : null; }
   /* what add-on actions see: read access plus small helpers (they return ops; they never edit the document directly) */
+  /* callouts placed in the world: [{id, name, on, point, dir, along, symbol, lines, kind}] — for the views and the drawings */
+  callouts() {
+    const out = [];
+    for (const o of this.doc.objects) {
+      if (o.type !== 'callout' || o.suppressed || o.hidden) continue; const M = this.result.world.get(o.on); if (!M) continue; const p = o.params;
+      out.push({ id: o.id, name: o.name, on: o.on, point: M4.point(M, p.at), dir: V.norm(M4.dir(M, p.dir)), along: V.norm(M4.dir(M, p.along)), symbol: p.symbol, lines: p.lines || [], kind: p.kind });
+    }
+    return out;
+  }
   addonContext() {
     const self = this;
     return { api: addonApi, get doc() { return self.doc; }, get result() { return self.result; }, get: (id) => self.get(id), describe: () => self.describe(), uid, ground: () => self.result.ground,
+      /* geometry, for add-ons that work on what is there: the body (solid, world) holding an object, its world matrix, its material */
+      bodyOf: (id) => self.bodyContaining(id) || null, world: (id) => self.result.world.get(id) || null,
+      material: (id) => { const b = self.bodyContaining(id), o = self.get((b && b.id) || id); return (o && o.meta && o.meta.material) || self.doc.material || null; },
+      materials: MATERIALS,
+      /* a world point as the ops in this batch expect it (origin-relative when the batch is) */
+      opPoint: (p) => (self.rel ? V.sub(p, self.result.originPoint) : p),
       newId: (prefix) => { let i = 1; while (self.get(prefix + i)) i++; return prefix + i; } };
   }
   /* summary for the AI and the tree */

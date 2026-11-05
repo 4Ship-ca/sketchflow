@@ -2,9 +2,11 @@
    Third-angle layout (TOP above FRONT, RIGHT beside it, an isometric view top-right), visible and hidden lines
    (hidden-line removal by sampling every edge against all parts' triangles, sped up with a 2D grid), the parts'
    carried dimensions and the measured dimensions, a parts list and a title block. Exports SVG (prints to PDF) and DXF.
-   An assembly (two or more parts) gets an exploded isometric instead, with numbered balloons tied to the parts list. */
+   An assembly (two or more parts) gets an exploded isometric instead, with numbered balloons tied to the parts list.
+   Weld symbols (ISO 2553) go on the orthographic view that sees each joint best, with a weld schedule beside the title block. */
 import * as K from './kernel.js';
 import { dimsOf, measureDim, massReport, bom, MATERIALS } from './model.js';
+import { weldSymbol } from './weldsymbol.js';
 const { V, M4 } = K;
 
 const VIEWS = {
@@ -82,7 +84,7 @@ function viewDims(model, view) {
   const R = model.result, O = R.originPoint, B = VIEWS[view], out = [];
   const P = (p) => { const q = V.sub(p, O); return [V.dot(q, B.r), V.dot(q, B.u)]; };
   for (const ob of model.doc.objects) {
-    if (!R.world.has(ob.id) || ['edge', 'pattern', 'weld', 'shell'].includes(ob.type) || (R.off && R.off.has(ob.id))) continue;
+    if (!R.world.has(ob.id) || ['edge', 'pattern', 'weld', 'shell', 'callout'].includes(ob.type) || (ob.meta && ob.meta.joint) || (R.off && R.off.has(ob.id))) continue;   /* a joint's weld metal and prep cuts are sized by its symbol */
     const M = R.world.get(ob.id), lb = R.local.get(ob.id), lc = lb && !lb.isEmpty() ? V.lerp(lb.bbox().min, lb.bbox().max, 0.5) : [0, 0, 0], c = P(M4.point(M, lc));   /* the part's middle: dimensions go outside it */
     for (const d of dimsOf(ob)) {
       const a = M4.point(M, d.a), b = M4.point(M, d.b), dir = V.norm(V.sub(b, a));
@@ -148,6 +150,33 @@ export function layoutSheet(model, opts = {}) {
     let low = label.at[1] + 7; for (const d of dims.slice(firstDim)) low = Math.min(low, d.line[0][1], d.line[1][1], d.at[1] - 2);
     label.at[1] = low - 7;
   }
+  /* weld symbols: each on the orthographic view where its leader lies flat on the sheet, the arrow on the joint */
+  const welds = [], schedule = [], O = R.originPoint;
+  let cl = []; try { cl = opts.welds === false || typeof model.callouts !== 'function' ? [] : model.callouts(); } catch (e) { cl = []; }
+  for (const k of cl) {
+    let best = null;
+    for (const v of ['front', 'top', 'right']) { if (!ext[v].bbox) continue; const B = VIEWS[v], score = 1 - Math.abs(V.dot(k.dir, B.f)) + 0.3 * Math.abs(V.dot(k.along, B.f)); if (!best || score > best.score) best = { v, score }; }
+    if (!best) continue;
+    const B = VIEWS[best.v], q = V.sub(k.point, O), at = toSheet(best.v, [V.dot(q, B.r), V.dot(q, B.u)]);
+    let dx = V.dot(k.dir, B.r), dy = V.dot(k.dir, B.u); const l = Math.hypot(dx, dy);
+    if (l < 0.3) { dx = 0.7; dy = 0.7; } else { dx /= l; dy /= l; }
+    if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6; const n = Math.hypot(dx, dy);
+    welds.push({ id: k.id, view: best.v, at, dir: [dx / n, dy / n], left: dx / n < -0.05, symbol: k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' }, lines: k.lines || [] });
+    if (k.lines && k.lines.length) schedule.push({ ref: (k.symbol && k.symbol.ref) || k.name, text: k.lines.join(' · ') });
+  }
+  const WK = 0.85, placedW = [];
+  for (const w of welds) {
+    /* inside the frame: a symbol that would run off the sheet turns to the other side */
+    const fits = (left, kx) => { const Q = weldSymbol(w.symbol, { left }); return kx + Q.box.x0 * WK > m + 3 && kx + (Q.box.x0 + Q.box.w) * WK < W - m - 3; };
+    if (!fits(w.left, w.at[0] + w.dir[0] * 9) && fits(!w.left, w.at[0] - w.dir[0] * 9)) { w.left = !w.left; w.dir = [-w.dir[0], w.dir[1]]; }
+    const P = weldSymbol(w.symbol, { left: w.left }); let len = 9;
+    for (let t = 0; t < 8 && !w.knee; t++, len += 7) {
+      const kx = w.at[0] + w.dir[0] * len, ky = w.at[1] + w.dir[1] * len, bx = { x0: kx + P.box.x0 * WK - 1, y0: ky - 6 * WK, x1: kx + (P.box.x0 + P.box.w) * WK + 1, y1: ky + 7 * WK };
+      if (!placedW.some(b => b.x0 < bx.x1 && bx.x0 < b.x1 && b.y0 < bx.y1 && bx.y0 < b.y1)) { w.knee = [kx, ky]; placedW.push(bx); }
+    }
+    if (!w.knee) w.knee = [w.at[0] + w.dir[0] * len, w.at[1] + w.dir[1] * len];
+    w.k = WK; w.prims = P;
+  }
   /* title block + parts list */
   const rep = massReport(model.doc, R), parts = bom(model.doc, R).lines, mats = [...new Set(rep.parts.map(p => p.material_name).filter(Boolean))];
   /* balloons: one per parts-list item, its leader on the first part of that item in the exploded view */
@@ -169,7 +198,16 @@ export function layoutSheet(model, opts = {}) {
     ['MATERIAL', mats.join(', ') || '—'], ['MASS', rep.total_mass_g ? (rep.total_mass_g >= 1000 ? fmt(rep.total_mass_g / 1000) + ' kg' : fmt(rep.total_mass_g) + ' g') : '—'],
     ['DATE', opts.date || new Date().toISOString().slice(0, 10)], ['DRAWN', 'SketchFlow 3D'], ['SHEET', '1 / 1']
   ] };
-  return { W, H, m, scale, isoScale, lines, dims, labels, title, parts: parts.length > 1 ? parts : [], balloons, balloonR: BR, exploded, sheet: opts.sheet || 'A3' };
+  /* the weld schedule fills the strip left of the title block, bottom up */
+  const schW = W - 2 * m - tbW - 12, maxc = Math.max(30, Math.floor(schW / 1.3)), wrapped = [];
+  for (const e of schedule) {
+    const words = e.text.replace(new RegExp('^' + String(e.ref || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '').split(' '); let cur = '', first = true;
+    const push = () => { wrapped.push({ ref: first ? e.ref : '', text: cur }); first = false; cur = ''; };
+    for (const wd of words) { if (cur && (cur + ' ' + wd).length > maxc - 6) push(); cur = cur ? cur + ' ' + wd : wd; }
+    if (cur) push();
+  }
+  const rowsFit = Math.max(1, Math.floor((base - 8) / 3.6)), sched = { x: m + 4, y: m + 4, w: schW, rows: wrapped.length > rowsFit ? wrapped.slice(0, rowsFit - 1).concat([{ ref: '', text: `… ${schedule.length} joints in all (see the model)` }]) : wrapped };
+  return { W, H, m, scale, isoScale, lines, dims, labels, title, parts: parts.length > 1 ? parts : [], balloons, balloonR: BR, exploded, sheet: opts.sheet || 'A3', welds, schedule: sched };
 }
 /* balloons on a rectangle just outside the view, each in the direction of its part from the view's middle, then
    spread along that rectangle so none overlap (leaders stay short and do not cross much) */
@@ -202,7 +240,7 @@ export function drawingSVG(model, opts = {}) {
   o.push(`<?xml version="1.0" encoding="UTF-8"?>`, `<svg xmlns="http://www.w3.org/2000/svg" width="${S.W}mm" height="${S.H}mm" viewBox="0 0 ${S.W} ${S.H}" font-family="Helvetica, Arial, sans-serif">`);
   o.push(`<rect x="0" y="0" width="${S.W}" height="${S.H}" fill="#fff"/>`, `<rect x="${S.m}" y="${S.m}" width="${S.W - 2 * S.m}" height="${S.H - 2 * S.m}" fill="none" stroke="#000" stroke-width="0.5"/>`);
   const L = (a, b, cls) => `<line x1="${a[0].toFixed(3)}" y1="${Y(a[1]).toFixed(3)}" x2="${b[0].toFixed(3)}" y2="${Y(b[1]).toFixed(3)}" class="${cls}"/>`;
-  o.push(`<style>.v{stroke:#000;stroke-width:0.35;stroke-linecap:round}.h{stroke:#000;stroke-width:0.18;stroke-dasharray:1.6 0.9}.d{stroke:#1d4ed8;stroke-width:0.18}.t{fill:#1d4ed8;font-size:3px}.lbl{font-size:3.2px;font-weight:bold;letter-spacing:.3px}.tb{stroke:#000;stroke-width:0.25;fill:none}.k{font-size:2px;fill:#555}.val{font-size:3.4px}.bl{stroke:#000;stroke-width:0.25}.bn{font-size:3.2px;font-weight:bold}</style>`);
+  o.push(`<style>.v{stroke:#000;stroke-width:0.35;stroke-linecap:round}.h{stroke:#000;stroke-width:0.18;stroke-dasharray:1.6 0.9}.d{stroke:#1d4ed8;stroke-width:0.18}.t{fill:#1d4ed8;font-size:3px}.lbl{font-size:3.2px;font-weight:bold;letter-spacing:.3px}.tb{stroke:#000;stroke-width:0.25;fill:none}.k{font-size:2px;fill:#555}.val{font-size:3.4px}.bl{stroke:#000;stroke-width:0.25}.wl{stroke:#000;stroke-width:0.25;fill:none;stroke-linecap:round}.wd{stroke:#000;stroke-width:0.2;stroke-dasharray:1.2 0.7;fill:none}.wtx{font-size:2.2px}.bn{font-size:3.2px;font-weight:bold}</style>`);
   o.push('<g>', ...S.lines.filter(l => l.hidden).map(l => L(l.a, l.b, 'h')), ...S.lines.filter(l => !l.hidden).map(l => L(l.a, l.b, 'v')), '</g>');
   for (const d of S.dims) {
     o.push(L(d.ext[0][0], d.ext[0][1], 'd'), L(d.ext[1][0], d.ext[1][1], 'd'), L(d.line[0], d.line[1], 'd'));
@@ -216,6 +254,27 @@ export function drawingSVG(model, opts = {}) {
   for (const b of S.balloons) {
     const dx = b.anchor[0] - b.at[0], dy = b.anchor[1] - b.at[1], l = Math.hypot(dx, dy) || 1, e = [b.at[0] + dx / l * b.r, b.at[1] + dy / l * b.r];
     o.push(`<g class="bl"><line x1="${e[0].toFixed(2)}" y1="${Y(e[1]).toFixed(2)}" x2="${b.anchor[0].toFixed(2)}" y2="${Y(b.anchor[1]).toFixed(2)}"/><circle cx="${b.anchor[0].toFixed(2)}" cy="${Y(b.anchor[1]).toFixed(2)}" r="0.5" fill="#000"/><circle cx="${b.at[0].toFixed(2)}" cy="${Y(b.at[1]).toFixed(2)}" r="${b.r}" fill="#fff"/></g><text x="${b.at[0].toFixed(2)}" y="${Y(b.at[1]).toFixed(2)}" text-anchor="middle" dominant-baseline="central" class="bn">${b.item}</text>`);
+  }
+  /* weld symbols: arrow onto the joint, reference line with the ISO 2553 symbol, sizes and tail */
+  for (const w of S.welds) {
+    const [ax, ay] = w.at, [kx, ky] = w.knee, k = w.k, P = w.prims, at = (x, y) => [kx + x * k, ky + y * k];
+    const ux = ax - kx, uy = ay - ky, ul = Math.hypot(ux, uy) || 1, x = ux / ul, y = uy / ul, s = 2.2, aw = 0.7;
+    o.push('<g>', L([kx, ky], [ax, ay], 'wl'), `<polygon points="${ax.toFixed(2)},${Y(ay).toFixed(2)} ${(ax - x * s - y * aw).toFixed(2)},${Y(ay - y * s + x * aw).toFixed(2)} ${(ax - x * s + y * aw).toFixed(2)},${Y(ay - y * s - x * aw).toFixed(2)}" fill="#000"/>`);
+    for (const [x1, y1, x2, y2, dashed] of P.lines) o.push(L(at(x1, y1), at(x2, y2), dashed ? 'wd' : 'wl'));
+    for (const [cx, cy, r, a0, a1] of P.arcs) {
+      const c = at(cx, cy), rr = r * k;
+      if (a1 - a0 >= 2 * Math.PI - 1e-6) { o.push(`<circle cx="${c[0].toFixed(2)}" cy="${Y(c[1]).toFixed(2)}" r="${rr.toFixed(2)}" class="wl"/>`); continue; }
+      const p0 = [c[0] + rr * Math.cos(a0), c[1] + rr * Math.sin(a0)], p1 = [c[0] + rr * Math.cos(a1), c[1] + rr * Math.sin(a1)];
+      o.push(`<path d="M${p0[0].toFixed(2)} ${Y(p0[1]).toFixed(2)} A${rr.toFixed(2)} ${rr.toFixed(2)} 0 ${a1 - a0 > Math.PI ? 1 : 0} 0 ${p1[0].toFixed(2)} ${Y(p1[1]).toFixed(2)}" class="wl"/>`);
+    }
+    if (P.flag) o.push(`<polygon points="${P.flag.map(([u, v]) => { const q = at(u, v); return q[0].toFixed(2) + ',' + Y(q[1]).toFixed(2); }).join(' ')}" fill="#000"/>`);
+    for (const t of P.texts) { const q = at(t.x, t.y); o.push(`<text x="${q[0].toFixed(2)}" y="${Y(q[1]).toFixed(2)}" text-anchor="${t.anchor}" style="font-size:${(t.size * k).toFixed(2)}px">${esc(t.text)}</text>`); }
+    o.push('</g>');
+  }
+  if (S.schedule.rows.length) {
+    const Sc = S.schedule, n = Sc.rows.length;
+    o.push(`<text x="${Sc.x}" y="${Y(Sc.y + n * 3.6 + 2).toFixed(2)}" class="lbl" style="font-size:2.6px">WELD SCHEDULE</text>`);
+    Sc.rows.forEach((r, i) => { const yy = Sc.y + (n - 1 - i) * 3.6 + 1; o.push(`<text x="${Sc.x}" y="${Y(yy).toFixed(2)}" class="val" style="font-size:2.4px">${r.ref ? `<tspan font-weight="bold">${esc(r.ref)}</tspan>` : ''}<tspan x="${Sc.x + 9}">${esc(r.text)}</tspan></text>`); });
   }
   /* title block: a 3 × 3 grid of labelled cells */
   const T = S.title, cw = T.w / 3, chh = T.h / 3;
@@ -240,8 +299,8 @@ export function drawingDXF(model, opts = {}) {
   g(0, 'LTYPE'); g(2, 'CONTINUOUS'); g(70, 0); g(3, 'Solid line'); g(72, 65); g(73, 0); g(40, 0);
   g(0, 'LTYPE'); g(2, 'HIDDEN'); g(70, 0); g(3, 'Hidden __ __ __'); g(72, 65); g(73, 2); g(40, 2.5); g(49, 1.6); g(49, -0.9);
   g(0, 'ENDTAB');
-  g(0, 'TABLE'); g(2, 'LAYER'); g(70, 6);
-  for (const [n, col, lt] of [['VISIBLE', 7, 'CONTINUOUS'], ['HIDDEN', 8, 'HIDDEN'], ['DIMS', 5, 'CONTINUOUS'], ['TEXT', 7, 'CONTINUOUS'], ['BORDER', 7, 'CONTINUOUS'], ['BALLOONS', 7, 'CONTINUOUS']]) { g(0, 'LAYER'); g(2, n); g(70, 0); g(62, col); g(6, lt); }
+  g(0, 'TABLE'); g(2, 'LAYER'); g(70, 7);
+  for (const [n, col, lt] of [['VISIBLE', 7, 'CONTINUOUS'], ['HIDDEN', 8, 'HIDDEN'], ['DIMS', 5, 'CONTINUOUS'], ['TEXT', 7, 'CONTINUOUS'], ['BORDER', 7, 'CONTINUOUS'], ['BALLOONS', 7, 'CONTINUOUS'], ['WELDS', 7, 'CONTINUOUS']]) { g(0, 'LAYER'); g(2, n); g(70, 0); g(62, col); g(6, lt); }
   g(0, 'ENDTAB'); g(0, 'ENDSEC');
   g(0, 'SECTION'); g(2, 'ENTITIES');
   const line = (a, b, layer) => { g(0, 'LINE'); g(8, layer); g(10, a[0].toFixed(4)); g(20, a[1].toFixed(4)); g(30, 0); g(11, b[0].toFixed(4)); g(21, b[1].toFixed(4)); g(31, 0); };
@@ -257,6 +316,23 @@ export function drawingDXF(model, opts = {}) {
     line([b.at[0] + dx / l * b.r, b.at[1] + dy / l * b.r], b.anchor, 'BALLOONS');
     g(0, 'TEXT'); g(8, 'BALLOONS'); g(10, b.at[0].toFixed(3)); g(20, b.at[1].toFixed(3)); g(30, 0); g(40, 3); g(1, String(b.item)); g(72, 1); g(11, b.at[0].toFixed(3)); g(21, b.at[1].toFixed(3)); g(31, 0); g(73, 2);
   }
+  /* weld symbols and the weld schedule */
+  const jtext = (p, h, t, just) => { g(0, 'TEXT'); g(8, 'WELDS'); g(10, p[0].toFixed(3)); g(20, p[1].toFixed(3)); g(30, 0); g(40, h.toFixed(2)); g(1, String(t)); if (just) { g(72, just); g(11, p[0].toFixed(3)); g(21, p[1].toFixed(3)); g(31, 0); } };
+  for (const w of S.welds) {
+    const [kx, ky] = w.knee, k = w.k, P = w.prims, at = (x, y) => [kx + x * k, ky + y * k];
+    line(w.knee, w.at, 'WELDS');
+    const ux = w.at[0] - kx, uy = w.at[1] - ky, ul = Math.hypot(ux, uy) || 1, x = ux / ul, y = uy / ul, s = 2.2, aw = 0.7, A = w.at;
+    line(A, [A[0] - x * s - y * aw, A[1] - y * s + x * aw], 'WELDS'); line(A, [A[0] - x * s + y * aw, A[1] - y * s - x * aw], 'WELDS');
+    for (const [x1, y1, x2, y2, dashed] of P.lines) { const a = at(x1, y1), b = at(x2, y2); g(0, 'LINE'); g(8, 'WELDS'); if (dashed) g(6, 'HIDDEN'); g(10, a[0].toFixed(4)); g(20, a[1].toFixed(4)); g(30, 0); g(11, b[0].toFixed(4)); g(21, b[1].toFixed(4)); g(31, 0); }
+    for (const [cx, cy, r, a0, a1] of P.arcs) {
+      const c = at(cx, cy);
+      if (a1 - a0 >= 2 * Math.PI - 1e-6) { g(0, 'CIRCLE'); g(8, 'WELDS'); g(10, c[0].toFixed(4)); g(20, c[1].toFixed(4)); g(30, 0); g(40, (r * k).toFixed(4)); }
+      else { g(0, 'ARC'); g(8, 'WELDS'); g(10, c[0].toFixed(4)); g(20, c[1].toFixed(4)); g(30, 0); g(40, (r * k).toFixed(4)); g(50, (a0 * 180 / Math.PI).toFixed(3)); g(51, (a1 * 180 / Math.PI).toFixed(3)); }
+    }
+    if (P.flag) P.flag.forEach((p, i) => line(at(p[0], p[1]), at(P.flag[(i + 1) % P.flag.length][0], P.flag[(i + 1) % P.flag.length][1]), 'WELDS'));
+    for (const t of P.texts) jtext(at(t.x, t.y), t.size * k, t.text, t.anchor === 'middle' ? 1 : t.anchor === 'end' ? 2 : 0);
+  }
+  if (S.schedule.rows.length) { const Sc = S.schedule, n = Sc.rows.length; jtext([Sc.x, Sc.y + n * 3.6 + 2], 2.6, 'WELD SCHEDULE'); Sc.rows.forEach((r, i) => { const yy = Sc.y + (n - 1 - i) * 3.6 + 1; if (r.ref) jtext([Sc.x, yy], 2.4, r.ref); jtext([Sc.x + 9, yy], 2.4, r.text); }); }
   const T = S.title, cw = T.w / 3, chh = T.h / 3; rect(T.x, T.y, T.w, T.h, 'BORDER');
   T.fields.forEach(([k, v], i) => { const cx = T.x + (i % 3) * cw, cy = T.y + T.h - Math.floor(i / 3) * chh; rect(cx, cy - chh, cw, chh, 'BORDER'); text([cx + 1.5, cy - 3.5], 1.8, k, 'TEXT'); text([cx + 1.5, cy - chh + 2.5], 3, String(v).slice(0, 40), 'TEXT'); });
   g(0, 'ENDSEC'); g(0, 'EOF');

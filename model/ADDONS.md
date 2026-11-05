@@ -5,8 +5,9 @@ An add-on brings specialist know-how into the 3D workspace: gears, fasteners, sh
 - An LLM gets it through the `model_addon` MCP tool, which lists your shapes, mates and actions along with your docs.
 - Your shapes behave like built-in ones. They take mates, booleans, fillets and welds; they can be patterned; they carry dimensions, materials and mass; they export to STL, OBJ and the parts list.
 
-Two add-ons ship with SketchFlow:
+Three add-ons ship with SketchFlow:
 - **Gears** (`model/addons/gears.js`) is built in.
+- **Welding & joining** (`model/addons/welding.js`) is built in, with its own wizard in the toolbar (**Weld wizard**).
 - **Fasteners** (`model/addons/examples/fasteners.js`) is an example you can copy.
 
 ## Installing one
@@ -105,6 +106,8 @@ actions: {
 | `api.conn(name, o, n, u, kind)` | A connector |
 | `api.dim(param, a, b, view, kind)` | A carried dimension that edits `param` |
 
+An action's `ctx` also carries what an add-on that works *between* parts needs: `ctx.bodyOf(id)` (the evaluated body holding an object, with its solid in world coordinates), `ctx.world(id)` (its 4×4 world matrix), `ctx.material(id)` and `ctx.materials` (the material table), and `ctx.opPoint(p)` (a world point as the ops expect it, origin-relative when the batch is). Two ops help it build: a **frame mate** `{op:'mate', id, to, frame:[16 numbers]}` attaches a part rigidly to another at any pose (so a weld bead at an angle follows its plate), and **`callout`** `{op:'callout', on, at, dir, along, symbol, lines, kind}` pins a label — an ISO 2553 weld symbol or a note — to a part, shown in the views and on drawings.
+
 ## Testing an add-on
 
 Add-ons run in Node unchanged:
@@ -118,7 +121,17 @@ const [r] = m.apply([{ op: 'addon', addon: 'mine', action: 'build_it', args: { s
 console.log(r.info, m.result.warnings, m.describe().mass);
 ```
 
-See `model/test/addons.test.mjs` (the contract plus the fasteners example) and `model/test/gears.test.mjs`. The gears tests check meshing by measuring the overlap volume between gears, and a half-tooth phase error must show up.
+See `model/test/addons.test.mjs` (the contract plus the fasteners example), `model/test/gears.test.mjs` and `model/test/welding.test.mjs`. The gears tests check meshing by measuring the overlap volume between gears, and a half-tooth phase error must show up.
+
+## The welding & joining add-on in brief
+
+Pick two parts (or click the seam between them) and the add-on reads the joint, then suggests how to join it for **light**, **regular** and **heavy** service, by common standards: ISO 9692-1 / -3 (edge preparations, steel and aluminium), AWS D1.1 (minimum fillet and lap sizes), EN 1993-1-8 (fillet throats), ISO 5817 (quality levels D / C / B), ISO 4063 (process numbers), ISO 6947 (positions), ISO 2553 (symbols), IIW fatigue practice (grinding flush, toe dressing), and adhesive-maker and marine FRP practice for joints that are not welded.
+
+- **The joint** (`analyze`): butt, tee, corner or lap, from the contact between the two solids: both thicknesses, the seam length, and for each side whether it is an inside corner or flush, how well a torch reaches it (rays from points along the seam, round the approach direction: *open*, *restricted* or *blocked*, naming the part in the way) and its welding position (PA flat … PE overhead).
+- **The advice** (`advise`): for each duty, the joint and its preparation (square, V, Y, X, U, double U, bevel, K, J; root face, root gap, backing strip, back gouge and sealing run), the process (135 MAG, 136 FCAW, 131 MIG, 141 TIG, 111 stick, 121 SAW — chosen by material, thickness, duty, position and length), filler and gas, sizes and passes, weld metal, the main and worst welding positions, the time (fit-up; preparation by thermal cutting and grinding, or machining for U / J; preheat for thick sections and cast iron; arc time over the operating factor at each run's position; back gouging, grinding flush, toe dressing, pickling; inspection), cost (labour at your rate, filler, gas), an ease score (1–5), the ISO 5817 level and NDT, the steps, the reasons, and what to watch out for. Light service is the smallest weld that does the job (one side, intermittent on long seams); regular is general structural (fillets both sides ≈ 0.5 t, or full penetration from both sides); heavy is fatigue / dynamic / pressure (full penetration, ground or dressed, 100 % UT/RT).
+- **Materials**: alike weldable metals weld; carbon steel to stainless uses 309L filler; aluminium to steel, plastics, wood and glass are **bonded** (an adhesive chosen by the materials and the duty, the surface preparation it needs, a bond line and spew fillets, and bonded straps over butt joints); copper alloys are **brazed**; composites get a **filler fillet and fibre tabbing**, the plies counted from the panel thickness. `method` asks for any of them.
+- **Building it** (`apply` with `duty`): one undoable step that cuts the preparation out of the parts (extrude cuts attached to each), opens the root gap or bond line (moving the stem of a tee, or *b*, through its mate), places the weld metal, adhesive, filler, laminate or straps as parts attached to *a* (`meta.joint` names the joint; they carry material and mass), and adds the ISO 2553 weld symbol as a callout. Everything follows the parts when they move. The weld metal is inset 0.02 mm from the parts so the interference check stays clean.
+- **The wizard** (`ui.advise`, `ui.section`, `ui.publicOption`): the toolbar's **Weld wizard** asks what service the joint is for, shows the three suggestions side by side with a section through the joint (the parts as cut, the preparation hatched, the weld metal in place) and the symbol, and builds the one you choose. `model/js/weldsymbol.js` draws symbols and sections for the views, the wizard and the drawing sheets (which also get a weld schedule).
 
 ## The gears add-on in brief
 

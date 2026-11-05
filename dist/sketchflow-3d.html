@@ -100,6 +100,29 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
 #people .feed{display:flex;flex-direction:column;gap:3px;font:500 11.5px var(--f-ui)} #people .fe{display:grid;grid-template-columns:40px auto 1fr;gap:6px;align-items:baseline} #people .fe.bad{color:var(--warn)} #people input{min-width:0;flex:1}
 .peerdot{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;color:#fff;font:700 9px var(--f-ui);margin-left:4px;flex:none}
 .peerban{display:flex;gap:8px;align-items:center;border:1px solid;border-left-width:4px;border-radius:8px;padding:6px 8px;margin:8px 10px 0;font:500 12px var(--f-ui);color:var(--ink-2)}
+#weldwiz{position:absolute;left:12px;right:12px;bottom:12px;max-height:min(74%, calc(100% - 24px));overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;box-shadow:0 10px 30px #0000003a;z-index:8;display:flex;flex-direction:column;gap:8px;-webkit-user-select:text;user-select:text}
+.wwhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .wwhead b{font:700 13px var(--f-brand)} .wwhead .sp{flex:1}
+.wwparts{font:600 12px var(--f-ui);color:var(--ink-2);white-space:pre} .wwparts i{color:var(--ink-3);font-style:normal}
+.wwchips{display:flex;flex-wrap:wrap;gap:6px} .wwchip{border:1px solid var(--line);border-radius:999px;padding:4px 9px;font:600 11.5px var(--f-ui);color:var(--ink-2);background:var(--panel-2)} .wwchip b{color:var(--ink)} .wwchip.bad{color:var(--warn);border-color:color-mix(in srgb, var(--warn) 45%, var(--line))}
+.wwin{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px} .wwin .f{grid-template-columns:84px 1fr}
+.wwq{display:flex;align-items:center;gap:10px;flex-wrap:wrap} .wwq b{font:700 12.5px var(--f-ui)} .wwq .seg{margin:0} .wwq .seg button{padding:6px 16px;font-size:12.5px}
+.wwcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width: 1100px){ .wwcards{grid-template-columns:1fr} }
+.wwcard{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px;background:var(--panel-2);min-width:0}
+.wwcard.pick{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.wwct{display:flex;justify-content:space-between;align-items:baseline;gap:8px} .wwct b{font:700 13px var(--f-brand)} .wwct .ease{font:600 11px var(--f-mono);color:var(--accent);letter-spacing:1px;white-space:nowrap}
+.wwduty{font-size:11.5px;color:var(--ink-3)}
+.wwbig{display:flex;gap:14px;align-items:baseline;font-size:11.5px;color:var(--ink-2)} .wwbig b{font:700 18px var(--f-brand);color:var(--ink)}
+.wwweld{font:700 12.5px var(--f-ui)}
+.wwsec{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;justify-content:center} .wwsec svg{display:block;max-width:100%;height:auto}
+.wwsym{color:var(--ink);display:flex;overflow-x:auto} .wwsym svg{display:block;max-width:100%;height:auto}
+.wwiso{font-size:11px;color:var(--ink-2);word-break:break-word}
+.wwdl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:11.5px} .wwdl dt{color:var(--ink-3);font-weight:600} .wwdl dd{margin:0;color:var(--ink);min-width:0;word-break:break-word}
+.wwbar{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--line)} .wwbar i{display:block;height:100%}
+.wwleg{display:flex;flex-wrap:wrap;gap:3px 10px;font:500 10.5px var(--f-mono);color:var(--ink-2)} .wwleg span{display:inline-flex;align-items:center;gap:4px} .wwleg i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.wwcard details{font-size:11.5px;color:var(--ink-2);line-height:1.4} .wwcard summary{cursor:pointer;font-weight:700;color:var(--ink)} .wwcard details ul,.wwcard details ol{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px} .wwcard details.notes summary{color:var(--warn)}
+.wwcard .btn{align-self:flex-start} .btn[disabled]{opacity:.45;cursor:default}
+.wwdone{border:1px solid var(--ok);border-radius:9px;padding:8px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:600 12px var(--f-ui)}
 #check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
 #check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
 #check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
@@ -168,6 +191,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
       <button class="tb" data-tool="edge-fillet" title="Fillet an edge: rounds outer edges, fills inner corners; on the seam between two parts it merges them into one" data-icon="fillet">Fillet</button>
       <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
       <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
+      <button class="tb" id="weldWizBtn" title="Weld / join wizard: click the seam between two parts — suggested welds (or bonded, filled, laminated joints) for light, regular and heavy service, with edge prep, gap, process, time, cost and ease; builds the prep, gap, weld and ISO 2553 symbol" data-icon="weldwiz">Weld wizard</button>
       <button class="tb" data-tool="split" title="Split: cut a part with a plane — keep one side, or both as two parts" data-icon="split">Split</button>
       <button class="tb" id="shellBtn" title="Shell: hollow a part to an even wall thickness, open on a face or closed" data-icon="shell">Shell</button>
       <button class="tb" id="patternBtn" title="Pattern / mirror: rows, grids, circles or mirror copies of a part or feature (P)" data-icon="pattern">Pattern</button>
@@ -190,7 +214,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><div id="people" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><div id="weldwiz" hidden role="dialog" aria-label="Weld / join wizard"></div><div id="people" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>
@@ -1333,6 +1357,188 @@ function silhouetteEdges(solid, viewDir, smoothSids) {
 return { EPS, V, M4, Poly, poly, Solid, area2, ccw, triangulate, resample, box, wedge, cylinder, sphere, extrude, loft, pchip, loftSections, revolve, smoothPath, sweep, radialSolid, wrapSolid, healTJunctions, gridSplit, drapeSolid, offsetPolygon, thickenPolyline, offsetSolid, ringExtrude, edgePiece, loopPiece, lineKey, creaseEdges, silhouetteEdges };
 })();
 
+__sf3.weldsymbol = (() => {
+/* SketchFlow — weld and joint symbols (ISO 2553, system A) as drawing primitives, so the views, the wizard and the
+   drawing sheets all draw the same thing.
+
+   spec = {
+     sym: 'fillet' | 'square' | 'V' | 'bevel' | 'U' | 'J' | 'Y' | 'HY' (single-V / bevel with broad root face) |
+          'adhesive' | 'tab' (fibre overlay) | 'filled' (filler fillet),
+     both: true            symbol on both sides of the reference line (a double-sided weld: X, K, double fillet…)
+     other: true           weld on the other side (symbol on the dashed-line side)
+     size: 'a5'            left of the symbol (throat a / leg z / penetration s / bond line…)
+     length: '100' | '3 × 50 (100)'   right of the symbol (length, or count × length (pitch) for intermittent)
+     contour: 'flat' | 'convex' | 'concave'     finish: 'G' (ground) | 'M' (machined)
+     toes: true            toes blended (ISO 2553 supplementary symbol)
+     backing: 'M' | 'MR'   permanent / removable backing strip on the other side
+     seal: true            sealing (back) run on the other side
+     allAround, field      the circle and the flag at the knee
+     tail: ['135', 'ISO 5817-C', 'UT']   process, quality level, testing — in the fork at the end
+   }
+
+   weldSymbol(spec, {left}) → { lines: [[x1, y1, x2, y2, dashed]], arcs: [[cx, cy, r, a0, a1]], texts: [{x, y, text, anchor, size}],
+   flag: [[x, y]…] | null, box: {x0, w, h} }. Units: the symbol is 4 units tall; y up; the knee (where the arrow line meets
+   the reference line) is at (0, 0); the reference line runs to the right — or to the left with left: true (when the
+   arrow comes from the right). The elementary symbols are never mirrored (ISO 2553: a bevel's or fillet's upright leg
+   is always on the left) and the text always reads left to right. */
+
+const H = 4;   /* height of an elementary symbol */
+
+function glyph(sym, flip) {
+  /* an elementary symbol standing on the reference line at x = 0 (upwards; flip draws it under the line) */
+  const s = flip ? -1 : 1, L = [], A = [];
+  const ln = (x1, y1, x2, y2) => L.push([x1, s * y1, x2, s * y2, false]);
+  switch (sym) {
+    case 'fillet': ln(0, 0, 0, H); ln(0, H, H, 0); break;
+    case 'square': ln(-0.8, 0, -0.8, H); ln(0.8, 0, 0.8, H); break;
+    case 'V': ln(0, 0, -H * 0.58, H); ln(0, 0, H * 0.58, H); break;
+    case 'bevel': ln(0, 0, 0, H); ln(0, 0, H * 0.75, H); break;
+    case 'Y': ln(0, 0, 0, H * 0.35); ln(0, H * 0.35, -H * 0.55, H); ln(0, H * 0.35, H * 0.55, H); break;
+    case 'HY': ln(0, 0, 0, H); ln(0, H * 0.35, H * 0.7, H); break;
+    case 'U': { ln(-1.1, H * 0.55, -1.4, H); ln(1.1, H * 0.55, 1.4, H); A.push([0, s * H * 0.55, 1.1, flip ? 0 : Math.PI, flip ? Math.PI : 2 * Math.PI]); ln(0, 0, 0, H * 0.55 - 1.1); break; }
+    case 'J': { ln(0, 0, 0, H); ln(1.1, H * 0.55, 1.5, H); A.push([0, s * H * 0.55, 1.1, flip ? 0 : 1.5 * Math.PI, flip ? 0.5 * Math.PI : 2 * Math.PI]); break; }
+    case 'adhesive': { ln(-H * 0.7, H * 0.25, H * 0.7, H * 0.25); ln(-H * 0.7, H * 0.85, H * 0.7, H * 0.85); for (let k = -2; k <= 2; k++) ln(k * 0.5 - 0.4, H * 0.25, k * 0.5 + 0.2, H * 0.85); break; }
+    case 'tab': { A.push([0, 0, H * 0.75, flip ? Math.PI : 0, flip ? 2 * Math.PI : Math.PI]); A.push([0, 0, H * 0.45, flip ? Math.PI : 0, flip ? 2 * Math.PI : Math.PI]); break; }
+    case 'filled': { ln(0, 0, 0, H); A.push([H, s * H, H, flip ? 0.5 * Math.PI : Math.PI, flip ? Math.PI : 1.5 * Math.PI]); ln(0, 0, H, 0); break; }
+    default: ln(-1, 0, 1, H);
+  }
+  /* arcs flipped: mirror the angles */
+  return { L, A: flip ? A.map(([cx, cy, r, a0, a1]) => [cx, cy, r, a0, a1]) : A };
+}
+
+function weldSymbol(spec = {}, opts = {}) {
+  const lines = [], arcs = [], texts = [], ref = 34, D = opts.left ? -1 : 1, sx = 12 * D;   /* reference line length; the symbol's place along it */
+  const T = (x, y, text, anchor = 'start', size = 2.6) => { if (text != null && text !== '') texts.push({ x, y, text: String(text), anchor, size }); };
+  lines.push([0, 0, D * ref, 0, false]);
+  /* identification (dashed) line — ISO system A — unless the weld is symmetric about the reference line */
+  if (!spec.both && !['adhesive', 'tab'].includes(spec.sym)) lines.push([0, -1.2, D * (ref - 6), -1.2, true]);
+  const sides = spec.both ? [false, true] : [!!spec.other];
+  for (const under of sides) {
+    const g = glyph(spec.sym, under), base = under ? (spec.both ? 0 : -1.2) : 0, sgn = under ? -1 : 1;
+    for (const [x1, y1, x2, y2] of g.L) lines.push([sx + x1, base + y1, sx + x2, base + y2, false]);
+    for (const [cx, cy, r, a0, a1] of g.A) arcs.push([sx + cx, base + cy, r, a0, a1]);
+    /* contour over the symbol, finish letter above it */
+    const top = base + sgn * (H + 0.8);
+    if (spec.contour === 'flat') lines.push([sx - 2.2, top, sx + 2.2, top, false]);
+    if (spec.contour === 'convex') arcs.push([sx, top - sgn * 1.4, 2.4, under ? 1.2 * Math.PI : 0.2 * Math.PI, under ? 1.8 * Math.PI : 0.8 * Math.PI]);
+    if (spec.contour === 'concave') arcs.push([sx, top + sgn * 1.6, 2.4, under ? 0.2 * Math.PI : 1.2 * Math.PI, under ? 0.8 * Math.PI : 1.8 * Math.PI]);
+    /* toes blended smoothly: a small cupped arc at each toe */
+    if (spec.toes) for (const e of [-2.6, 2.6]) arcs.push([sx + e, top + sgn * 0.7, 0.7, under ? 0 : Math.PI, under ? Math.PI : 2 * Math.PI]);
+    if (spec.finish) T(sx, top + sgn * (spec.contour ? 2.6 : 1.4) - (under ? 2.4 : 0), spec.finish, 'middle', 2.4);
+    /* size to the left, length / pitch to the right, at the symbol's height */
+    const ty = under ? base - H + 0.2 : base + 1;
+    T(sx - H * 0.8 - 1, ty, spec.size, 'end');
+    T(sx + H * 0.8 + 1.4, ty, spec.length, 'start');
+  }
+  /* the other side: a sealing run (half circle) or a backing strip */
+  if (spec.seal && !spec.both) { const y = spec.other ? 0 : -1.2; arcs.push([sx, y, 1.4, spec.other ? 0 : Math.PI, spec.other ? Math.PI : 2 * Math.PI]); }
+  if (spec.backing && !spec.both) { const y = spec.other ? 0 : -1.2, d = spec.other ? 1 : -1; lines.push([sx - 2, y, sx - 2, y + d * 1.6, false], [sx - 2, y + d * 1.6, sx + 2, y + d * 1.6, false], [sx + 2, y + d * 1.6, sx + 2, y, false]); T(sx + 3, y + d * 1.6 + (d < 0 ? -2 : 0.4), spec.backing, 'start', 2.2); }
+  /* all around: a circle at the knee; field weld: a flag */
+  if (spec.allAround) arcs.push([0, 0, 1.6, 0, 2 * Math.PI]);
+  let flag = null; if (spec.field) { lines.push([0, 0, 0, 5, false]); flag = [[0, 5], [D * 3.4, 4.1], [0, 3.2]]; }
+  /* tail: process, quality, testing */
+  const tail = (spec.tail || []).filter(Boolean), tt = tail.join(' / ');
+  if (tail.length) { lines.push([D * ref, 0, D * (ref + 2.4), 2.4, false], [D * ref, 0, D * (ref + 2.4), -2.4, false]); T(D * (ref + 3.2), -0.9, tt, opts.left ? 'end' : 'start', 2.4); }
+  const w = ref + (tail.length ? 4 + tt.length * 1.45 : 2);
+  return { lines, arcs, texts, flag, box: { x0: opts.left ? -w : 0, w, h: 2 * H + 4 }, left: !!opts.left };
+}
+
+/* as an SVG group: x, y = where the knee goes (SVG units, y down), scale = SVG units per symbol unit */
+function weldSymbolSVG(spec, x, y, scale = 2, color = 'currentColor', font = 'Inter, system-ui, sans-serif', opts = {}) {
+  const P = weldSymbol(spec, opts), X = (u) => (x + u * scale).toFixed(2), Y = (v) => (y - v * scale).toFixed(2), out = [];
+  for (const [x1, y1, x2, y2, dashed] of P.lines) out.push(`<line x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}"${dashed ? ` stroke-dasharray="${(1.6 * scale).toFixed(1)} ${(1 * scale).toFixed(1)}"` : ''}/>`);
+  for (const [cx, cy, r, a0, a1] of P.arcs) {
+    if (a1 - a0 >= 2 * Math.PI - 1e-6) { out.push(`<circle cx="${X(cx)}" cy="${Y(cy)}" r="${(r * scale).toFixed(2)}" fill="none"/>`); continue; }
+    const p0 = [cx + r * Math.cos(a0), cy + r * Math.sin(a0)], p1 = [cx + r * Math.cos(a1), cy + r * Math.sin(a1)], large = a1 - a0 > Math.PI ? 1 : 0;
+    out.push(`<path d="M${X(p0[0])} ${Y(p0[1])} A${(r * scale).toFixed(2)} ${(r * scale).toFixed(2)} 0 ${large} 0 ${X(p1[0])} ${Y(p1[1])}" fill="none"/>`);
+  }
+  if (P.flag) out.push(`<polygon points="${P.flag.map(([u, v]) => X(u) + ',' + Y(v)).join(' ')}" fill="${color}"/>`);
+  for (const t of P.texts) out.push(`<text x="${X(t.x)}" y="${Y(t.y)}" font-size="${(t.size * scale).toFixed(1)}" text-anchor="${t.anchor}" fill="${color}" stroke="none" font-family="${font}">${String(t.text).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`);
+  return `<g stroke="${color}" stroke-width="${(0.25 * scale).toFixed(2)}" fill="none" stroke-linecap="round">${out.join('')}</g>`;
+}
+
+/* onto a 2D canvas context: x, y in pixels (y down), scale = pixels per symbol unit */
+function weldSymbolCanvas(ctx, spec, x, y, scale = 3, color = '#1a1a1a', opts = {}) {
+  const P = weldSymbol(spec, opts), X = (u) => x + u * scale, Y = (v) => y - v * scale;
+  ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Math.max(1, 0.28 * scale); ctx.lineCap = 'round';
+  for (const [x1, y1, x2, y2, dashed] of P.lines) { ctx.setLineDash(dashed ? [1.6 * scale, scale] : []); ctx.beginPath(); ctx.moveTo(X(x1), Y(y1)); ctx.lineTo(X(x2), Y(y2)); ctx.stroke(); }
+  ctx.setLineDash([]);
+  for (const [cx, cy, r, a0, a1] of P.arcs) { ctx.beginPath(); ctx.arc(X(cx), Y(cy), r * scale, -a1, -a0); ctx.stroke(); }
+  if (P.flag) { ctx.beginPath(); P.flag.forEach(([u, v], i) => (i ? ctx.lineTo(X(u), Y(v)) : ctx.moveTo(X(u), Y(v)))); ctx.closePath(); ctx.fill(); }
+  for (const t of P.texts) { ctx.font = `600 ${Math.round(t.size * scale)}px Inter, system-ui, sans-serif`; ctx.textAlign = t.anchor === 'middle' ? 'center' : t.anchor === 'end' ? 'right' : 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t.text, X(t.x), Y(t.y)); }
+  ctx.restore();
+  return P.box;
+}
+
+const escX = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+/* the symbol as one line of text (ISO 2553 order: size, symbol, length, then the tail) — for lists and the feature tree */
+function weldSymbolText(s = {}) {
+  const glyph = { fillet: '◺', square: '‖', V: 'V', bevel: '⊿', Y: 'Y', HY: 'K-Y', U: 'U', J: 'J', adhesive: 'ADH', tab: 'TAB', filled: 'FILL' }[s.sym] || s.sym || '';
+  return [s.ref, s.size, glyph + (s.both ? ' both sides' : ''), s.length, s.contour === 'flat' ? 'flush' : s.contour || '', s.finish ? `(${s.finish})` : '', s.toes ? 'toes ground' : '', s.backing ? `backing ${s.backing}` : '', s.seal ? '+ sealing run' : '', s.allAround ? 'all round' : '', s.field ? 'site weld' : '', s.tail && s.tail.filter(Boolean).length ? `< ${s.tail.filter(Boolean).join(' / ')}` : ''].filter(Boolean).join(' ');
+}
+
+/* a whole symbol as a stand-alone SVG: the arrow line from the joint (bottom left) to the knee, the reference line with
+   its symbol, sizes and tail. opts: {scale (px per unit, 4), color, arrow: false to leave the arrow off} */
+function weldSymbolBlockSVG(spec, opts = {}) {
+  const k = opts.scale || 4, color = opts.color || 'currentColor', P = weldSymbol(spec), arrow = opts.arrow !== false;
+  let x0 = arrow ? -7.5 : -1, y0 = arrow ? -7.5 : -6, x1 = P.box.w, y1 = 7;
+  const grow = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  for (const [a, b, c, d] of P.lines) { grow(a, b); grow(c, d); }
+  for (const [cx, cy, r] of P.arcs) { grow(cx - r, cy - r); grow(cx + r, cy + r); }
+  for (const t of P.texts) { const w = String(t.text).length * t.size * 0.56, xa = t.anchor === 'end' ? t.x - w : t.anchor === 'middle' ? t.x - w / 2 : t.x; grow(xa, t.y - t.size * 0.3); grow(xa + w, t.y + t.size); }
+  const pad = 1.2; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  const W = (x1 - x0) * k, H = (y1 - y0) * k, kx = -x0 * k, ky = y1 * k, out = [];
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" role="img" aria-label="${escX(opts.label || weldSymbolText(spec))}">`);
+  if (arrow) {
+    const tx = kx - 6.5 * k, ty = ky + 6.5 * k, ux = Math.SQRT1_2, s = 1.6 * k, w = 0.55 * k;
+    out.push(`<g stroke="${color}" stroke-width="${(0.25 * k).toFixed(2)}" fill="${color}" stroke-linecap="round"><line x1="${kx.toFixed(2)}" y1="${ky.toFixed(2)}" x2="${tx.toFixed(2)}" y2="${ty.toFixed(2)}"/><polygon stroke="none" points="${tx.toFixed(2)},${ty.toFixed(2)} ${(tx + ux * s - ux * w).toFixed(2)},${(ty - ux * s - ux * w).toFixed(2)} ${(tx + ux * s + ux * w).toFixed(2)},${(ty - ux * s + ux * w).toFixed(2)}"/></g>`);
+  }
+  out.push(weldSymbolSVG(spec, kx, ky, k, color));
+  out.push('</svg>');
+  return out.join('');
+}
+
+/* a joint section (the welding add-on's ui.section) as SVG: the parts as cut, the edge preparation taken out of them
+   (hatched red), the weld metal dark, adhesive / filler / laminate in their own colours, and a scale bar.
+   opts: {width, height, dark, label, id (unique per page, for the hatch pattern)} */
+function jointSectionSVG(sec, opts = {}) {
+  if (!sec) return '';
+  const W = opts.width || 240, H = opts.height || 150, dark = !!opts.dark, [x0, y0, x1, y1] = sec.window, uid = opts.id || 'js' + Math.random().toString(36).slice(2, 8);
+  const k = Math.min(W / (x1 - x0), H / (y1 - y0)), ox = (W - (x1 - x0) * k) / 2, oy = (H - (y1 - y0) * k) / 2;
+  const X = (x) => (ox + (x - x0) * k).toFixed(2), Y = (y) => (oy + (y1 - y) * k).toFixed(2);
+  const C = dark
+    ? { part: ['#353a43', '#3f4550'], line: '#d6d4cf', cut: '#ff6b5e', weld: '#8f99a4', weldLine: '#eef0f2', layer: '#e0c36a', tab: '#cfcc98', fill: '#e6dcc0', strap: '#56606c', ink: '#ecebe8', note: '#a9a7a2' }
+    : { part: ['#e4e7ec', '#d5dae2'], line: '#2a2d33', cut: '#d93a2b', weld: '#5b6470', weldLine: '#1d2127', layer: '#d6ae35', tab: '#b9b47a', fill: '#d6c59a', strap: '#aeb6c1', ink: '#1d1c1a', note: '#5f5b55' };
+  const d = (pts) => 'M' + pts.map(([x, y]) => X(x) + ' ' + Y(y)).join('L') + 'Z', o = [];
+  o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${escX(opts.label || 'joint section')}" font-family="Figtree, system-ui, sans-serif">`);
+  o.push(`<defs><pattern id="${uid}h" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${C.cut}" stroke-width="1.2" opacity="0.75"/></pattern></defs>`);
+  sec.parts.forEach((p, i) => {
+    if (p.loops.length) o.push(`<path d="${p.loops.map(d).join(' ')}" fill="${C.part[i % 2]}" fill-rule="evenodd" stroke="none"/>`);
+    o.push(`<g stroke="${C.line}" stroke-width="1.1" stroke-linecap="round">${p.segs.map(([a, b]) => `<line x1="${X(a[0])}" y1="${Y(a[1])}" x2="${X(b[0])}" y2="${Y(b[1])}"/>`).join('')}</g>`);
+  });
+  for (const c of sec.cuts) o.push(`<path d="${d(c.pts)}" fill="url(#${uid}h)" stroke="${C.cut}" stroke-width="1" stroke-dasharray="3 2"/>`);
+  for (const b of sec.beads) {
+    const fill = b.kind === 'layer' ? C.layer : b.kind === 'tab' ? C.tab : b.kind === 'fill' ? C.fill : b.kind === 'strap' || b.kind === 'backing' ? C.strap : C.weld;
+    o.push(`<path d="${d(b.pts)}" fill="${fill}" stroke="${b.kind === 'layer' ? C.layer : C.weldLine}" stroke-width="0.9" stroke-linejoin="round"/>`);
+  }
+  /* part names, inside each part's cut outline, toward its far side */
+  sec.parts.forEach((p) => {
+    let best = null, ba = 0;
+    for (const l of p.loops) { let a = 0, cx = 0, cy = 0; for (let i = 0; i < l.length; i++) { const [xa, ya] = l[i], [xb, yb] = l[(i + 1) % l.length], c = xa * yb - xb * ya; a += c; cx += (xa + xb) * c; cy += (ya + yb) * c; } if (Math.abs(a) > ba) { ba = Math.abs(a); best = [cx / (3 * a), cy / (3 * a)]; } }
+    if (best && ba * k * k / 2 > 900) o.push(`<text x="${X(best[0])}" y="${Y(best[1])}" font-size="10" font-weight="600" fill="${C.note}" text-anchor="middle" dominant-baseline="middle">${escX(p.name)}</text>`);
+  });
+  /* scale bar */
+  const L = [1, 2, 5, 10, 20, 50, 100, 200].find(v => v * k >= 28) || 200, bx = 8, by = H - 8;
+  o.push(`<g stroke="${C.ink}" stroke-width="1.2"><line x1="${bx}" y1="${by}" x2="${(bx + L * k).toFixed(1)}" y2="${by}"/><line x1="${bx}" y1="${by - 3}" x2="${bx}" y2="${by + 2}"/><line x1="${(bx + L * k).toFixed(1)}" y1="${by - 3}" x2="${(bx + L * k).toFixed(1)}" y2="${by + 2}"/></g><text x="${(bx + L * k + 4).toFixed(1)}" y="${by + 3.5}" font-size="9.5" fill="${C.note}">${L} mm</text>`);
+  const mv = sec.parts.find(p => p.mover);
+  if (sec.gap > 0) o.push(`<text x="${W - 6}" y="12" font-size="9.5" fill="${C.note}" text-anchor="end">${sec.method === 'weld' ? 'root gap' : 'bond line'} ${sec.gap} mm${mv ? ` · ${escX(mv.name)} moves ${sec.moved} mm` : ''}</text>`);
+  o.push('</svg>');
+  return o.join('');
+}
+
+return { weldSymbol, weldSymbolSVG, weldSymbolCanvas, weldSymbolText, weldSymbolBlockSVG, jointSectionSVG };
+})();
+
 __sf3.sketch = (() => {
 /* SketchFlow 3D sketch constraints for profiles (extrude / revolve / loft) made of lines and arcs.
    Points P0…Pn-1 in the sketch plane; segment i runs Pi → P(i+1 mod n) (an open profile has no closing segment).
@@ -1793,6 +1999,9 @@ const TYPES = {
   wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], constraints: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
   /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
   plane: { label: 'Plane', params: { size: 60 } },
+  /* an annotation on a part (a weld symbol, a joint note): `on` = the part; at / dir / along in that part's own coordinates, so it
+     moves with it; symbol = what the weld-symbol drawer needs (ISO 2553); lines = the note's text */
+  callout: { label: 'Callout', params: { at: [0, 0, 0], dir: [0, 0, 1], along: [1, 0, 0], symbol: null, lines: [], kind: 'note' } },
   /* everything on one side of a plane (a big block): the tool a split uses */
   halfspace: { label: 'Half-space', params: { size: 4000 } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
@@ -1825,11 +2034,12 @@ const MATERIALS = {
   copper: { name: 'Copper', density: 8.96, color: '#c27a4e', family: 'metal' }, titanium: { name: 'Titanium Ti-6Al-4V', density: 4.43, color: '#a4a29d', family: 'metal' },
   oak: { name: 'Oak', density: 0.75, color: '#b8895a', family: 'wood' }, pine: { name: 'Pine', density: 0.50, color: '#d9b77e', family: 'wood' },
   plywood: { name: 'Plywood (birch)', density: 0.68, color: '#d6b98a', family: 'wood' }, mdf: { name: 'MDF', density: 0.75, color: '#b49a78', family: 'wood' },
-  carbon_fibre: { name: 'Carbon fibre (CFRP)', density: 1.60, color: '#2d2f33', family: 'composite' }, concrete: { name: 'Concrete', density: 2.40, color: '#a9a79f', family: 'other' },
+  carbon_fibre: { name: 'Carbon fibre (CFRP)', density: 1.60, color: '#2d2f33', family: 'composite' }, gfrp: { name: 'Glass fibre (GFRP laminate)', density: 1.80, color: '#d9dcc8', family: 'composite' },
+  adhesive: { name: 'Structural adhesive (epoxy)', density: 1.20, color: '#e0c36a', family: 'plastic' }, filler: { name: 'Epoxy filler (silica / microfibre)', density: 1.00, color: '#e8dcc0', family: 'plastic' }, concrete: { name: 'Concrete', density: 2.40, color: '#a9a79f', family: 'other' },
   glass: { name: 'Glass', density: 2.50, color: '#d5e9ee', family: 'other' }, rubber: { name: 'Rubber', density: 1.15, color: '#3a3b3d', family: 'other' }
 };
 /* object types that are not shapes of their own */
-const META = new Set(['edge', 'pattern', 'weld', 'shell', 'drape']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell', 'drape', 'callout']);
 const SHAPES = ['box', 'wedge', 'cylinder', 'cone', 'sphere', 'fillet'];
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -2625,6 +2835,7 @@ function evaluate(doc, opts) {
       }
       if (!m) { /* keep its own pose */ }
       else if (m.to !== 'origin' && !target) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mated to a deleted object` });
+      else if (Array.isArray(m.frame) && m.frame.length === 16) M = M4.mul(m.to === 'origin' ? M4.ident() : worldOf(m.to), m.frame);   /* attached: a fixed place in the target's own frame */
       else {
         const tConns = m.to === 'origin' ? ORIGIN_CONNS : (R.conns.get(m.to) || []), tc = tConns.find(c => c.name === m.a), sc = (R.conns.get(id) || []).find(c => c.name === m.b);
         if (!tc || !sc) R.warnings.push({ kind: 'orphan', id, text: `${o.name}: mate connector “${!tc ? m.a : m.b}” no longer exists` });
@@ -2718,6 +2929,7 @@ function evaluate(doc, opts) {
   };
   for (const o of doc.objects) {
     if (o.into && !byId.has(o.into)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: its boolean target was deleted` });
+    if (o.type === 'callout' && !byId.has(o.on)) R.warnings.push({ kind: 'orphan', id: o.id, text: `${o.name}: the part it labels was deleted` });
   }
   /* body cache: a body is rebuilt only when something it is made of changed (shape, size, place, booleans, edges, patterns) */
   const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
@@ -3250,6 +3462,11 @@ class Model {
           mk.solve({ self: x, target: need(o.to), mate: extra, api: addonApi });   /* throws a helpful error now rather than a warning later */
           x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
         }
+        /* attached: a fixed place in the target's own frame (16 numbers, column-major) — it moves with the target */
+        if (o.frame) {
+          if (!Array.isArray(o.frame) || o.frame.length !== 16 || o.frame.some(v => !isFinite(+v))) throw new Error('frame is a 4×4 matrix: 16 numbers, column-major');
+          x.mate = { to: o.to, frame: o.frame.map(Number) }; this.recompute(); return { label: 'Attach ' + x.name, id: x.id };
+        }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
         if (!this.result.conns.has(x.id) && x.type !== 'instance') this.recompute();   /* a part added in this batch: build it first so its own connectors exist */
         const sconns = this.result.conns.get(x.id) || (x.type === 'instance' ? this.result.conns.get(x.of) : null) || connectorsOf(x, null);
@@ -3332,6 +3549,14 @@ class Model {
         const mat = (x) => (x.meta && x.meta.material) || d.material || null, advice = weldAdvice(mat(this.get(ba.id) || A), mat(this.get(bb.id) || B));
         return { label: `Weld ${A.name} to ${B.name}`, id, seams: r.seams || 0, length: r.length || 0, round: !!r.round, other_seams: concave.length - 1, material_advice: advice || undefined };
       }
+      case 'callout': {
+        /* {on: part, at:[x,y,z] (world, origin-relative with relative ops), dir (leader direction), along (the joint's direction), symbol, lines, kind} */
+        const t = need(o.on), M = this.result.world.get(t.id); if (!M) throw new Error(`${t.name} has no position`);
+        const Mi = M4.inv(M), id = o.id && !this.get(o.id) ? String(o.id) : uid('cal');
+        const params = defaultParams('callout', { at: M4.point(Mi, W(o.at) || [0, 0, 0]).map(r6), dir: V.norm(M4.dir(Mi, o.dir || [0, 0, 1])).map(r6), along: V.norm(M4.dir(Mi, o.along || [1, 0, 0])).map(r6), symbol: o.symbol || null, lines: (o.lines || []).map(String), kind: o.kind || 'note' });
+        this.insert({ id, name: o.name || (o.kind === 'weld' ? 'Weld symbol' : 'Callout') + ' ' + (d.objects.filter(x => x.type === 'callout').length + 1), type: 'callout', on: t.id, params, mate: null, pose: null, into: null, op: null, color: null });
+        return { label: 'Label ' + t.name, id };
+      }
       case 'addon': {
         const a = ADDONS.get(o.addon); if (!a) throw new Error(`No add-on “${o.addon}”. Loaded: ${[...ADDONS.keys()].join(', ') || 'none'}`);
         const act = (a.actions || {})[o.action]; if (!act) throw new Error(`Add-on ${a.id} has no action “${o.action}”. Try: ${Object.keys(a.actions || {}).join(', ')}`);
@@ -3341,7 +3566,7 @@ class Model {
         return { label: res.label || `${a.name || a.id}: ${o.action}`, info: res.info, results };
       }
       case 'delete': {
-        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id);
+        const x = need(o.id), xi = d.objects.indexOf(x); d.objects = d.objects.filter(y => y.id !== x.id && !(y.type === 'callout' && y.on === x.id));   /* a label goes with the part it labels */
         if (Number.isInteger(d.rollback) && xi < d.rollback) d.rollback = Math.max(0, d.rollback - 1);
         for (const y of d.objects) { if (y.into === x.id && y.type === 'edge') y.into = '__deleted__'; }
         if (d.ground === x.id) d.ground = null; if (d.origin && d.origin.obj === x.id) d.origin = null;
@@ -3353,7 +3578,7 @@ class Model {
       case 'fix': { const x = need(o.id); const M = this.result.world.get(x.id); if (M) x.pose = poseFromMatrix(M); x.mate = null; x.fixed = true; this.recompute(); return { label: 'Fix ' + x.name + ' in place', id: x.id }; }
       case 'cleanup': {
         let n = 0; const ids = new Set(d.objects.map(y => y.id));
-        d.objects = d.objects.filter(y => { if (y.type === 'edge' && !ids.has(y.into)) { n++; return false; } return true; });
+        d.objects = d.objects.filter(y => { if ((y.type === 'edge' && !ids.has(y.into)) || (y.type === 'callout' && !ids.has(y.on))) { n++; return false; } return true; });
         for (const y of d.objects) {
           if (y.into && !ids.has(y.into)) { y.into = null; y.op = null; n++; }
           if (y.mate && y.mate.to !== 'origin' && !ids.has(y.mate.to)) { const M = this.result.world.get(y.id); y.mate = null; if (M) y.pose = poseFromMatrix(M); y.fixed = true; n++; }
@@ -3690,9 +3915,24 @@ class Model {
   /* the object a picked body / id stands for: pattern copies resolve to their pattern */
   resolveId(id) { if (!id || this.get(id)) return id; const v = this.result.virtual && this.result.virtual.get(id); return v ? v.pattern : null; }
   /* what add-on actions see: read access plus small helpers (they return ops; they never edit the document directly) */
+  /* callouts placed in the world: [{id, name, on, point, dir, along, symbol, lines, kind}] — for the views and the drawings */
+  callouts() {
+    const out = [];
+    for (const o of this.doc.objects) {
+      if (o.type !== 'callout' || o.suppressed || o.hidden) continue; const M = this.result.world.get(o.on); if (!M) continue; const p = o.params;
+      out.push({ id: o.id, name: o.name, on: o.on, point: M4.point(M, p.at), dir: V.norm(M4.dir(M, p.dir)), along: V.norm(M4.dir(M, p.along)), symbol: p.symbol, lines: p.lines || [], kind: p.kind });
+    }
+    return out;
+  }
   addonContext() {
     const self = this;
     return { api: addonApi, get doc() { return self.doc; }, get result() { return self.result; }, get: (id) => self.get(id), describe: () => self.describe(), uid, ground: () => self.result.ground,
+      /* geometry, for add-ons that work on what is there: the body (solid, world) holding an object, its world matrix, its material */
+      bodyOf: (id) => self.bodyContaining(id) || null, world: (id) => self.result.world.get(id) || null,
+      material: (id) => { const b = self.bodyContaining(id), o = self.get((b && b.id) || id); return (o && o.meta && o.meta.material) || self.doc.material || null; },
+      materials: MATERIALS,
+      /* a world point as the ops in this batch expect it (origin-relative when the batch is) */
+      opPoint: (p) => (self.rel ? V.sub(p, self.result.originPoint) : p),
       newId: (prefix) => { let i = 1; while (self.get(prefix + i)) i++; return prefix + i; } };
   }
   /* summary for the AI and the tree */
@@ -3742,6 +3982,7 @@ __sf3.views = (() => {
    hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
 const K = __sf3.kernel;
 const { dimsOf, worldConnectors, massReport, measureDim } = __sf3.model;
+const { weldSymbol, weldSymbolCanvas } = __sf3.weldsymbol;
 const { V } = K, M4point = (m, p) => K.M4.point(m, p);
 
 const PANES = ['top', '3d', 'front', 'right'];
@@ -3998,6 +4239,7 @@ class Views {
       if (this.showCoG && still) this.drawCoG(c, pane, cam);
       if (still && pane.id !== '3d') this.drawSketchGlyphs(c, pane, cam);
       if (still) this.drawPlanes(c, pane, cam);
+      if (still && this.showCallouts !== false) this.drawCallouts(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -4008,7 +4250,7 @@ class Views {
   drawDims(c, pane, cam, R, O) {
     const C = this.colors, doc = this.model.doc, list = [];
     for (const ob of doc.objects) {
-      if (ob.type === 'edge' || !R.world.has(ob.id)) continue;
+      if (ob.type === 'edge' || ob.type === 'callout' || (ob.meta && ob.meta.joint) || !R.world.has(ob.id)) continue;   /* weld metal / prep cuts: their symbol sizes them */
       const M = R.world.get(ob.id);
       for (const d of dimsOf(ob)) {
         const a = V.sub(K.M4.point(M, d.a), O), b = V.sub(K.M4.point(M, d.b), O), dir = V.norm(V.sub(b, a));
@@ -4095,6 +4337,45 @@ class Views {
       }
     }
     c.restore();
+  }
+  /* weld symbols and joint notes (ISO 2553): an arrow onto the joint, the reference line with its symbol, sizes and tail;
+     the notes under it when it (or the part it labels) is selected. Click one to select it. */
+  drawCallouts(c, pane, cam) {
+    let list; try { list = this.model.callouts(); } catch (e) { return; }
+    if (!list.length) return;
+    const O = this.O, ink = this.dark ? '#ecebe8' : '#1c1d21', placed = [];
+    for (const k of list) {
+      const p = this.project(pane, V.sub(k.point, O), cam); if (p.behind) continue;
+      if (p.x < pane.x - 40 || p.x > pane.x + pane.w + 40 || p.y < pane.y - 40 || p.y > pane.y + pane.h + 40) continue;
+      /* the leader leaves along the joint's open side as this pane sees it (to the right, so the reference line reads) */
+      const q = this.project(pane, V.add(V.sub(k.point, O), k.dir), cam), r = this.project(pane, V.add(V.sub(k.point, O), k.along), cam);
+      let dx = q.x - p.x, dy = q.y - p.y; const l = Math.hypot(dx, dy), lr = Math.hypot(r.x - p.x, r.y - p.y);
+      if (l < 0.35 * Math.max(lr, 1e-9) || l < 1e-9) { dx = 0.75; dy = -0.66; } else { dx /= l; dy /= l; }
+      if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6;
+      const n = Math.hypot(dx, dy); dx /= n; dy /= n;
+      /* the reference line runs away from the joint: to the left when the leader leaves to the left */
+      const left = dx < -0.05, spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' };
+      const sel = this.sel && (this.sel === k.id || this.sel === k.on), col = sel ? '#ff7b3d' : ink, scale = 3.4, P = weldSymbol(spec, { left });
+      let len = 38, kx, ky, box;
+      for (let tries = 0; tries < 6; tries++) {
+        kx = p.x + dx * len; ky = p.y + dy * len; box = { x: kx + P.box.x0 * scale - 4, y: ky - 7 * scale, w: P.box.w * scale + 8, h: 13 * scale };
+        if (!placed.some(b => b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h)) break;
+        len += 18;
+      }
+      placed.push(box);
+      c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = sel ? 1.6 : 1.2;
+      c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(kx, ky); c.stroke();
+      const s = 7, w = 2.6; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + dx * s - dy * w, p.y + dy * s + dx * w); c.lineTo(p.x + dx * s + dy * w, p.y + dy * s - dx * w); c.closePath(); c.fill();
+      weldSymbolCanvas(c, spec, kx, ky, scale, col, { left });
+      if (sel && k.lines.length) {
+        c.font = '600 10.5px "Figtree", system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+        const lw = Math.max(...k.lines.map(t => c.measureText(t).width)), bx = Math.max(pane.x + 6, Math.min(left ? kx - lw : kx, pane.x + pane.w - lw - 6)), by = ky + 6 * scale + 4;
+        c.fillStyle = this.dark ? 'rgba(20,21,25,0.86)' : 'rgba(255,255,255,0.9)'; c.fillRect(bx - 3, by - 11, lw + 6, k.lines.length * 13 + 4);
+        c.fillStyle = col; k.lines.forEach((t, i) => c.fillText(t, bx, by + i * 13));
+      }
+      c.restore();
+      this.overlayHits.push({ kind: 'callout', id: k.id, x: box.x, y: box.y, w: box.w, h: box.h, pane: pane.id });
+    }
   }
   /* centre of gravity: the assembly's (large) and the selected part's (small), as the drafting symbol */
   drawCoG(c, pane, cam) {
@@ -4403,9 +4684,11 @@ __sf3.drawing = (() => {
    Third-angle layout (TOP above FRONT, RIGHT beside it, an isometric view top-right), visible and hidden lines
    (hidden-line removal by sampling every edge against all parts' triangles, sped up with a 2D grid), the parts'
    carried dimensions and the measured dimensions, a parts list and a title block. Exports SVG (prints to PDF) and DXF.
-   An assembly (two or more parts) gets an exploded isometric instead, with numbered balloons tied to the parts list. */
+   An assembly (two or more parts) gets an exploded isometric instead, with numbered balloons tied to the parts list.
+   Weld symbols (ISO 2553) go on the orthographic view that sees each joint best, with a weld schedule beside the title block. */
 const K = __sf3.kernel;
 const { dimsOf, measureDim, massReport, bom, MATERIALS } = __sf3.model;
+const { weldSymbol } = __sf3.weldsymbol;
 const { V, M4 } = K;
 
 const VIEWS = {
@@ -4483,7 +4766,7 @@ function viewDims(model, view) {
   const R = model.result, O = R.originPoint, B = VIEWS[view], out = [];
   const P = (p) => { const q = V.sub(p, O); return [V.dot(q, B.r), V.dot(q, B.u)]; };
   for (const ob of model.doc.objects) {
-    if (!R.world.has(ob.id) || ['edge', 'pattern', 'weld', 'shell'].includes(ob.type) || (R.off && R.off.has(ob.id))) continue;
+    if (!R.world.has(ob.id) || ['edge', 'pattern', 'weld', 'shell', 'callout'].includes(ob.type) || (ob.meta && ob.meta.joint) || (R.off && R.off.has(ob.id))) continue;   /* a joint's weld metal and prep cuts are sized by its symbol */
     const M = R.world.get(ob.id), lb = R.local.get(ob.id), lc = lb && !lb.isEmpty() ? V.lerp(lb.bbox().min, lb.bbox().max, 0.5) : [0, 0, 0], c = P(M4.point(M, lc));   /* the part's middle: dimensions go outside it */
     for (const d of dimsOf(ob)) {
       const a = M4.point(M, d.a), b = M4.point(M, d.b), dir = V.norm(V.sub(b, a));
@@ -4549,6 +4832,33 @@ function layoutSheet(model, opts = {}) {
     let low = label.at[1] + 7; for (const d of dims.slice(firstDim)) low = Math.min(low, d.line[0][1], d.line[1][1], d.at[1] - 2);
     label.at[1] = low - 7;
   }
+  /* weld symbols: each on the orthographic view where its leader lies flat on the sheet, the arrow on the joint */
+  const welds = [], schedule = [], O = R.originPoint;
+  let cl = []; try { cl = opts.welds === false || typeof model.callouts !== 'function' ? [] : model.callouts(); } catch (e) { cl = []; }
+  for (const k of cl) {
+    let best = null;
+    for (const v of ['front', 'top', 'right']) { if (!ext[v].bbox) continue; const B = VIEWS[v], score = 1 - Math.abs(V.dot(k.dir, B.f)) + 0.3 * Math.abs(V.dot(k.along, B.f)); if (!best || score > best.score) best = { v, score }; }
+    if (!best) continue;
+    const B = VIEWS[best.v], q = V.sub(k.point, O), at = toSheet(best.v, [V.dot(q, B.r), V.dot(q, B.u)]);
+    let dx = V.dot(k.dir, B.r), dy = V.dot(k.dir, B.u); const l = Math.hypot(dx, dy);
+    if (l < 0.3) { dx = 0.7; dy = 0.7; } else { dx /= l; dy /= l; }
+    if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6; const n = Math.hypot(dx, dy);
+    welds.push({ id: k.id, view: best.v, at, dir: [dx / n, dy / n], left: dx / n < -0.05, symbol: k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' }, lines: k.lines || [] });
+    if (k.lines && k.lines.length) schedule.push({ ref: (k.symbol && k.symbol.ref) || k.name, text: k.lines.join(' · ') });
+  }
+  const WK = 0.85, placedW = [];
+  for (const w of welds) {
+    /* inside the frame: a symbol that would run off the sheet turns to the other side */
+    const fits = (left, kx) => { const Q = weldSymbol(w.symbol, { left }); return kx + Q.box.x0 * WK > m + 3 && kx + (Q.box.x0 + Q.box.w) * WK < W - m - 3; };
+    if (!fits(w.left, w.at[0] + w.dir[0] * 9) && fits(!w.left, w.at[0] - w.dir[0] * 9)) { w.left = !w.left; w.dir = [-w.dir[0], w.dir[1]]; }
+    const P = weldSymbol(w.symbol, { left: w.left }); let len = 9;
+    for (let t = 0; t < 8 && !w.knee; t++, len += 7) {
+      const kx = w.at[0] + w.dir[0] * len, ky = w.at[1] + w.dir[1] * len, bx = { x0: kx + P.box.x0 * WK - 1, y0: ky - 6 * WK, x1: kx + (P.box.x0 + P.box.w) * WK + 1, y1: ky + 7 * WK };
+      if (!placedW.some(b => b.x0 < bx.x1 && bx.x0 < b.x1 && b.y0 < bx.y1 && bx.y0 < b.y1)) { w.knee = [kx, ky]; placedW.push(bx); }
+    }
+    if (!w.knee) w.knee = [w.at[0] + w.dir[0] * len, w.at[1] + w.dir[1] * len];
+    w.k = WK; w.prims = P;
+  }
   /* title block + parts list */
   const rep = massReport(model.doc, R), parts = bom(model.doc, R).lines, mats = [...new Set(rep.parts.map(p => p.material_name).filter(Boolean))];
   /* balloons: one per parts-list item, its leader on the first part of that item in the exploded view */
@@ -4570,7 +4880,16 @@ function layoutSheet(model, opts = {}) {
     ['MATERIAL', mats.join(', ') || '—'], ['MASS', rep.total_mass_g ? (rep.total_mass_g >= 1000 ? fmt(rep.total_mass_g / 1000) + ' kg' : fmt(rep.total_mass_g) + ' g') : '—'],
     ['DATE', opts.date || new Date().toISOString().slice(0, 10)], ['DRAWN', 'SketchFlow 3D'], ['SHEET', '1 / 1']
   ] };
-  return { W, H, m, scale, isoScale, lines, dims, labels, title, parts: parts.length > 1 ? parts : [], balloons, balloonR: BR, exploded, sheet: opts.sheet || 'A3' };
+  /* the weld schedule fills the strip left of the title block, bottom up */
+  const schW = W - 2 * m - tbW - 12, maxc = Math.max(30, Math.floor(schW / 1.3)), wrapped = [];
+  for (const e of schedule) {
+    const words = e.text.replace(new RegExp('^' + String(e.ref || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '').split(' '); let cur = '', first = true;
+    const push = () => { wrapped.push({ ref: first ? e.ref : '', text: cur }); first = false; cur = ''; };
+    for (const wd of words) { if (cur && (cur + ' ' + wd).length > maxc - 6) push(); cur = cur ? cur + ' ' + wd : wd; }
+    if (cur) push();
+  }
+  const rowsFit = Math.max(1, Math.floor((base - 8) / 3.6)), sched = { x: m + 4, y: m + 4, w: schW, rows: wrapped.length > rowsFit ? wrapped.slice(0, rowsFit - 1).concat([{ ref: '', text: `… ${schedule.length} joints in all (see the model)` }]) : wrapped };
+  return { W, H, m, scale, isoScale, lines, dims, labels, title, parts: parts.length > 1 ? parts : [], balloons, balloonR: BR, exploded, sheet: opts.sheet || 'A3', welds, schedule: sched };
 }
 /* balloons on a rectangle just outside the view, each in the direction of its part from the view's middle, then
    spread along that rectangle so none overlap (leaders stay short and do not cross much) */
@@ -4603,7 +4922,7 @@ function drawingSVG(model, opts = {}) {
   o.push(`<?xml version="1.0" encoding="UTF-8"?>`, `<svg xmlns="http://www.w3.org/2000/svg" width="${S.W}mm" height="${S.H}mm" viewBox="0 0 ${S.W} ${S.H}" font-family="Helvetica, Arial, sans-serif">`);
   o.push(`<rect x="0" y="0" width="${S.W}" height="${S.H}" fill="#fff"/>`, `<rect x="${S.m}" y="${S.m}" width="${S.W - 2 * S.m}" height="${S.H - 2 * S.m}" fill="none" stroke="#000" stroke-width="0.5"/>`);
   const L = (a, b, cls) => `<line x1="${a[0].toFixed(3)}" y1="${Y(a[1]).toFixed(3)}" x2="${b[0].toFixed(3)}" y2="${Y(b[1]).toFixed(3)}" class="${cls}"/>`;
-  o.push(`<style>.v{stroke:#000;stroke-width:0.35;stroke-linecap:round}.h{stroke:#000;stroke-width:0.18;stroke-dasharray:1.6 0.9}.d{stroke:#1d4ed8;stroke-width:0.18}.t{fill:#1d4ed8;font-size:3px}.lbl{font-size:3.2px;font-weight:bold;letter-spacing:.3px}.tb{stroke:#000;stroke-width:0.25;fill:none}.k{font-size:2px;fill:#555}.val{font-size:3.4px}.bl{stroke:#000;stroke-width:0.25}.bn{font-size:3.2px;font-weight:bold}</style>`);
+  o.push(`<style>.v{stroke:#000;stroke-width:0.35;stroke-linecap:round}.h{stroke:#000;stroke-width:0.18;stroke-dasharray:1.6 0.9}.d{stroke:#1d4ed8;stroke-width:0.18}.t{fill:#1d4ed8;font-size:3px}.lbl{font-size:3.2px;font-weight:bold;letter-spacing:.3px}.tb{stroke:#000;stroke-width:0.25;fill:none}.k{font-size:2px;fill:#555}.val{font-size:3.4px}.bl{stroke:#000;stroke-width:0.25}.wl{stroke:#000;stroke-width:0.25;fill:none;stroke-linecap:round}.wd{stroke:#000;stroke-width:0.2;stroke-dasharray:1.2 0.7;fill:none}.wtx{font-size:2.2px}.bn{font-size:3.2px;font-weight:bold}</style>`);
   o.push('<g>', ...S.lines.filter(l => l.hidden).map(l => L(l.a, l.b, 'h')), ...S.lines.filter(l => !l.hidden).map(l => L(l.a, l.b, 'v')), '</g>');
   for (const d of S.dims) {
     o.push(L(d.ext[0][0], d.ext[0][1], 'd'), L(d.ext[1][0], d.ext[1][1], 'd'), L(d.line[0], d.line[1], 'd'));
@@ -4617,6 +4936,27 @@ function drawingSVG(model, opts = {}) {
   for (const b of S.balloons) {
     const dx = b.anchor[0] - b.at[0], dy = b.anchor[1] - b.at[1], l = Math.hypot(dx, dy) || 1, e = [b.at[0] + dx / l * b.r, b.at[1] + dy / l * b.r];
     o.push(`<g class="bl"><line x1="${e[0].toFixed(2)}" y1="${Y(e[1]).toFixed(2)}" x2="${b.anchor[0].toFixed(2)}" y2="${Y(b.anchor[1]).toFixed(2)}"/><circle cx="${b.anchor[0].toFixed(2)}" cy="${Y(b.anchor[1]).toFixed(2)}" r="0.5" fill="#000"/><circle cx="${b.at[0].toFixed(2)}" cy="${Y(b.at[1]).toFixed(2)}" r="${b.r}" fill="#fff"/></g><text x="${b.at[0].toFixed(2)}" y="${Y(b.at[1]).toFixed(2)}" text-anchor="middle" dominant-baseline="central" class="bn">${b.item}</text>`);
+  }
+  /* weld symbols: arrow onto the joint, reference line with the ISO 2553 symbol, sizes and tail */
+  for (const w of S.welds) {
+    const [ax, ay] = w.at, [kx, ky] = w.knee, k = w.k, P = w.prims, at = (x, y) => [kx + x * k, ky + y * k];
+    const ux = ax - kx, uy = ay - ky, ul = Math.hypot(ux, uy) || 1, x = ux / ul, y = uy / ul, s = 2.2, aw = 0.7;
+    o.push('<g>', L([kx, ky], [ax, ay], 'wl'), `<polygon points="${ax.toFixed(2)},${Y(ay).toFixed(2)} ${(ax - x * s - y * aw).toFixed(2)},${Y(ay - y * s + x * aw).toFixed(2)} ${(ax - x * s + y * aw).toFixed(2)},${Y(ay - y * s - x * aw).toFixed(2)}" fill="#000"/>`);
+    for (const [x1, y1, x2, y2, dashed] of P.lines) o.push(L(at(x1, y1), at(x2, y2), dashed ? 'wd' : 'wl'));
+    for (const [cx, cy, r, a0, a1] of P.arcs) {
+      const c = at(cx, cy), rr = r * k;
+      if (a1 - a0 >= 2 * Math.PI - 1e-6) { o.push(`<circle cx="${c[0].toFixed(2)}" cy="${Y(c[1]).toFixed(2)}" r="${rr.toFixed(2)}" class="wl"/>`); continue; }
+      const p0 = [c[0] + rr * Math.cos(a0), c[1] + rr * Math.sin(a0)], p1 = [c[0] + rr * Math.cos(a1), c[1] + rr * Math.sin(a1)];
+      o.push(`<path d="M${p0[0].toFixed(2)} ${Y(p0[1]).toFixed(2)} A${rr.toFixed(2)} ${rr.toFixed(2)} 0 ${a1 - a0 > Math.PI ? 1 : 0} 0 ${p1[0].toFixed(2)} ${Y(p1[1]).toFixed(2)}" class="wl"/>`);
+    }
+    if (P.flag) o.push(`<polygon points="${P.flag.map(([u, v]) => { const q = at(u, v); return q[0].toFixed(2) + ',' + Y(q[1]).toFixed(2); }).join(' ')}" fill="#000"/>`);
+    for (const t of P.texts) { const q = at(t.x, t.y); o.push(`<text x="${q[0].toFixed(2)}" y="${Y(q[1]).toFixed(2)}" text-anchor="${t.anchor}" style="font-size:${(t.size * k).toFixed(2)}px">${esc(t.text)}</text>`); }
+    o.push('</g>');
+  }
+  if (S.schedule.rows.length) {
+    const Sc = S.schedule, n = Sc.rows.length;
+    o.push(`<text x="${Sc.x}" y="${Y(Sc.y + n * 3.6 + 2).toFixed(2)}" class="lbl" style="font-size:2.6px">WELD SCHEDULE</text>`);
+    Sc.rows.forEach((r, i) => { const yy = Sc.y + (n - 1 - i) * 3.6 + 1; o.push(`<text x="${Sc.x}" y="${Y(yy).toFixed(2)}" class="val" style="font-size:2.4px">${r.ref ? `<tspan font-weight="bold">${esc(r.ref)}</tspan>` : ''}<tspan x="${Sc.x + 9}">${esc(r.text)}</tspan></text>`); });
   }
   /* title block: a 3 × 3 grid of labelled cells */
   const T = S.title, cw = T.w / 3, chh = T.h / 3;
@@ -4641,8 +4981,8 @@ function drawingDXF(model, opts = {}) {
   g(0, 'LTYPE'); g(2, 'CONTINUOUS'); g(70, 0); g(3, 'Solid line'); g(72, 65); g(73, 0); g(40, 0);
   g(0, 'LTYPE'); g(2, 'HIDDEN'); g(70, 0); g(3, 'Hidden __ __ __'); g(72, 65); g(73, 2); g(40, 2.5); g(49, 1.6); g(49, -0.9);
   g(0, 'ENDTAB');
-  g(0, 'TABLE'); g(2, 'LAYER'); g(70, 6);
-  for (const [n, col, lt] of [['VISIBLE', 7, 'CONTINUOUS'], ['HIDDEN', 8, 'HIDDEN'], ['DIMS', 5, 'CONTINUOUS'], ['TEXT', 7, 'CONTINUOUS'], ['BORDER', 7, 'CONTINUOUS'], ['BALLOONS', 7, 'CONTINUOUS']]) { g(0, 'LAYER'); g(2, n); g(70, 0); g(62, col); g(6, lt); }
+  g(0, 'TABLE'); g(2, 'LAYER'); g(70, 7);
+  for (const [n, col, lt] of [['VISIBLE', 7, 'CONTINUOUS'], ['HIDDEN', 8, 'HIDDEN'], ['DIMS', 5, 'CONTINUOUS'], ['TEXT', 7, 'CONTINUOUS'], ['BORDER', 7, 'CONTINUOUS'], ['BALLOONS', 7, 'CONTINUOUS'], ['WELDS', 7, 'CONTINUOUS']]) { g(0, 'LAYER'); g(2, n); g(70, 0); g(62, col); g(6, lt); }
   g(0, 'ENDTAB'); g(0, 'ENDSEC');
   g(0, 'SECTION'); g(2, 'ENTITIES');
   const line = (a, b, layer) => { g(0, 'LINE'); g(8, layer); g(10, a[0].toFixed(4)); g(20, a[1].toFixed(4)); g(30, 0); g(11, b[0].toFixed(4)); g(21, b[1].toFixed(4)); g(31, 0); };
@@ -4658,6 +4998,23 @@ function drawingDXF(model, opts = {}) {
     line([b.at[0] + dx / l * b.r, b.at[1] + dy / l * b.r], b.anchor, 'BALLOONS');
     g(0, 'TEXT'); g(8, 'BALLOONS'); g(10, b.at[0].toFixed(3)); g(20, b.at[1].toFixed(3)); g(30, 0); g(40, 3); g(1, String(b.item)); g(72, 1); g(11, b.at[0].toFixed(3)); g(21, b.at[1].toFixed(3)); g(31, 0); g(73, 2);
   }
+  /* weld symbols and the weld schedule */
+  const jtext = (p, h, t, just) => { g(0, 'TEXT'); g(8, 'WELDS'); g(10, p[0].toFixed(3)); g(20, p[1].toFixed(3)); g(30, 0); g(40, h.toFixed(2)); g(1, String(t)); if (just) { g(72, just); g(11, p[0].toFixed(3)); g(21, p[1].toFixed(3)); g(31, 0); } };
+  for (const w of S.welds) {
+    const [kx, ky] = w.knee, k = w.k, P = w.prims, at = (x, y) => [kx + x * k, ky + y * k];
+    line(w.knee, w.at, 'WELDS');
+    const ux = w.at[0] - kx, uy = w.at[1] - ky, ul = Math.hypot(ux, uy) || 1, x = ux / ul, y = uy / ul, s = 2.2, aw = 0.7, A = w.at;
+    line(A, [A[0] - x * s - y * aw, A[1] - y * s + x * aw], 'WELDS'); line(A, [A[0] - x * s + y * aw, A[1] - y * s - x * aw], 'WELDS');
+    for (const [x1, y1, x2, y2, dashed] of P.lines) { const a = at(x1, y1), b = at(x2, y2); g(0, 'LINE'); g(8, 'WELDS'); if (dashed) g(6, 'HIDDEN'); g(10, a[0].toFixed(4)); g(20, a[1].toFixed(4)); g(30, 0); g(11, b[0].toFixed(4)); g(21, b[1].toFixed(4)); g(31, 0); }
+    for (const [cx, cy, r, a0, a1] of P.arcs) {
+      const c = at(cx, cy);
+      if (a1 - a0 >= 2 * Math.PI - 1e-6) { g(0, 'CIRCLE'); g(8, 'WELDS'); g(10, c[0].toFixed(4)); g(20, c[1].toFixed(4)); g(30, 0); g(40, (r * k).toFixed(4)); }
+      else { g(0, 'ARC'); g(8, 'WELDS'); g(10, c[0].toFixed(4)); g(20, c[1].toFixed(4)); g(30, 0); g(40, (r * k).toFixed(4)); g(50, (a0 * 180 / Math.PI).toFixed(3)); g(51, (a1 * 180 / Math.PI).toFixed(3)); }
+    }
+    if (P.flag) P.flag.forEach((p, i) => line(at(p[0], p[1]), at(P.flag[(i + 1) % P.flag.length][0], P.flag[(i + 1) % P.flag.length][1]), 'WELDS'));
+    for (const t of P.texts) jtext(at(t.x, t.y), t.size * k, t.text, t.anchor === 'middle' ? 1 : t.anchor === 'end' ? 2 : 0);
+  }
+  if (S.schedule.rows.length) { const Sc = S.schedule, n = Sc.rows.length; jtext([Sc.x, Sc.y + n * 3.6 + 2], 2.6, 'WELD SCHEDULE'); Sc.rows.forEach((r, i) => { const yy = Sc.y + (n - 1 - i) * 3.6 + 1; if (r.ref) jtext([Sc.x, yy], 2.4, r.ref); jtext([Sc.x + 9, yy], 2.4, r.text); }); }
   const T = S.title, cw = T.w / 3, chh = T.h / 3; rect(T.x, T.y, T.w, T.h, 'BORDER');
   T.fields.forEach(([k, v], i) => { const cx = T.x + (i % 3) * cw, cy = T.y + T.h - Math.floor(i / 3) * chh; rect(cx, cy - chh, cw, chh, 'BORDER'); text([cx + 1.5, cy - 3.5], 1.8, k, 'TEXT'); text([cx + 1.5, cy - chh + 2.5], 3, String(v).slice(0, 40), 'TEXT'); });
   g(0, 'ENDSEC'); g(0, 'EOF');
@@ -5908,12 +6265,811 @@ const __default = {
 return { default: __default };
 })();
 
+__sf3.welding = (() => {
+/* SketchFlow 3D add-on: Welding & joining.
+   Pick two parts (or a point where they meet): the add-on finds the joint between them — butt, tee, corner or lap —
+   reads both thicknesses, the materials, how well a torch can reach each side and the welding position, and suggests a
+   joint for LIGHT, REGULAR and HEAVY service by common standards:
+     ISO 9692-1 / -3 (edge preparations, steel / aluminium), AWS D1.1 (prequalified joints, minimum fillet sizes),
+     EN 1993-1-8 (fillet throat), ISO 5817 (quality levels B / C / D), ISO 4063 (process numbers), ISO 2553 (symbols),
+     IIW fatigue recommendations (toe grinding), and for non-welded joints adhesive-joint and marine (FRP tabbing) practice.
+   Each suggestion carries the preparation (square, V, X, bevel, K, J, U, none), root gap and face, the process, sizes,
+   passes, weld metal, labour and machining time, cost, an ease score and the reasons. Applying one cuts the preparation
+   out of the parts, opens the root gap, places the weld metal (or adhesive, filler, laminate) as a part of its own, and
+   labels the joint with its weld symbol — all attached to the parts, so they follow them.
+   Materials that cannot be fusion-welded (aluminium to steel, plastics, wood, composites) get bonded, filled or
+   fibre-reinforced joints instead — or ask for one with method. Plain object, no imports: the host passes the kernel. */
+
+const DEG = Math.PI / 180;
+const r1 = (v) => Math.round(v * 10) / 10, r2 = (v) => Math.round(v * 100) / 100;
+const half = (v) => Math.round(v * 2) / 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- materials: how each one joins ---------- */
+const MAT = {
+  steel: { cls: 'steel', label: 'carbon steel (S235–S355)', weld: true, filler: 'G 42 4 M21 3Si1 (ER70S-6)', rho: 7.85, vAngle: 60, cost: 3 },
+  stainless: { cls: 'stainless', label: 'austenitic stainless (304/316)', weld: true, filler: 'G 19 9 L Si (ER308LSi)', rho: 7.9, vAngle: 60, cost: 12 },
+  aluminium: { cls: 'aluminium', label: 'aluminium (5xxx / 6xxx)', weld: true, filler: 'S Al 5356 (ER5356)', rho: 2.7, vAngle: 70, cost: 10 },
+  cast_iron: { cls: 'cast_iron', label: 'cast iron', weld: true, filler: 'E C Ni-CI (ENi-CI)', rho: 7.2, vAngle: 70, cost: 40 },
+  titanium: { cls: 'titanium', label: 'titanium', weld: true, filler: 'S Ti 0120 (ERTi-2)', rho: 4.5, vAngle: 60, cost: 90 },
+  copper: { cls: 'copper', label: 'copper', braze: true, rho: 8.9 }, brass: { cls: 'copper', label: 'brass', braze: true, rho: 8.5 }, bronze: { cls: 'copper', label: 'bronze', braze: true, rho: 8.8 },
+  carbon_fibre: { cls: 'composite', label: 'carbon fibre (CFRP)', rho: 1.6 }, gfrp: { cls: 'composite', label: 'glass fibre (GFRP)', rho: 1.8 },
+  oak: { cls: 'wood', label: 'oak', rho: 0.75 }, pine: { cls: 'wood', label: 'pine', rho: 0.5 }, plywood: { cls: 'wood', label: 'plywood', rho: 0.68 }, mdf: { cls: 'wood', label: 'MDF', rho: 0.75 },
+  pla: { cls: 'plastic', label: 'PLA', rho: 1.24, print: true }, petg: { cls: 'plastic', label: 'PETG', rho: 1.27, print: true }, abs: { cls: 'plastic', label: 'ABS', rho: 1.04, solvent: true }, asa: { cls: 'plastic', label: 'ASA', rho: 1.07, solvent: true },
+  tpu: { cls: 'plastic', label: 'TPU', rho: 1.21, flexible: true }, nylon: { cls: 'plastic', label: 'nylon', rho: 1.01, hard: true }, pa_cf: { cls: 'plastic', label: 'nylon CF', rho: 1.15, hard: true }, pom: { cls: 'plastic', label: 'POM (acetal)', rho: 1.41, hard: true },
+  acrylic: { cls: 'plastic', label: 'acrylic', rho: 1.18, solvent: true }, polycarbonate: { cls: 'plastic', label: 'polycarbonate', rho: 1.2, solvent: true },
+  resin: { cls: 'thermoset', label: 'cured resin', rho: 1.18 }, tough_resin: { cls: 'thermoset', label: 'tough resin', rho: 1.15 },
+  concrete: { cls: 'mineral', label: 'concrete', rho: 2.4 }, glass: { cls: 'glass', label: 'glass', rho: 2.5 }, rubber: { cls: 'elastomer', label: 'rubber', rho: 1.15 },
+  adhesive: { cls: 'thermoset', label: 'adhesive', rho: 1.2 }, filler: { cls: 'thermoset', label: 'filler', rho: 1.0 }
+};
+/* ISO 4063 processes: deposition (kg/h, manual, flat), operating factor (arc-on share of the welder's time), skill */
+const PROC = {
+  111: { name: 'MMA / SMAW (stick)', rate: 1.4, of: 0.3, skill: 1, gas: 'none (flux-coated rod)' },
+  135: { name: 'MAG / GMAW', rate: 3.0, of: 0.35, skill: 0, gas: 'M21 (Ar + 18 % CO₂)' },
+  136: { name: 'FCAW (flux-cored)', rate: 4.5, of: 0.4, skill: 0, gas: 'M21 / C1' },
+  131: { name: 'MIG (aluminium)', rate: 2.0, of: 0.35, skill: 1, gas: 'I1 (argon)' },
+  141: { name: 'TIG / GTAW', rate: 0.8, of: 0.3, skill: 2, gas: 'I1 (argon)' },
+  121: { name: 'SAW (submerged arc)', rate: 8, of: 0.5, skill: 0, gas: 'flux' }
+};
+const POSF = { PA: 1, PB: 0.95, PC: 0.85, PD: 0.65, PE: 0.6, PF: 0.7, PG: 0.8 };
+const POSNAME = { PA: 'flat', PB: 'horizontal-vertical', PC: 'horizontal', PD: 'horizontal-overhead', PE: 'overhead', PF: 'vertical up', PG: 'vertical down' };
+
+/* ---------- geometry ---------- */
+function V(api) { return api.V; }
+function polyArea(V, q) { let s = [0, 0, 0]; for (let i = 0; i < q.v.length; i++) s = V.add(s, V.cross(q.v[i].p, q.v[(i + 1) % q.v.length].p)); return V.len(s) / 2; }
+/* where two bodies touch (or face each other across a small gap): planes of A with B's faces opposite them */
+function contacts(api, sa, sb, maxGap) {
+  const Vv = api.V, groups = [];
+  for (const q of sa.polys) {
+    let g = groups.find(x => Vv.dot(x.n, q.plane.n) > 1 - 1e-6 && Math.abs(x.w - q.plane.w) < 1e-4);
+    if (!g) { g = { n: q.plane.n.slice(), w: q.plane.w, A: [], B: [], sep: 0 }; groups.push(g); }
+    g.A.push(q);
+  }
+  for (const q of sb.polys) for (const g of groups) {
+    if (Vv.dot(g.n, q.plane.n) > -1 + 1e-6) continue;
+    const sep = -q.plane.w - g.w; if (sep < -1e-4 || sep > maxGap) continue;
+    g.B.push(q); g.sep = Math.max(g.sep, sep);
+  }
+  return groups.filter(g => g.B.length);
+}
+function rectOf(Vv, polys, e1, e2) { let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; for (const q of polys) for (const x of q.v) { const u = Vv.dot(x.p, e1), v = Vv.dot(x.p, e2); u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); } return { u0, u1, v0, v1 }; }
+/* distance from p along dir until the ray leaves the solid (its thickness there) */
+function depthAlong(Vv, sol, p, dir) {
+  const o = Vv.add(p, Vv.mul(dir, 1e-3)), hits = [];
+  for (const q of sol.polys) {
+    const dn = Vv.dot(q.plane.n, dir); if (Math.abs(dn) < 1e-9) continue;
+    const t = (q.plane.w - Vv.dot(q.plane.n, o)) / dn; if (t <= 1e-6) continue;
+    const x = Vv.add(o, Vv.mul(dir, t)); if (inPoly(Vv, q, x)) hits.push({ t, out: dn > 0 });
+  }
+  hits.sort((a, b) => a.t - b.t); const h = hits.find(x => x.out); return h ? h.t + 1e-3 : 0;
+}
+function inPoly(Vv, q, x) {
+  const n = q.plane.n; let sgn = 0;
+  for (let i = 0; i < q.v.length; i++) { const a = q.v[i].p, b = q.v[(i + 1) % q.v.length].p, c = Vv.dot(Vv.cross(Vv.sub(b, a), Vv.sub(x, a)), n); if (Math.abs(c) < 1e-9) continue; const s = c > 0 ? 1 : -1; if (!sgn) sgn = s; else if (s !== sgn) return false; }
+  return true;
+}
+/* does a ray from p along dir hit any solid within reach? (bounding boxes first) */
+function blockedBy(Vv, bodies, p, dir, reach) {
+  for (const b of bodies) {
+    const bb = b.bb; let t0 = 0, t1 = reach, ok = true;
+    for (let k = 0; k < 3 && ok; k++) { if (Math.abs(dir[k]) < 1e-12) { if (p[k] < bb.min[k] || p[k] > bb.max[k]) ok = false; continue; } let a = (bb.min[k] - p[k]) / dir[k], c = (bb.max[k] - p[k]) / dir[k]; if (a > c) [a, c] = [c, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) ok = false; }
+    if (!ok) continue;
+    for (const q of b.solid.polys) { const dn = Vv.dot(q.plane.n, dir); if (Math.abs(dn) < 1e-9) continue; const t = (q.plane.w - Vv.dot(q.plane.n, p)) / dn; if (t <= 0.05 || t > reach) continue; if (inPoly(Vv, q, Vv.add(p, Vv.mul(dir, t)))) return b; }
+  }
+  return null;
+}
+const rot = (Vv, v, axis, a) => Vv.add(Vv.add(Vv.mul(v, Math.cos(a)), Vv.mul(Vv.cross(axis, v), Math.sin(a))), Vv.mul(axis, Vv.dot(axis, v) * (1 - Math.cos(a))));
+/* how a torch reaches a seam: rays from points along it, round the approach direction */
+function accessOf(ctx, seam, reach = 80) {
+  const Vv = ctx.api.V, bodies = ctx.result.bodies.filter(b => !b.hidden && b.solid && !b.solid.isEmpty()).map(b => ({ id: b.id, solid: b.solid, bb: b.solid.bbox() }));
+  let clear = 0, total = 0; const who = new Map();
+  for (const f of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+    const p0 = Vv.add(Vv.add(seam.O, Vv.mul(seam.e1, seam.L * f)), Vv.mul(seam.approach, 1.5));
+    for (const [a, b] of [[0, 0], [25, 0], [-25, 0], [0, 25], [0, -25]]) {
+      let d = rot(Vv, seam.approach, seam.e1, a * DEG); d = rot(Vv, d, Vv.norm(Vv.cross(seam.e1, seam.approach)), b * DEG); total++;
+      const hit = blockedBy(Vv, bodies, p0, Vv.norm(d), reach); if (!hit) clear++; else who.set(hit.id, (who.get(hit.id) || 0) + 1);
+    }
+  }
+  const share = clear / total, names = [...who.keys()].map(id => (ctx.get(id) || {}).name || id);
+  return { level: share >= 0.6 ? 'open' : share >= 0.2 ? 'restricted' : 'blocked', clear: r2(share), blockers: names };
+}
+/* ISO 6947 position from the weld's axis and the direction the torch comes from (world Z up) */
+function positionOf(seam, fillet) {
+  const z = [0, 0, 1], ax = Math.abs(seam.e1[0] * z[0] + seam.e1[1] * z[1] + seam.e1[2] * z[2]), up = seam.approach[2];
+  if (ax > 0.7) return 'PF';
+  if (up > (fillet ? 0.9 : 0.7)) return 'PA';
+  if (fillet && up > 0.35) return 'PB';
+  if (up < -0.6) return 'PE';
+  if (up < -0.2) return fillet ? 'PD' : 'PE';
+  return fillet ? 'PB' : 'PC';
+}
+
+/* the joint between parts a and b (or the one nearest `near`) */
+function analyze(ctx, args) {
+  const api = ctx.api, Vv = api.V;
+  const A0 = ctx.get(args.a), B0 = ctx.get(args.b);
+  if (!A0 || !B0) throw new Error('give a and b: the two parts to join');
+  const ba = ctx.bodyOf(args.a), bb = ctx.bodyOf(args.b);
+  if (!ba || !bb) throw new Error('both parts need geometry');
+  if (ba.id === bb.id) throw new Error(`${A0.name} and ${B0.name} are one part already (a boolean merged them) — join separate parts`);
+  const groups = contacts(api, ba.solid, bb.solid, args.max_gap == null ? 6 : +args.max_gap);
+  if (!groups.length) throw new Error(`${ctx.get(ba.id).name} and ${ctx.get(bb.id).name} do not touch or face each other within 6 mm — mate them together first`);
+  const joints = [];
+  for (const g of groups) {
+    const c = g.n; let best = null, bl = 0;
+    for (const q of g.B.concat(g.A)) for (let i = 0; i < q.v.length; i++) { const e = Vv.sub(q.v[(i + 1) % q.v.length].p, q.v[i].p), l = Vv.len(e); if (l > bl) { bl = l; best = Vv.mul(e, 1 / l); } }
+    let e1 = Vv.norm(Vv.sub(best, Vv.mul(c, Vv.dot(best, c)))), e2 = Vv.cross(c, e1);
+    let RA = rectOf(Vv, g.A, e1, e2), RB = rectOf(Vv, g.B, e1, e2);
+    let P = { u0: Math.max(RA.u0, RB.u0), u1: Math.min(RA.u1, RB.u1), v0: Math.max(RA.v0, RB.v0), v1: Math.min(RA.v1, RB.v1) };
+    if (P.u1 - P.u0 < 0.5 || P.v1 - P.v0 < 0.3) continue;
+    if (P.v1 - P.v0 > P.u1 - P.u0) { const n1 = e2, n2 = Vv.neg(e1); e1 = n1; e2 = n2; RA = rectOf(Vv, g.A, e1, e2); RB = rectOf(Vv, g.B, e1, e2); P = { u0: Math.max(RA.u0, RB.u0), u1: Math.min(RA.u1, RB.u1), v0: Math.max(RA.v0, RB.v0), v1: Math.min(RA.v1, RB.v1) }; }
+    const size = Math.max(P.u1 - P.u0, P.v1 - P.v0), tol = Math.max(0.05, size * 0.002);
+    /* does each part END here (the contact is its whole face), or does its face carry on? */
+    const areaIn = (polys) => polys.reduce((s, q) => s + polyArea(Vv, q), 0), patch = (P.u1 - P.u0) * (P.v1 - P.v0);
+    const ends = (R, polys) => Math.abs(R.v0 - P.v0) < tol && Math.abs(R.v1 - P.v1) < tol && areaIn(polys) < patch * 1.08 + 1e-6;
+    const aEnds = ends(RA, g.A), bEnds = ends(RB, g.B);
+    const origin = Vv.mul(c, g.w);   /* the contact plane through the origin's projection: the joint frame's origin */
+    const at = (u, v, q = 0) => Vv.add(Vv.add(Vv.add(origin, Vv.mul(e1, u)), Vv.mul(e2, v)), Vv.mul(c, q));
+    const mid = at((P.u0 + P.u1) / 2, (P.v0 + P.v1) / 2);
+    let type, stem = null, base = null;
+    if (aEnds && bEnds) type = 'butt';
+    else if (bEnds) { type = 'tee'; stem = 'b'; base = 'a'; }
+    else if (aEnds) { type = 'tee'; stem = 'a'; base = 'b'; }
+    else type = 'lap';
+    const tA = aEnds ? P.v1 - P.v0 : depthAlong(Vv, ba.solid, mid, Vv.neg(c)), tB = bEnds ? P.v1 - P.v0 : depthAlong(Vv, bb.solid, Vv.add(mid, Vv.mul(c, g.sep)), c);
+    const seams = [];
+    for (const side of ['v1', 'v0']) {
+      const s = side === 'v1' ? e2 : Vv.neg(e2), v = P[side], ext = (R) => side === 'v1' ? R.v1 - P.v1 : P.v0 - R.v0;
+      const aExt = ext(RA), bExt = ext(RB);
+      let kind, y = c, onto = null;
+      if (type === 'butt') kind = 'flush';
+      else if (type === 'tee') { const baseExt = base === 'a' ? aExt : bExt; kind = baseExt > tol ? 'inside' : 'flush'; y = base === 'a' ? c : Vv.neg(c); }
+      else { if (aExt < tol && bExt > tol) { kind = 'inside'; y = Vv.neg(c); onto = 'b'; } else if (bExt < tol && aExt > tol) { kind = 'inside'; y = c; onto = 'a'; } else kind = 'flush'; }
+      const approach = kind === 'inside' ? Vv.norm(Vv.add(s, y)) : s;
+      const seam = { side, s, y, kind, onto, e1, L: P.u1 - P.u0, O: at(P.u0, v), approach };
+      seam.access = accessOf(ctx, seam); seam.position = positionOf(seam, kind === 'inside');
+      seams.push(seam);
+    }
+    if (type === 'tee' && seams.some(x => x.kind === 'flush')) type = 'corner';
+    joints.push({ type, c, e1, e2, origin, rect: P, sep: r2(g.sep), stem, base, tA: r2(tA), tB: r2(tB), length: r1(P.u1 - P.u0), width: r1(P.v1 - P.v0), area: r1(patch), seams, mid, a: ba.id, b: bb.id });
+  }
+  if (!joints.length) throw new Error('the parts only touch along a line or a point — no face to join');
+  let j = joints.reduce((x, y) => (y.area > x.area ? y : x));
+  if (args.near) { const n = args.near; j = joints.reduce((x, y) => (Vv.len(Vv.sub(y.mid, n)) < Vv.len(Vv.sub(x.mid, n)) ? y : x)); }
+  j.others = joints.length - 1;
+  return j;
+}
+
+/* ---------- advice ---------- */
+function materialsOf(ctx, j) {
+  const ka = ctx.material(j.a), kb = ctx.material(j.b);
+  return { ka, kb, A: MAT[ka] || null, B: MAT[kb] || null };
+}
+/* what kind of joint suits these materials (method auto) */
+function methodFor(m) {
+  const { A, B, ka, kb } = m;
+  if (!A || !B) return { method: 'weld', note: !ka || !kb ? 'no material set on one of the parts — assumed carbon steel (set it in Properties → Material for exact advice)' : null, assumed: true };
+  if (A.weld && B.weld) {
+    if (A.cls === B.cls) return { method: 'weld' };
+    if ((A.cls === 'steel' && B.cls === 'stainless') || (A.cls === 'stainless' && B.cls === 'steel')) return { method: 'weld', dissimilar: '309L filler (G 23 12 L Si / ER309LSi) for carbon steel to stainless' };
+    return { method: 'bond', note: `${A.label} cannot be fusion-welded to ${B.label} — bonded (or riveted / bolted); a transition insert (explosion-bonded) is the welded route` };
+  }
+  if ((A.braze || B.braze) && (A.weld || A.braze) && (B.weld || B.braze) && A.cls !== 'aluminium' && B.cls !== 'aluminium') return { method: 'braze' };
+  if (A.cls === 'composite' || B.cls === 'composite') return { method: 'tab' };
+  return { method: 'bond' };
+}
+function processFor(cls, t, duty, pos, length, args) {
+  if (args.process && args.process !== 'auto' && PROC[args.process]) return +args.process;
+  if (cls === 'aluminium') return t < 3 ? 141 : 131;
+  if (cls === 'stainless') return t <= 4 || duty === 'heavy' ? 141 : 135;
+  if (cls === 'titanium') return 141;
+  if (cls === 'cast_iron') return 111;
+  if (duty === 'heavy' && pos === 'PA' && length >= 1000 && t >= 12) return 121;
+  if (t >= 12 && duty !== 'light') return 136;
+  return 135;
+}
+/* shielding gas by process and material (EN ISO 14175) */
+function gasFor(proc, cls, P) {
+  if (proc === 135 && cls === 'stainless') return 'M12 (Ar + 2.5 % CO₂)';
+  if (proc === 141 && cls === 'titanium') return 'I1 (argon), with a trailing shield and back purge';
+  if (proc === 141 && cls === 'stainless') return 'I1 (argon), back purge for full-penetration roots';
+  if ((proc === 131 || proc === 141) && cls === 'aluminium') return 'I1 (argon) or I3 (Ar + He) over 10 mm';
+  return P.gas;
+}
+const aMin = (tmax) => (tmax <= 10 ? 3 : tmax <= 20 ? 4 : tmax <= 30 ? 5 : 6);   /* EN 1011 / EN 1993 practice; AWS D1.1 Table 5.7 is similar */
+
+/* the groove of one part's edge in (r, w): r = depth below the welded surface (0 … −d), w = into the part from the joint face */
+function groove(prep, d, m) {
+  const out = [];
+  if (prep.shape === 'J') {
+    const R = prep.radius, phi = (90 - prep.angle) * DEG, cx = -d + R, n = 8;
+    out.push([-d, -m]); out.push([m, -m]);
+    const T = [cx - R * Math.cos(phi), R * Math.sin(phi)], wEnd = T[1] + (m - T[0]) * Math.tan(prep.angle * DEG);
+    out.push([m, wEnd]); out.push(T);
+    for (let k = n - 1; k >= 1; k--) { const th = Math.PI + phi * k / n; out.push([cx + R * Math.cos(th), -R * Math.sin(th)]); }
+    out.push([-d, 0]);
+    return { cut: out, face: [[-d, 0], ...out.slice(4, -1).reverse(), T, [0, T[1] + (0 - T[0]) * Math.tan(prep.angle * DEG)]] };
+  }
+  const tb = Math.tan(prep.angle * DEG);
+  return { cut: [[-d, -m], [m, -m], [m, (d + m) * tb], [-d, 0]], face: [[-d, 0], [0, d * tb]] };
+}
+const polyArea2 = (P) => { let a = 0; for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; };
+/* the weld metal of a groove seen in its seam's section (p = out of the surface, q = across: part 1 at q ≤ 0, part 2 at q ≥ g) */
+/* a groove face cut off at depth −e (the run stops above a back-gouged root): points below it go, one is interpolated */
+function trimFace(f, e) {
+  if (!(f[0][0] < -e - 1e-9)) return f;
+  const out = []; for (let k = 0; k < f.length; k++) {
+    const [r, w] = f[k]; if (r >= -e - 1e-9) { if (!out.length && k > 0) { const [r0, w0] = f[k - 1], t = (-e - r0) / (r - r0); out.push([-e, w0 + (w - w0) * t]); } out.push([r, w]); }
+  }
+  return out.length >= 2 ? out : [[-e, 0], [0, f[f.length - 1][1]]];
+}
+function grooveBead(t, depthEnd, g, f1, f2, cap, root, flush) {
+  /* f1 / f2: the two groove faces as [r, w] lists from the root up (w into each part); flush: ground level with the surface */
+  if (!root) { f1 = trimFace(f1, depthEnd); f2 = trimFace(f2, depthEnd); }
+  const P = [];
+  if (root) for (let k = 0; k <= 6; k++) { const q = -0.6 + (g + 1.2) * k / 6; P.push([-t - root * Math.sin(Math.PI * k / 6), q]); }
+  if (root) P.push([-t, g]);
+  for (const [r, w] of f2) P.push([r, g + w]);
+  const qB = g + f2[f2.length - 1][1], qA = -f1[f1.length - 1][1];
+  if (flush || !cap) P.push([0, qB], [0, qA]);
+  else { const n = 8, a0 = qB + 1, a1 = qA - 1; P.push([0, qB], [0, a0]); for (let k = 1; k < n; k++) P.push([cap * Math.sin(Math.PI * k / n), a0 + (a1 - a0) * k / n]); P.push([0, a1], [0, qA]); }
+  for (let k = f1.length - 1; k >= 0; k--) P.push([f1[k][0], -f1[k][1]]);
+  if (root) P.push([-t, 0]);
+  return tidy(P);
+}
+/* no repeated points, no points on a straight run (they would give the inset and the booleans needle edges) */
+function tidy(P) {
+  let Q = P.slice();
+  for (let pass = 0; pass < 3; pass++) {
+    const out = [];
+    for (let i = 0; i < Q.length; i++) {
+      const a = out.length ? out[out.length - 1] : Q[(i + Q.length - 1) % Q.length], p = Q[i], b = Q[(i + 1) % Q.length];
+      if (Math.hypot(p[0] - a[0], p[1] - a[1]) < 1e-3) continue;
+      const ux = p[0] - a[0], uy = p[1] - a[1], vx = b[0] - p[0], vy = b[1] - p[1], lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+      if (lv > 1e-9 && Math.abs(ux * vy - uy * vx) / (lu * lv) < 1e-6 && ux * vx + uy * vy > 0) continue;
+      out.push(p);
+    }
+    if (out.length === Q.length) break; Q = out;
+  }
+  return Q;
+}
+const fillet = (z, convex) => convex ? [[0, 0], [z, 0], [z * 0.62, z * 0.62], [0, z]] : [[0, 0], [z, 0], [0, z]];
+const concaveFillet = (r, n = 8) => { const P = [[0, 0], [r, 0]]; for (let k = 1; k < n; k++) { const a = 1.5 * Math.PI - (0.5 * Math.PI) * k / n; P.push([r + r * Math.cos(a), r + r * Math.sin(a)]); } P.push([0, r]); return P; };
+/* a laminate (n plies) over a filler fillet of radius r, legs L1 / L2 onto the two faces */
+function laminate(r, tl, L1, L2, n = 8) {
+  const P = [[L1, 0], [r, 0]];
+  for (let k = 1; k < n; k++) { const a = 1.5 * Math.PI - (0.5 * Math.PI) * k / n; P.push([r + r * Math.cos(a), r + r * Math.sin(a)]); }
+  P.push([0, r], [0, L2], [tl, L2 - tl], [tl, r]);
+  const ri = r - tl; for (let k = 1; k < n; k++) { const a = Math.PI + (0.5 * Math.PI) * k / n; P.push([r + ri * Math.cos(a), r + ri * Math.sin(a)]); }
+  P.push([r, tl], [L1 - tl, tl]);
+  return P;
+}
+
+/* one suggestion: a weld for this joint at this duty */
+function weldOption(j, m, duty, args, meth) {
+  const A = m.A || MAT.steel, B = m.B || MAT.steel, cls = A.cls === 'cast_iron' || B.cls === 'cast_iron' ? 'cast_iron' : A.cls, mat = MAT[cls] || A;
+  const L = j.length, notes = [], why = [], seams = j.seams.filter(s => s.access.level !== 'blocked');
+  const open = (k) => seams.filter(s => s.kind === k);
+  let o = { duty, method: 'weld', joint: j.type, beads: [], cuts: [], gap: 0 };
+  const tS = j.type === 'butt' ? Math.min(j.tA, j.tB) : j.stem ? j[j.stem === 'a' ? 'tA' : 'tB'] : Math.min(j.tA, j.tB);
+  const tBase = j.type === 'butt' ? Math.max(j.tA, j.tB) : j.base ? j[j.base === 'a' ? 'tA' : 'tB'] : Math.max(j.tA, j.tB);
+  const tmin = Math.min(tS, tBase), tmax = Math.max(tS, tBase), aLo = aMin(tmax), aHi = Math.max(aLo, Math.floor(0.7 * tmin * 2) / 2);
+  const angle = mat.vAngle || 60, al = cls === 'aluminium';
+  const quality = { light: 'ISO 5817-D', regular: 'ISO 5817-C', heavy: 'ISO 5817-B' }[duty];
+  if (!seams.length) return { duty, method: 'weld', impossible: true, title: 'No torch access', why: [`neither side of the joint can be reached (blocked by ${[...new Set(j.seams.flatMap(s => s.access.blockers))].join(', ') || 'the parts'}) — weld it before the closing part goes on, add an access hole, or bond it`] };
+  const fillets = (sides, a, intermittent) => {
+    for (const s of sides) o.beads.push({ seam: s, poly: fillet(a * Math.SQRT2, duty === 'regular'), kind: 'fillet' });
+    o.weld = `${sides.length > 1 ? 'double' : 'single'} fillet a${a}${intermittent ? ' intermittent' : ''}`;
+    o.symbol = { sym: 'fillet', both: sides.length > 1, size: 'a' + a, contour: duty === 'heavy' ? null : null, toes: duty === 'heavy' };
+    if (intermittent) {
+      const l = Math.max(40, Math.round(L / 6 / 10) * 10), e = 2 * l, n = Math.max(2, Math.floor((L - l) / e) + 1), s0 = (L - ((n - 1) * e + l)) / 2;
+      o.symbol.length = `${n} × ${l} (${e})`; o.intermittent = { n, l, e }; o.weldLength = n * l * sides.length;
+      for (const b of o.beads) b.segments = Array.from({ length: n }, (_, k) => [s0 + k * e, l]);
+    }
+    else o.weldLength = L * sides.length;
+  };
+  if (j.type === 'tee' || j.type === 'lap' || j.type === 'corner') {
+    const inside = open('inside');
+    if (j.type === 'lap') {
+      const ta = Math.min(j.tA, j.tB), a = clamp(half(duty === 'light' ? 0.3 * ta : 0.5 * ta + (al ? 0.5 : 0)), aLo, Math.max(aLo, half(ta * 0.7)));
+      if (!inside.length) return { duty, method: 'weld', impossible: true, title: 'No reachable lap edge', why: ['both lap edges are blocked'] };
+      fillets(duty === 'light' ? [inside[0]] : inside, a, duty === 'light' && L >= 150);
+      why.push(`lap: fillet${inside.length > 1 && duty !== 'light' ? 's on both edges' : ''} a${a} (≈ ${duty === 'light' ? '0.3' : '0.5'} × the ${ta} mm plate, at least a${aLo} for its thickness)`);
+      const ov = j.width; if (ov < Math.max(25, 5 * ta)) notes.push(`overlap is ${r1(ov)} mm: AWS D1.1 wants at least 5 × t = ${Math.max(25, 5 * ta)} mm`);
+      if (duty === 'heavy') notes.push('lap joints are poor in fatigue (the eccentric load bends the plates) — a butt joint or a double lap is better for dynamic loads');
+      o.prep = { shape: 'none', text: 'none (sheared or sawn edges, deburred)' };
+    } else if (duty === 'light' || (duty === 'regular' && tS <= 25)) {
+      if (!inside.length) {
+        /* corner, flush both sides (rare): a bevel groove from outside */
+        o = Object.assign(o, bevelTee(j, seams.slice(0, 1), tS, duty, angle, false)); why.push('no inside corner to fillet: a partial-penetration bevel groove from outside');
+      } else {
+        const both = duty === 'regular' && inside.length > 1;
+        const a = clamp(half((duty === 'light' ? 0.3 : both ? 0.5 : 0.7) * tS + (al ? 0.5 : 0)), aLo, aHi);
+        fillets(duty === 'light' ? [inside.slice().sort((x, y) => POSF[y.position] - POSF[x.position])[0]] : (both ? inside : [inside[0]]), a, duty === 'light' && L >= 200);
+        why.push(duty === 'light' ? `light duty: one fillet a${a} (0.3 × t = ${r1(0.3 * tS)}, at least a${aLo} for a ${tmax} mm part)${L >= 200 ? ', intermittent' : ''}` : both ? `fillets both sides a${a}: ≈ 0.5 × t gives about the stem's full strength in S235 (EN 1993-1-8)` : `only one side can be reached: one fillet a${a} ≈ 0.7 × t — keep it out of bending about its root`);
+        if (al) why.push('aluminium: +0.5 mm on the throat for the softened heat-affected zone');
+        if (j.type === 'corner') { const out = seams.find(s => s.kind === 'flush'); if (out && duty === 'regular') { o.beads.push({ seam: out, poly: [[0, -1.5], [1, -0.8], [1.2, 0], [1, 0.8], [0, 1.5]], kind: 'seal' }); notes.push('outside corner: a light sealing run along the flush edge (or leave it for appearance)'); } }
+      }
+      o.prep = o.prep || { shape: 'none', text: 'none — square-cut edge, deburred; the stem sits tight on the plate (gap ≤ 1 mm)' };
+    } else {
+      /* full penetration: single or double bevel (K), or J for thick stems */
+      const sidesOk = seams.length;
+      o = Object.assign(o, bevelTee(j, sidesOk > 1 ? seams : seams.slice(0, 1), tS, duty, angle, duty === 'heavy'));
+      why.push(o.fullPen ? `${duty} duty: full penetration — the load passes through the weld, not round an unfused root (fatigue class rises from FAT 36 to FAT 71–80, IIW)` : 'partial penetration');
+      if (sidesOk < 2) notes.push(`only one side can be reached: ${o.backing ? 'a backing strip under the root (fit it before assembly)' : 'the root is welded from one side'}`);
+    }
+  } else if (j.type === 'butt') {
+    /* the main side: the one in the best welding position (and reachable); the other is the back */
+    const t = tS, ranked = seams.slice().sort((x, y) => (POSF[y.position] - POSF[x.position]) || ((x.access.level === 'open' ? 0 : 1) - (y.access.level === 'open' ? 0 : 1))), top = ranked[0], bot = ranked[1] || null;
+    const both = !!bot && seams.length > 1;
+    let shape, s2 = false, pen = 'full';
+    if (duty === 'light') { if (t <= 4) shape = 'I'; else if (t <= 8 && both) { shape = 'I'; s2 = true; } else { shape = 'V'; pen = 'partial'; } }
+    else if (t <= 3) shape = 'I';
+    else if (t <= (duty === 'heavy' ? 12 : 16) || !both) shape = t > 30 ? 'U' : 'V';
+    else { shape = t > 30 && duty === 'heavy' ? 'UU' : 'X'; s2 = true; }
+    const g = shape === 'I' ? (t <= 2 ? 0.5 : Math.min(3, r1(t / 2))) : pen === 'partial' ? 0 : 2;
+    const rf = shape === 'I' ? 0 : pen === 'partial' ? r1(t * 0.4) : shape === 'X' || shape === 'UU' ? 2 : 1.5;
+    const dOne = shape === 'I' ? 0 : s2 ? (t - rf) / 2 : t - rf;
+    const prep = shape === 'U' || shape === 'UU' ? { shape: 'J', angle: 10, radius: 6 } : { shape: 'V', angle: angle / 2 };
+    const backGouge = s2 && duty !== 'light' || (shape !== 'I' && both && duty !== 'light'), backing = shape !== 'I' && !both && duty !== 'light' ? (duty === 'heavy' ? 'MR' : 'M') : null;
+    o.gap = g; o.fullPen = pen === 'full'; o.backing = backing;
+    const sidesPrep = s2 ? [top, bot] : [top];
+    if (shape !== 'I') for (const s of sidesPrep) { o.cuts.push({ part: j.a, seam: s, prep, d: dOne, sign: -1 }); o.cuts.push({ part: j.b, seam: s, prep, d: dOne, sign: 1 }); }
+    const face = (d) => (shape === 'I' ? [[-t, 0], [0, 0]] : groove(prep, d, 1).face);
+    const flush = duty === 'heavy', gouge = !s2 && backGouge && bot && !backing ? { shape: 'V', angle: 30 } : null, gd = 2;
+    /* the top run fills down to the middle (X / double-U), to the back-gouged root, or right through */
+    const topEnd = !o.fullPen ? dOne : s2 ? t / 2 : gouge ? t - gd : t;
+    o.beads.push({ seam: top, kind: 'groove', poly: grooveBead(t, topEnd, g, face(dOne), face(dOne), 1.5, !s2 && o.fullPen && !backing && !gouge ? 1 : 0, flush) });
+    if (s2) o.beads.push({ seam: bot, kind: 'groove', poly: grooveBead(t, t / 2, g, face(dOne), face(dOne), 1.5, 0, flush) });
+    else if (gouge) {
+      /* back-gouged to sound metal, then a sealing run from the back */
+      o.cuts.push({ part: j.a, seam: bot, prep: gouge, d: gd, sign: -1, gouge: true }); o.cuts.push({ part: j.b, seam: bot, prep: gouge, d: gd, sign: 1, gouge: true });
+      o.beads.push({ seam: bot, kind: 'seal', poly: grooveBead(t, gd, g, groove(gouge, gd, 1).face, groove(gouge, gd, 1).face, 1.2, 0, flush) });
+    }
+    if (backing === 'M' && bot) o.beads.push({ seam: top, kind: 'backing', name: 'backing strip', poly: [[-t - 5, -12], [-t, -12], [-t, g + 12], [-t - 5, g + 12]] });
+    const nm = { I: 'square butt', V: pen === 'partial' ? 'single-V (partial penetration)' : 'single-V', X: 'double-V (X)', U: 'single-U', UU: 'double-U' }[shape];
+    o.weld = `${nm} butt${o.fullPen ? ', full penetration' : ''}`;
+    o.prep = { shape, text: shape === 'I' ? `square edges, root gap ${g} mm${s2 ? ', welded from both sides' : ''}` : `${shape === 'U' || shape === 'UU' ? 'U (J-faces) 2 × 10°, root radius 6' : `${angle}° V`}${s2 ? ' both sides' : ''}, root face ${rf} mm, gap ${g} mm${backing ? `, ${backing === 'MR' ? 'removable ceramic' : 'permanent steel'} backing` : ''}`, angle, rootFace: rf, gap: g, machined: shape === 'U' || shape === 'UU' };
+    o.symbol = { sym: shape === 'I' ? 'square' : shape === 'U' || shape === 'UU' ? 'U' : pen === 'partial' ? 'Y' : 'V', both: s2, size: pen === 'partial' ? 's' + r1(t - rf) : '', contour: flush ? 'flat' : null, finish: flush ? 'G' : null, seal: !s2 && backGouge && !!bot, backing };
+    o.weldLength = L;
+    why.push(`${t} mm: ${nm}${pen === 'partial' ? ` (penetration s = ${r1(t - rf)})` : ''} — ISO 9692-${al ? 3 : 1}${shape === 'X' || shape === 'UU' ? ': both sides halve the weld metal and balance distortion' : ''}${shape === 'U' || shape === 'UU' ? ': U uses far less weld metal than V on thick plate (machined)' : ''}`);
+    if (Math.abs(j.tA - j.tB) > 3) notes.push(`thicknesses differ by ${r1(Math.abs(j.tA - j.tB))} mm: taper the thicker plate 1:4 to the thinner (ISO 9692-1 / AWS D1.1)`);
+    if (flush) why.push('ground flush both sides: a butt weld with its cap and root ground off rises to FAT 112 (from 90)');
+  }
+  /* process, position, time and cost */
+  /* the main run's position names the joint; each run deposits at its own position's rate; the worst one sets the ease */
+  const main = o.beads.length ? o.beads[0].seam.position : seams[0].position, pos = o.beads.reduce((w, b) => (POSF[b.seam.position] < POSF[w] ? b.seam.position : w), main);
+  const proc = processFor(cls, tS, duty, main, L, args), P = PROC[proc], share = o.intermittent ? o.intermittent.n * o.intermittent.l / L : 1;
+  const area = o.beads.reduce((s, b) => s + polyArea2(b.poly), 0) * share;
+  const vol = area * L / 1000, mass = vol * mat.rho;
+  const arcMin = o.beads.reduce((s, b) => s + polyArea2(b.poly) * share * L / 1000 * mat.rho / 1000 / (P.rate * POSF[b.seam.position] * (al ? 0.85 : 1)) * 60, 0);
+  const weldMin = arcMin / P.of, passes = Math.max(1, Math.round(area / (proc === 121 ? 60 : proc === 141 ? 12 : 25)));
+  const t = { fit: 3 + 0.4 * L / 100 * (o.gap || o.backing ? 1.5 : 1), prep: 0, weld: weldMin, finish: 0, ndt: 0, preheat: 0 }, ops = [];
+  const prepLen = o.cuts.length * L / 1000;
+  if (o.cuts.length) {
+    const machined = (o.prep || {}).machined, thermal = cls === 'steel' && tS >= 6 && !machined;
+    t.prep = machined ? 15 + 3.5 * prepLen * 1 : thermal ? (2.5 + 1.5) * prepLen + 4 : 6 + 5 * prepLen;
+    ops.push(machined ? `machine the ${(o.prep || {}).shape === 'J' ? 'J' : 'U'} preparation (edge milling / planing)` : thermal ? 'bevel by plasma / oxy-fuel, then grind the faces bright' : `bevel by ${al ? 'router or milling (no thermal cutting)' : 'grinding / milling'}`);
+  } else ops.push('square-cut and deburr the edges');
+  if (cls === 'aluminium') { t.prep += 1 * L / 1000 * 2 + 1; ops.push('remove the oxide with a stainless brush just before welding, degrease'); }
+  if (cls === 'stainless') ops.push('clean with stainless tools only; back-purge full-penetration roots');
+  const tl = (o.beads[0] && o.beads[0].kind === 'groove') ? tS : tmax;
+  if ((cls === 'steel' && tl >= 30) || cls === 'cast_iron') { t.preheat = 10 + 3 * L / 1000; ops.push(cls === 'cast_iron' ? 'preheat 200–300 °C, peen each pass, cool slowly' : 'preheat 75–100 °C (thick section; check the carbon equivalent, EN 1011-2)'); }
+  if (o.symbol && (o.symbol.seal || (o.symbol.both && j.type === 'butt')) && duty !== 'light') { t.finish += 6 * L / 1000; ops.push('back-gouge the root (arc-air or grinding) to sound metal before the second side'); }
+  if (o.symbol && o.symbol.finish === 'G') { t.finish += 6 * L / 1000 * (o.symbol.both ? 2 : 1); ops.push('grind the cap (and root) flush'); }
+  if (o.symbol && o.symbol.toes) { t.finish += 4 * L / 1000 * o.beads.length * 2; ops.push('burr-grind the weld toes (IIW fatigue improvement)'); }
+  if (cls === 'stainless') { t.finish += 4 * L / 1000; ops.push('pickle and passivate the weld zone'); }
+  const ndt = duty === 'light' ? 'VT' : duty === 'regular' ? (o.fullPen ? 'VT + 10 % MT/PT' : 'VT + 10 % MT/PT') : o.fullPen ? (j.type === 'butt' ? 'VT + 100 % UT or RT' : 'VT + 100 % UT') : 'VT + 100 % MT/PT';
+  t.ndt = 1 * L / 1000 + (duty === 'regular' ? 0.5 * L / 1000 + 3 : duty === 'heavy' ? 10 + 6 * L / 1000 : 0);
+  const totalMin = Object.values(t).reduce((a, b) => a + b, 0), rateH = +args.labor_rate || 60;
+  const filler = mass / 1000 * (mat.cost || 5) * 1.3, gas = arcMin * 0.15;
+  const cost = totalMin / 60 * rateH + filler + gas;
+  /* ease: 5 = an apprentice in the flat; 1 = a coded welder overhead */
+  let ease = 5;
+  if (o.cuts.length) ease -= (o.prep && o.prep.machined) ? 1 : 0.5;
+  ease -= { PA: 0, PB: 0, PC: 0.5, PF: 1, PG: 0.5, PD: 1.5, PE: 2 }[pos] || 0;
+  if (o.beads.some(b => b.seam.access.level === 'restricted')) ease -= 1;
+  ease -= P.skill * 0.5; if (o.fullPen) ease -= 0.5; if (duty === 'heavy') ease -= 0.5;
+  ease = clamp(Math.round(ease * 2) / 2, 1, 5);
+  for (const b of o.beads) if (b.seam.access.level === 'restricted') notes.push(`limited torch room on the ${b.seam.side === 'v1' ? 'first' : 'second'} side (${b.seam.access.blockers.join(', ') || 'nearby geometry'}) — a ${proc === 141 ? 'gas-lens TIG torch' : 'slim neck / short stick-out'}; or weld it before fitting ${b.seam.access.blockers[0] || 'the part in the way'}`);
+  if (o.beads.some(b => ['PE', 'PD'].includes(b.seam.position))) notes.push('overhead as modelled — turn the assembly over for this side if it can be handled (flat / horizontal is faster and sounder)');
+  if (meth.dissimilar) notes.push(meth.dissimilar);
+  if (al) notes.push('6xxx alloys lose 30–50 % of their strength in the heat-affected zone — size the joint on the softened strength');
+  if (meth.assumed) notes.push(meth.note || 'no material set: carbon steel assumed');
+  o.symbol = Object.assign({ tail: [String(proc), quality, ndt.replace(/^VT \+ /, '')] }, o.symbol || {});
+  return Object.assign(o, {
+    title: { light: 'Light service', regular: 'Regular service', heavy: 'Heavy service' }[duty],
+    process: { code: proc, name: P.name, filler: meth.dissimilar ? 'G 23 12 L Si (ER309LSi)' : mat.filler, gas: gasFor(proc, cls, P) },
+    position: Object.assign({ code: main, name: POSNAME[main] }, pos !== main ? { worst: pos, worst_name: POSNAME[pos] } : {}), quality, ndt,
+    sizes: { t_stem: tS, t_base: tBase, weld_area_mm2: r1(area), weld_length_mm: r1(o.weldLength || L), passes },
+    metal: { volume_cm3: r2(vol), mass_g: r1(mass) },
+    time_min: { fit_up: r1(t.fit), prep: r1(t.prep), preheat: r1(t.preheat), welding: r1(t.weld), finishing: r1(t.finish), inspection: r1(t.ndt), total: r1(totalMin) },
+    arc_min: r1(arcMin), cost: { total: r2(cost), labour: r2(totalMin / 60 * rateH), filler: r2(filler), gas: r2(gas), rate_per_h: rateH }, ease,
+    steps: ops, why, notes, text: `${o.weld} · ${P.name.split(' ')[0]} ${proc}`
+  });
+}
+/* tee / corner groove: single or double bevel (K), J for thick stems; fills the groove and adds a reinforcing fillet */
+function bevelTee(j, sides, tS, duty, angle, full) {
+  const both = sides.length > 1, J = full && tS > 25, prep = J ? { shape: 'J', angle: 15, radius: 8 } : { shape: 'V', angle: 45 };
+  const rf = full ? (both ? 2 : 1.5) : r1(tS * 0.4), g = full ? 2 : 0, d = full ? (both ? (tS - rf) / 2 : tS - rf) : tS - rf;
+  const backing = full && !both ? (duty === 'heavy' ? 'MR' : 'M') : null;
+  const o = { cuts: [], beads: [], gap: g, fullPen: full, backing };
+  for (const s of sides) {
+    o.cuts.push({ part: j.stem === 'a' ? j.a : j.b, seam: s, prep, d, sign: 1, stem: true });
+    const f = groove(prep, d, 1).face, end = full ? (both ? tS / 2 : tS) : d, h = g + f[f.length - 1][1], zr = Math.max(2, r1(0.25 * tS));
+    const P = [[-end, 0]];
+    if (s.kind === 'inside') P.push([zr, 0], [0, h + zr * 0.6]);
+    else { for (let k = 0; k <= 6; k++) P.push([1.2 * Math.sin(Math.PI * k / 6), -0.5 + (h + 1) * k / 6]); }
+    P.push([0, h]);
+    for (let k = f.length - 1; k >= 0; k--) P.push([f[k][0], g + f[k][1]]);
+    P.push([-end, g]);
+    o.beads.push({ seam: s, kind: 'groove', poly: P.filter((p, i) => { const q = P[(i + P.length - 1) % P.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4; }) });
+  }
+  const zr = Math.max(2, r1(0.25 * tS));
+  o.weld = `${both ? 'double' : 'single'}-${J ? 'J' : 'bevel'}${both && !J ? ' (K)' : ''} ${full ? 'full penetration' : 'partial penetration'} + reinforcing fillet${both ? 's' : ''} a${zr}`;
+  o.prep = { shape: J ? 'J' : both ? 'K' : 'bevel', text: `${J ? 'J 15°, root radius 8' : '45° bevel'}${both ? ' both sides' : ''} on the stem, root face ${rf} mm, gap ${g} mm${backing ? `, ${backing === 'MR' ? 'removable ceramic' : 'permanent'} backing` : ''}`, angle: J ? 15 : 45, rootFace: rf, gap: g, machined: J };
+  o.symbol = { sym: J ? 'J' : full ? 'bevel' : 'HY', both, size: full ? '' : 's' + r1(tS - rf), toes: duty === 'heavy', backing };
+  o.weldLength = j.length * sides.length;
+  return o;
+}
+
+/* bonded, filled and fibre-reinforced joints */
+function adhesiveFor(m, duty) {
+  const c = [m.A ? m.A.cls : 'steel', m.B ? m.B.cls : 'steel'];
+  const has = (k) => c.includes(k);
+  if (has('wood') && c.every(x => x === 'wood')) return duty === 'heavy' ? { name: 'epoxy (gap-filling, marine)', bond: 0.3, tau: 6, cure: '24 h at 20 °C' } : duty === 'regular' ? { name: 'polyurethane (D4) or PVA (D3)', bond: 0.15, tau: 4, cure: '1–4 h clamped, 24 h full' } : { name: 'PVA wood glue (D2/D3)', bond: 0.1, tau: 3, cure: '30–60 min clamped' };
+  if (has('glass')) return { name: 'UV-curing acrylic (glass to metal) or neutral silicone', bond: 0.2, tau: 3, cure: 'seconds (UV) / 24 h' };
+  if (has('elastomer')) return { name: 'cyanoacrylate with polyolefin primer, or contact adhesive', bond: 0.05, tau: 2, cure: 'minutes' };
+  if (has('plastic') || has('thermoset')) {
+    const hard = [m.A, m.B].some(x => x && x.hard), solvent = m.A && m.B && m.A === m.B && m.A.solvent;
+    if (duty === 'light') return solvent ? { name: 'solvent cement (welds the plastic)', bond: 0.05, tau: 6, cure: '1 h handling, 24 h full' } : { name: 'cyanoacrylate (instant)', bond: 0.05, tau: 5, cure: 'seconds–minutes', primer: hard ? 'polyolefin primer (acetal / nylon)' : null };
+    return { name: 'structural acrylic (MMA)', bond: 0.4, tau: duty === 'heavy' ? 8 : 6, cure: '20 min handling, 24 h full', primer: hard ? 'plasma or flame treatment, then primer' : null };
+  }
+  if (has('composite')) return { name: 'toughened epoxy paste (structural)', bond: 0.3, tau: duty === 'heavy' ? 12 : 9, cure: '24 h at 20 °C or 1 h at 80 °C' };
+  if (has('mineral')) return { name: 'epoxy mortar', bond: 1, tau: 3, cure: '24 h' };
+  return duty === 'light' ? { name: '2K epoxy (general)', bond: 0.15, tau: 6, cure: '6–24 h' } : duty === 'regular' ? { name: 'toughened structural epoxy', bond: 0.2, tau: 10, cure: '24 h at 20 °C' } : { name: 'toughened structural epoxy (aerospace grade)', bond: 0.2, tau: 12, cure: '1 h at 120 °C or 7 days at 20 °C' };
+}
+function bondOption(j, m, duty, args, method) {
+  const rateH = +args.labor_rate || 60, L = j.length, notes = [], why = [], steps = [];
+  const tA = j.tA, tB = j.tB, t = Math.min(tA, tB), seams = j.seams.filter(s => s.access.level !== 'blocked'), inside = seams.filter(s => s.kind === 'inside');
+  const o = { duty, method, joint: j.type, beads: [], cuts: [], gap: 0, parts: [] };
+  const comp = [m.A, m.B].some(x => x && x.cls === 'composite'), wood = [m.A, m.B].every(x => x && x.cls === 'wood');
+  const plyT = comp && [m.ka, m.kb].includes('carbon_fibre') ? 0.3 : 0.45, fibre = plyT === 0.3 ? 'carbon 300 g/m² biaxial' : 'glass 450 g/m² biaxial (±45°)';
+  const metalOrPlastic = !comp && !wood;
+  let bondArea = j.area, title = { light: 'Light service', regular: 'Regular service', heavy: 'Heavy service' }[duty];
+  if (method === 'bond' || method === 'braze') {
+    const adh = method === 'braze' ? { name: 'silver braze (Ag 40 %) with flux', bond: 0.08, tau: 100, cure: 'none (brazed)' } : adhesiveFor(m, duty);
+    o.gap = adh.bond; o.adhesive = adh;
+    /* the adhesive layer in the contact area, spew fillets at its edges */
+    o.layer = { thickness: adh.bond };
+    const spew = method === 'braze' ? 0.8 : Math.max(1.5, r1(adh.bond * 6));
+    for (const s of inside) o.beads.push({ seam: s, kind: 'spew', poly: concaveFillet(spew), material: method === 'braze' ? null : 'adhesive', name: 'Spew fillet' });
+    if (j.type === 'butt' && duty !== 'light' && method !== 'braze') {
+      /* butt joints bond badly (peel, small area): straps over the joint */
+      const lo = Math.max(20, r1((duty === 'heavy' ? 20 : 15) * t)), sides = duty === 'heavy' && seams.length > 1 ? seams : [seams[0]], ts = r1(duty === 'heavy' ? Math.max(1, t / 2) : Math.max(1, t * 0.6));
+      for (const s of sides) o.parts.push({ seam: s, kind: 'strap', len: lo, ts, layer: adh.bond });
+      bondArea = sides.length * 2 * lo * L;
+      why.push(`butt joints load an adhesive in peel and give it little area: ${sides.length > 1 ? 'two straps' : 'a strap'} ${ts} mm thick, overlapping ${lo} mm each side (${duty === 'heavy' ? 20 : 15} × t)`);
+      o.symbol = { sym: 'adhesive', both: sides.length > 1, size: `${adh.bond}`, length: `strap ${2 * lo + o.gap}` };
+    } else {
+      o.symbol = { sym: 'adhesive', size: `${adh.bond}`, length: j.type === 'lap' ? `L${r1(j.width)}` : '' };
+      if (j.type === 'lap') { const need = Math.max(12, (duty === 'light' ? 10 : duty === 'regular' ? 15 : 20) * t); why.push(`lap overlap ${r1(j.width)} mm${j.width < need ? ` — at least ${r1(need)} mm (${duty === 'light' ? 10 : duty === 'regular' ? 15 : 20} × t) is the usual guidance` : ' meets the usual 10–20 × t guidance'}`); if (j.width < need) notes.push(`lengthen the overlap to ${r1(need)} mm, or add a second lap`); }
+      if (j.type === 'tee' || j.type === 'corner') { why.push(`tee / corner: the stem's end is bonded, with ${inside.length > 1 ? 'fillets on both sides' : 'a fillet'} of adhesive (spew) to spread the peel load`); if (duty === 'heavy') notes.push('for heavy service add a bonded angle cleat (or rivets / screws as a peel stop) — adhesives are strong in shear, weak in peel'); }
+    }
+    const cap = adh.tau * bondArea / 1000;
+    why.push(`${adh.name}: about ${adh.tau} MPa design shear on ${r1(bondArea)} mm² ≈ ${r1(cap)} kN in shear (not peel)`);
+    const prep = method === 'braze' ? 'clean to bright metal, flux, gap 0.05–0.15 mm (capillary)' : duty === 'light' ? 'degrease (IPA / acetone), abrade P120, degrease again' : duty === 'regular' ? `degrease, ${metalOrPlastic ? 'grit-blast or abrade P80' : 'abrade P80 / remove peel ply'}, degrease${adh.primer ? ', ' + adh.primer : ''}` : `degrease, grit-blast${[m.A, m.B].some(x => x && x.cls === 'aluminium') ? ' + anodize or sol-gel' : ''}${[m.A, m.B].some(x => x && x.cls === 'steel') ? ' + primer / silane' : ''}${comp ? ' (or peel ply)' : ''}, bond within 4 h`;
+    steps.push(prep, method === 'braze' ? 'torch- or furnace-braze, then wash off the flux' : `apply ${adh.name}, bond line ${adh.bond} mm (glass beads or shims keep it), clamp / fixture`, method === 'braze' ? '' : `cure: ${adh.cure}`);
+    const am2 = bondArea / 1e6 * (o.parts.length ? 2 : 1);
+    o.time = { prep: r1(3 + (duty === 'light' ? 20 : duty === 'regular' ? 35 : 60) * am2 * 10), fit: r1(4 + 0.5 * L / 100), apply: r1(3 + 15 * am2 * 10), finishing: r1(1 * L / 100), inspection: r1(duty === 'heavy' ? 10 : 2) };
+    o.weld = method === 'braze' ? `brazed ${j.type}` : `bonded ${j.type}${o.parts.length ? ` with ${o.parts.length > 1 ? 'double straps' : 'a strap'}` : ''}`;
+    o.prep = { shape: 'none', text: prep };
+    o.materialText = adh.name;
+  } else if (method === 'filled' || method === 'tab') {
+    const k = duty === 'light' ? 0.75 : duty === 'regular' ? 1 : 1.5, r = clamp(r1(k * Math.max(t, 4)), 3, 30);
+    const plies = method === 'tab' ? (duty === 'light' ? 2 : Math.max(2, Math.ceil((duty === 'regular' ? 0.5 : 1) * t / plyT))) : 0, tl = r1(plies * plyT), leg = 25 + 10 * Math.max(0, plies - 1) + r;
+    if (j.type === 'butt') {
+      /* a scarfed / V-ground butt filled, and (tab) laminate straps over both faces */
+      const d = r1(t * (duty === 'light' ? 0.5 : 0.8)), prep = { shape: 'V', angle: 35 };
+      const sides = method === 'tab' && duty !== 'light' && seams.length > 1 ? seams : [seams[0]];
+      for (const s of sides) { o.cuts.push({ part: j.a, seam: s, prep, d, sign: -1 }); o.cuts.push({ part: j.b, seam: s, prep, d, sign: 1 }); o.beads.push({ seam: s, kind: 'fill', material: 'filler', poly: grooveBead(t, d, 0, groove(prep, d, 1).face, groove(prep, d, 1).face, 0, 0, true), name: 'Filler' }); }
+      if (method === 'tab') for (const s of sides) o.beads.push({ seam: s, kind: 'tab', material: [m.ka, m.kb].includes('carbon_fibre') ? 'carbon_fibre' : 'gfrp', poly: [[0, -leg], [0, leg], [tl, leg - tl * 2], [tl, -leg + tl * 2]], name: 'Laminate strap' });
+      o.weld = `${method === 'tab' ? 'laminated' : 'filled'} butt (V-ground ${d} mm${method === 'tab' ? `, ${plies} plies each side` : ''})`;
+      o.symbol = method === 'tab' ? { sym: 'tab', both: sides.length > 1, size: `${plies} × ${fibre.split(' ')[1] || ''}`, length: `${2 * leg}` } : { sym: 'filled', size: `V${d}` };
+      why.push(method === 'tab' ? `butt: grind a shallow V (35°) ${d} mm deep, fill, then ${plies} plies of ${fibre} stepped 25 mm wider each, ${r1(2 * leg)} mm overall — about ${duty === 'heavy' ? 'the' : 'half the'} laminate thickness` : `butt: a V-ground groove ${d} mm deep filled with structural filler — for light loads and fairing`);
+    } else {
+      for (const s of inside.length ? (duty === 'light' && method === 'filled' ? [inside[0]] : inside) : [seams[0]]) {
+        o.beads.push({ seam: s, kind: 'fill', material: 'filler', poly: concaveFillet(r), name: 'Filler fillet' });
+        if (method === 'tab') o.beads.push({ seam: s, kind: 'tab', material: [m.ka, m.kb].includes('carbon_fibre') ? 'carbon_fibre' : 'gfrp', poly: laminate(r, tl, leg, leg), name: 'Tabbing' });
+      }
+      o.weld = method === 'tab' ? `filleted and tabbed ${j.type} (R${r}, ${plies} plies ${fibre})` : `filled ${j.type} (fillet R${r})`;
+      o.symbol = method === 'tab' ? { sym: 'tab', both: inside.length > 1, size: `${plies}×`, length: `${r1(leg)} / R${r}` } : { sym: 'filled', both: inside.length > 1 && duty !== 'light', size: `R${r}` };
+      why.push(`filler fillet radius ${r} mm (${k} × t, the usual marine / composite rule)${method === 'tab' ? `, then ${plies} plies of ${fibre} (${tl} mm, ${duty === 'light' ? 'nominal' : duty === 'regular' ? 'about half' : 'about all'} of the ${t} mm panel), first ply ${25 + r} mm onto each face, each ply 10 mm wider` : ''}`);
+    }
+    const area = o.beads.reduce((s2, b) => s2 + polyArea2(b.poly), 0), resinKg = area * L / 1e6 * 1.4;
+    steps.push(comp || method === 'tab' ? 'grind the faces 50 mm each side of the joint (P40–P80) or remove peel ply, vacuum, wipe' : 'abrade and degrease the faces', 'mix filler (epoxy + colloidal silica / microfibres) to peanut-butter consistency, run the fillet with a radiused spatula', method === 'tab' ? `wet out ${plies} plies (shortest first), roll out air, peel ply over` : '', `cure 24 h at 20 °C${method === 'tab' ? ', then trim and sand the ply edges' : ''}`);
+    o.time = { prep: r1(5 + 8 * L / 1000 * (o.beads.length)), fit: r1(3 + 0.3 * L / 100), apply: r1(5 + (method === 'tab' ? 6 * plies : 4) * L / 1000 * Math.max(1, o.beads.length / (method === 'tab' ? 2 : 1))), finishing: r1(4 * L / 1000), inspection: r1(duty === 'heavy' ? 8 : 2) };
+    o.prep = { shape: o.cuts.length ? 'V' : 'none', text: steps[0] };
+    o.materialText = method === 'tab' ? `epoxy + ${fibre}` : 'epoxy structural filler';
+    o.resin_kg = r2(resinKg);
+  }
+  const totalMin = Object.values(o.time).reduce((a, b) => a + b, 0), matCost = method === 'tab' ? (o.resin_kg || 0) * 25 + L / 1000 * 8 : method === 'filled' ? (o.resin_kg || 0) * 20 : (bondArea / 1e6) * 40 + 2;
+  let ease = method === 'braze' ? 3 : method === 'bond' ? (o.parts.length ? 3.5 : 4.5) : method === 'filled' ? 4 : 3;
+  if (duty === 'heavy') ease -= 0.5; if (seams.some(s => s.access.level === 'restricted')) ease -= 1;
+  if ((m.A && m.A.hard) || (m.B && m.B.hard)) notes.push('acetal / nylon / PE / PP are hard to bond: plasma or flame treatment and a polyolefin primer, or design a mechanical joint');
+  if (method === 'bond' && (m.A && m.B && m.A.cls !== m.B.cls)) notes.push('different materials expand differently with heat: a tougher, thicker bond line (PU or toughened epoxy, ≥ 0.3 mm) takes the movement');
+  o.symbol = Object.assign({ tail: [o.materialText || '', { light: 'light', regular: 'regular', heavy: 'heavy' }[duty]] }, o.symbol || {});
+  return Object.assign(o, {
+    title, process: { code: method, name: { bond: 'Adhesive bond', braze: 'Brazing', filled: 'Filled (structural filler)', tab: 'Fibre-reinforced (tabbing)' }[method], filler: o.materialText },
+    position: { code: (seams[0] || {}).position, name: POSNAME[(seams[0] || {}).position] }, quality: duty === 'heavy' ? 'proof-tested / witness coupons' : duty === 'regular' ? 'process control (mix, bond line, cure)' : 'visual',
+    ndt: duty === 'heavy' ? 'tap test / ultrasonic C-scan, witness coupons' : 'visual (squeeze-out all round)',
+    time_min: Object.assign({}, o.time, { total: r1(totalMin) }), cost: { total: r2(totalMin / 60 * rateH + matCost), labour: r2(totalMin / 60 * rateH), materials: r2(matCost), rate_per_h: rateH },
+    ease: clamp(Math.round(ease * 2) / 2, 1, 5), steps: steps.filter(Boolean), why, notes, text: `${o.weld} · ${o.materialText}`,
+    sizes: { t_a: tA, t_b: tB, bond_area_mm2: r1(bondArea) }
+  });
+}
+
+/* the three suggestions */
+function advise(ctx, args) {
+  const j = analyze(ctx, args), m = materialsOf(ctx, j), auto = methodFor(m);
+  const method = !args.method || args.method === 'auto' ? auto.method : args.method;
+  const duties = ['light', 'regular', 'heavy'];
+  const options = {};
+  for (const d of duties) options[d] = method === 'weld' ? weldOption(j, m, d, args, auto) : bondOption(j, m, d, args, method);
+  const summary = jointSummary(ctx, j, m);
+  return { j, m, method, auto, options, summary };
+}
+function jointSummary(ctx, j, m) {
+  const name = (id) => (ctx.get(id) || {}).name || id;
+  return {
+    joint: j.type, parts: [name(j.a), name(j.b)], materials: [m.A ? m.A.label : m.ka || 'not set', m.B ? m.B.label : m.kb || 'not set'],
+    thickness_mm: j.type === 'butt' ? { a: j.tA, b: j.tB } : j.stem ? { stem: j[j.stem === 'a' ? 'tA' : 'tB'], base: j[j.base === 'a' ? 'tA' : 'tB'] } : { a: j.tA, b: j.tB },
+    length_mm: j.length, contact_mm2: j.area, existing_gap_mm: j.sep || 0, other_contacts: j.others || 0,
+    sides: j.seams.map(s => ({ side: s.side === 'v1' ? 1 : 2, kind: s.kind === 'inside' ? 'inside corner' : 'flush / open', access: s.access.level, blocked_by: s.access.blockers.length ? s.access.blockers : undefined, position: `${s.position} (${POSNAME[s.position]})` }))
+  };
+}
+
+/* ---------- applying a suggestion: the operations ---------- */
+function frameAt(ctx, seam, partId, s0, len) {
+  /* world frame: x = s (out of the surface), y = the section's second axis, z along the seam; it covers [s0, s0 + len] */
+  const Vv = ctx.api.V, M4 = ctx.api.M4, x = seam.s, y = seam.y, z = Vv.cross(x, y), along = Vv.dot(z, seam.e1) > 0;
+  const o = Vv.add(seam.O, Vv.mul(seam.e1, along ? s0 : s0 + len));
+  const F = [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, o[0], o[1], o[2], 1];
+  const W = ctx.world(partId); return { rel: M4.mul(M4.inv(W), F), flipZ: !along };
+}
+/* who moves to open the root gap / bond line: the stem of a tee (otherwise b), along the contact normal, by what is still
+   missing — unless the other part hangs off it (then that one moves the other way) */
+function planGap(ctx, j, opt) {
+  const Vv = ctx.api.V;
+  const hangsOff = (x, y) => { const seen = new Set(); let o = ctx.get(x); while (o && o.mate && o.mate.to && o.mate.to !== 'origin' && !seen.has(o.id)) { seen.add(o.id); if (o.mate.to === y) return true; o = ctx.get(o.mate.to); } return false; };
+  let mover = (j.type === 'tee' || j.type === 'corner') && j.stem ? (j.stem === 'a' ? j.a : j.b) : j.b, fixed = mover === j.a ? j.b : j.a;
+  if (hangsOff(fixed, mover)) [mover, fixed] = [fixed, mover];
+  const dirN = mover === j.b ? j.c : Vv.neg(j.c), add = r2(r2(opt.gap || 0) - (j.sep || 0)), mt = (ctx.get(mover) || {}).mate;
+  return { mover, fixed, dirN, add, canMove: !(mt && mt.kind) };
+}
+/* the sections assume the part on the +y side of each seam moved by the gap; shift them when it was the other one */
+function shifter(Vv, j, g, moved) {
+  const posA = g.mover === j.a ? -moved : 0, posB = (j.sep || 0) + (g.mover === j.b ? moved : 0);
+  return (seam) => (Vv.dot(seam.y, j.c) > 0 ? posA : -posB);   /* where the −y part's face now is, along the seam's y */
+}
+/* the adhesive layer's own frame: across the contact patch, its thickness along the contact normal */
+const layerSeam = (Vv, j) => ({ s: j.e2, y: j.c, e1: j.e1, L: j.length, O: Vv.add(j.origin, Vv.mul(j.e1, j.rect.u0)) });
+function applyOps(ctx, args, adv, duty) {
+  const opt = adv.options[duty]; if (!opt || opt.impossible) throw new Error(opt ? opt.why.join('; ') : 'no such duty (light, regular or heavy)');
+  const j = adv.j, Vv = ctx.api.V, ops = [], tag = args.id || ctx.newId('W'), name = (id) => (ctx.get(id) || {}).name || id;
+  const matA = ctx.material(j.a) || 'steel', matB = ctx.material(j.b) || 'steel', weldMat = opt.method === 'weld' ? (MAT[matA] && MAT[matA].weld ? matA : MAT[matB] && MAT[matB].weld ? matB : 'steel') : null;
+  /* 1. the root gap / bond line */
+  const g = planGap(ctx, j, opt), { mover, fixed, add } = g, Bobj = ctx.get(mover);
+  let gapNote = null;
+  if (Math.abs(add) > 1e-3) {
+    const mv = Vv.mul(g.dirN, add), mt = Bobj.mate;
+    if (mt && !mt.kind && !mt.frame && mt.to) {
+      const tc = (ctx.result.conns.get(mt.to) || []).find(c2 => c2.name === mt.a), W = ctx.world(mt.to);
+      if (tc && W) {
+        const n = Vv.norm(ctx.api.M4.dir(W, tc.n)), u = Vv.norm(ctx.api.M4.dir(W, tc.u)), v = Vv.cross(n, u), dn = Vv.dot(mv, n), du = Vv.dot(mv, u), dv = Vv.dot(mv, v), sl = mt.slide || [0, 0];
+        ops.push({ op: 'mate', id: mover, to: mt.to, a: mt.a, b: mt.b, flip: mt.flip, offset: r2((mt.offset || 0) + dn), angle: mt.angle || 0, tilt: mt.tilt || 0, slide: [r2((sl[0] || 0) + du), r2((sl[1] || 0) + dv)] });
+      } else gapNote = 'the root gap was not opened (its mate could not be read) — set it by hand';
+    } else if (mt && mt.frame) { const f = mt.frame.slice(), Wt = ctx.world(mt.to), d = ctx.api.M4.dir(ctx.api.M4.inv(Wt), mv); f[12] += d[0]; f[13] += d[1]; f[14] += d[2]; ops.push({ op: 'mate', id: mover, to: mt.to, frame: f }); }
+    else if (!mt || mt.kind) {
+      if (mt && mt.kind) gapNote = `${name(mover)} is placed by a ${mt.kind} mate — the root gap was not opened`;
+      else { const W = ctx.world(mover); ops.push({ op: 'set', id: mover, at: ctx.opPoint(Vv.add([W[12], W[13], W[14]], mv)), rot: (Bobj.pose || {}).rot || [0, 0, 0] }); }
+    }
+  }
+  const shiftFor = shifter(Vv, j, g, gapNote ? 0 : add), jm = { joint: tag, joins: [j.a, j.b], duty };
+  /* 2. the preparation cut out of each part (attached to it), extended past the ends so the cut is clean */
+  const M = 1;
+  opt.cuts.forEach((c, i) => {
+    const d = c.d, g = groove(c.prep, d, M), poly = g.cut.map(([r, w]) => [r, c.sign < 0 ? -w : w]), fr = frameAt(ctx, c.seam, c.part, -M, c.seam.L + 2 * M);
+    ops.push({ op: 'extrude', id: `${tag}p${i + 1}`, name: `${tag} prep · ${c.gouge ? 'back gouge' : c.prep.shape === 'J' ? 'J' : 'bevel'} ${name(c.part)}`, profile: poly, length: r2(c.seam.L + 2 * M), into: c.part, mode: 'subtract', mate: { to: c.part, frame: fr.rel }, meta: Object.assign({ notes: `${opt.title}: ${opt.prep ? opt.prep.text : 'edge preparation'}` }, jm) });
+  });
+  /* 3. the weld metal / adhesive / filler / laminate, each a part of its own attached to part a */
+  opt.beads.forEach((b, i) => {
+    /* inset by 0.02 mm: the metal is fused to the parts in reality; here it must not share faces with them exactly (booleans
+       and the interference check can't tell coincident faces from overlap) */
+    const mat = b.material || weldMat || 'adhesive', sh = shiftFor(b.seam), raw = b.poly.map(([x, y]) => [x, y + sh]);
+    let poly = raw; try { const ins = ctx.api.K.offsetPolygon(raw, -0.02); if (ins && ins.length === raw.length) poly = ins.map(([x, y]) => [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]); } catch (e) { poly = raw; }
+    const label = `${tag} ${b.name || (opt.method === 'weld' ? (b.kind === 'seal' ? 'sealing run' : b.kind === 'fillet' ? 'fillet weld' : 'groove weld') : b.kind)}`;
+    (b.segments || [[0, b.seam.L]]).forEach(([s0, len], k, all) => {
+      const fr = frameAt(ctx, b.seam, fixed, s0, len);
+      ops.push({ op: 'extrude', id: `${tag}${String.fromCharCode(97 + i)}${all.length > 1 ? k + 1 : ''}`, name: label + (all.length > 1 ? ` ${k + 1}/${all.length}` : ''), profile: poly, length: r2(len), mate: { to: fixed, frame: fr.rel }, material: mat, color: b.kind === 'tab' ? '#c9c79a' : b.kind === 'fill' ? '#e6dcc0' : opt.method === 'weld' ? '#7f868e' : '#e0c36a', meta: Object.assign({ part_no: tag, notes: `${opt.title}: ${opt.weld}` }, jm) });
+    });
+  });
+  /* adhesive layer in the contact area (bonded joints) */
+  if (opt.layer) {
+    const seam = layerSeam(Vv, j), fr = frameAt(ctx, seam, fixed, 0, j.length), sh = shiftFor(seam);
+    const v0 = j.rect.v0, v1 = j.rect.v1;
+    ops.push({ op: 'extrude', id: `${tag}L`, name: `${tag} adhesive layer`, profile: [[v0, sh], [v1, sh], [v1, sh + opt.layer.thickness], [v0, sh + opt.layer.thickness]], length: r2(j.length), mate: { to: fixed, frame: fr.rel }, material: opt.method === 'braze' ? weldMat || 'brass' : 'adhesive', color: '#e0c36a', meta: Object.assign({ part_no: tag, notes: opt.materialText }, jm) });
+  }
+  /* straps over a bonded butt joint */
+  (opt.parts || []).forEach((sp, i) => {
+    const fr = frameAt(ctx, sp.seam, fixed, 0, sp.seam.L), g = opt.gap || 0, lo = sp.len, sh = shiftFor(sp.seam);
+    ops.push({ op: 'extrude', id: `${tag}s${i + 1}`, name: `${tag} strap ${i + 1}`, profile: [[sp.layer, sh - lo], [sp.layer, sh + g + lo], [sp.layer + sp.ts, sh + g + lo], [sp.layer + sp.ts, sh - lo]], length: r2(sp.seam.L), mate: { to: fixed, frame: fr.rel }, material: matA, meta: Object.assign({ part_no: `${tag}-S${i + 1}`, notes: 'bonded strap' }, jm) });
+    ops.push({ op: 'extrude', id: `${tag}s${i + 1}L`, name: `${tag} strap ${i + 1} adhesive`, profile: [[0, sh - lo], [0, sh + g + lo], [sp.layer, sh + g + lo], [sp.layer, sh - lo]], length: r2(sp.seam.L), mate: { to: fixed, frame: fr.rel }, material: 'adhesive', color: '#e0c36a', meta: Object.assign({ notes: 'strap adhesive' }, jm) });
+  });
+  /* 4. the callout: the weld symbol at the middle of the first seam, its leader pointing out of the joint */
+  const s0 = (opt.beads[0] || opt.cuts[0] || { seam: j.seams[0] }).seam, at = Vv.add(Vv.add(s0.O, Vv.mul(s0.e1, s0.L / 2)), Vv.mul(s0.approach, 0.5));
+  ops.push({ op: 'callout', id: `${tag}c`, name: `${tag} ${opt.method === 'weld' ? 'weld symbol' : 'joint note'}`, on: fixed, at: ctx.opPoint(at), dir: s0.approach, along: j.e1, kind: opt.method === 'weld' ? 'weld' : opt.method, symbol: Object.assign({ ref: tag }, opt.symbol), lines: [`${tag} ${opt.title}: ${opt.weld}`, opt.method === 'weld' ? `${opt.process.code} ${opt.process.name} · ${opt.process.filler} · ${opt.quality}` : `${opt.process.name} · ${opt.materialText || ''}`, `prep: ${opt.prep ? opt.prep.text : 'none'}`] });
+  return { ops, gapNote, tag, mover, fixed };
+}
+
+/* ---------- a section through the joint, for the wizard: the parts as cut at mid-seam (the moving one shifted by the
+   gap), the preparation taken out of them and the weld metal / adhesive / laminate put in — 2D, in mm, y up ---------- */
+function sliceSolid(Vv, solid, at, n, P2) {
+  const segs = [];
+  for (const q of solid.polys) {
+    const d = q.v.map(x => Vv.dot(Vv.sub(x.p, at), n)), pts = [];
+    if (d.every(x => Math.abs(x) < 1e-7)) continue;   /* a face lying in the cut plane: its neighbours give the outline */
+    for (let i = 0; i < d.length; i++) {
+      const k = (i + 1) % d.length, a = q.v[i].p, b = q.v[k].p;
+      if (Math.abs(d[i]) < 1e-7) pts.push(a);
+      if ((d[i] > 1e-7 && d[k] < -1e-7) || (d[i] < -1e-7 && d[k] > 1e-7)) pts.push(Vv.add(a, Vv.mul(Vv.sub(b, a), d[i] / (d[i] - d[k]))));
+    }
+    if (pts.length < 2) continue;
+    let A = pts[0], B = pts[1], best = -1;
+    for (let i = 0; i < pts.length; i++) for (let k = i + 1; k < pts.length; k++) { const l = Vv.len(Vv.sub(pts[i], pts[k])); if (l > best) { best = l; A = pts[i]; B = pts[k]; } }
+    if (best > 1e-6) segs.push([P2(A), P2(B)]);
+  }
+  return segs;
+}
+/* chain cut segments into closed outlines (points matched within 1 µm) */
+function chainLoops(segs) {
+  const tol = 1e-3, cell = new Map(), pts = [], idOf = (p) => {
+    const kx = Math.round(p[0] / tol), ky = Math.round(p[1] / tol);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const l = cell.get((kx + dx) + ',' + (ky + dy)); if (l) for (const i of l) if (Math.hypot(pts[i][0] - p[0], pts[i][1] - p[1]) <= tol) return i; }
+    const i = pts.length; pts.push(p); const key = kx + ',' + ky; (cell.get(key) || cell.set(key, []).get(key)).push(i); return i;
+  };
+  const edges = segs.map(([a, b]) => [idOf(a), idOf(b)]).filter(([a, b]) => a !== b), at = new Map();
+  edges.forEach(([a, b], i) => { for (const v of [a, b]) (at.get(v) || at.set(v, []).get(v)).push(i); });
+  const used = new Uint8Array(edges.length), loops = [];
+  for (let s0 = 0; s0 < edges.length; s0++) {
+    if (used[s0]) continue; used[s0] = 1;
+    const start = edges[s0][0], loop = [start]; let cur = edges[s0][1], guard = 0;
+    while (cur !== start && guard++ < edges.length) {
+      loop.push(cur);
+      const nx = (at.get(cur) || []).find(i => !used[i]); if (nx == null) break;
+      used[nx] = 1; cur = edges[nx][0] === cur ? edges[nx][1] : edges[nx][0];
+    }
+    if (cur === start && loop.length >= 3) loops.push(loop.map(i => pts[i]));
+  }
+  return loops;
+}
+/* Sutherland–Hodgman against the window (convex), and Liang–Barsky for the outline strokes */
+function clipPoly(P, w) {
+  let out = P;
+  for (const [k, lim, keepAbove] of [[0, w[0], true], [0, w[2], false], [1, w[1], true], [1, w[3], false]]) {
+    const inp = out; out = []; if (!inp.length) break;
+    const inside = (p) => (keepAbove ? p[k] >= lim : p[k] <= lim);
+    for (let i = 0; i < inp.length; i++) {
+      const a = inp[i], b = inp[(i + 1) % inp.length], ia = inside(a), ib = inside(b);
+      if (ia) out.push(a);
+      if (ia !== ib) { const t = (lim - a[k]) / (b[k] - a[k]), q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; out.push(q); }
+    }
+  }
+  return out.length >= 3 ? out : null;
+}
+function clipSeg(a, b, w) {
+  let t0 = 0, t1 = 1; const dx = b[0] - a[0], dy = b[1] - a[1];
+  for (const [p, q] of [[-dx, a[0] - w[0]], [dx, w[2] - a[0]], [-dy, a[1] - w[1]], [dy, w[3] - a[1]]]) {
+    if (Math.abs(p) < 1e-12) { if (q < 0) return null; continue; }
+    const r = q / p; if (p < 0) { if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; }
+  }
+  return [[a[0] + dx * t0, a[1] + dy * t0], [a[0] + dx * t1, a[1] + dy * t1]];
+}
+function sectionOf(ctx, adv, duty) {
+  const opt = adv.options[duty], j = adv.j, Vv = ctx.api.V;
+  if (!opt || opt.impossible) return null;
+  const g = planGap(ctx, j, opt), moved = g.canMove ? g.add : 0, mv = Vv.mul(g.dirN, moved), shiftFor = shifter(Vv, j, g, moved);
+  /* looking along the seam; world Z up on the page when it lies across the section, otherwise the contact normal */
+  const e1 = j.e1; let up = Vv.sub([0, 0, 1], Vv.mul(e1, e1[2]));
+  if (Vv.len(up) < 0.3) up = j.c; up = Vv.norm(up);
+  const right = Vv.norm(Vv.cross(up, e1)), mid = j.mid;
+  const P2 = (p) => { const d = Vv.sub(p, mid); return [Vv.dot(d, right), Vv.dot(d, up)]; };
+  const seamPt = (seam, x, y) => Vv.add(Vv.add(seam.O, Vv.mul(seam.s, x)), Vv.mul(seam.y, y));
+  const beads = [], cuts = [];
+  for (const b of opt.beads) { const sh = shiftFor(b.seam); beads.push({ kind: b.kind, name: b.name || null, pts: b.poly.map(([x, y]) => P2(seamPt(b.seam, x, y + sh))) }); }
+  for (const c of opt.cuts) { const off = c.part === g.mover ? mv : [0, 0, 0]; cuts.push({ part: c.part, gouge: !!c.gouge, pts: groove(c.prep, c.d, 1).cut.map(([r, w]) => P2(Vv.add(seamPt(c.seam, r, c.sign < 0 ? -w : w), off))) }); }
+  if (opt.layer) { const ls = layerSeam(Vv, j), sh = shiftFor(ls), t = opt.layer.thickness; beads.push({ kind: 'layer', pts: [[j.rect.v0, sh], [j.rect.v1, sh], [j.rect.v1, sh + t], [j.rect.v0, sh + t]].map(([x, y]) => P2(seamPt(ls, x, y))) }); }
+  for (const sp of opt.parts || []) {
+    const sh = shiftFor(sp.seam), gg = opt.gap || 0, lo = sp.len, P = (x, y) => P2(seamPt(sp.seam, x, y));
+    beads.push({ kind: 'strap', pts: [P(sp.layer, sh - lo), P(sp.layer, sh + gg + lo), P(sp.layer + sp.ts, sh + gg + lo), P(sp.layer + sp.ts, sh - lo)] });
+    beads.push({ kind: 'layer', pts: [P(0, sh - lo), P(0, sh + gg + lo), P(sp.layer, sh + gg + lo), P(sp.layer, sh - lo)] });
+  }
+  /* the window: the joint's own metal and cuts, with the parts around them */
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const it of beads.concat(cuts)) for (const [x, y] of it.pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  if (!(x1 > x0)) { x0 = -5; x1 = 5; y0 = -5; y1 = 5; }
+  const tmax = Math.max(j.tA, j.tB, 2), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  let hw = Math.max((x1 - x0) / 2 + Math.max(4, 0.6 * tmax), 1.5 * tmax + 3), hh = Math.max((y1 - y0) / 2 + Math.max(4, 0.6 * tmax), 1.5 * tmax + 3);
+  if (hw < hh * 1.35) hw = hh * 1.35; else hh = Math.max(hh, hw / 1.8);
+  const win = [cx - hw, cy - hh, cx + hw, cy + hh];
+  const parts = [];
+  for (const id of [j.a, j.b]) {
+    const body = ctx.bodyOf(id); if (!body) continue;
+    const off = id === g.mover ? mv : [0, 0, 0], segs = sliceSolid(Vv, body.solid, Vv.sub(mid, off), e1, (p) => P2(Vv.add(p, off)));
+    parts.push({ id, name: (ctx.get(id) || {}).name || id, material: ctx.material(id) || null, mover: id === g.mover && Math.abs(moved) > 1e-3, loops: chainLoops(segs).map(l => clipPoly(l, win)).filter(Boolean), segs: segs.map(([a, b]) => clipSeg(a, b, win)).filter(Boolean) });
+  }
+  return { window: win, parts, cuts: cuts.map(c => Object.assign(c, { pts: clipPoly(c.pts, win) || [] })).filter(c => c.pts.length), beads: beads.map(b => Object.assign(b, { pts: clipPoly(b.pts, win) || [] })).filter(b => b.pts.length), gap: r2(opt.gap || 0), moved: r2(moved), method: opt.method, up: Math.abs(up[2]) > 0.5 ? 'world Z' : 'joint normal' };
+}
+
+/* ---------- the add-on ---------- */
+const DUTY_DOC = 'light (static, low load: smallest weld, one side, intermittent where long), regular (general structural, ISO 5817-C), heavy (dynamic / fatigue / pressure: full penetration, ground, ISO 5817-B, 100 % NDT)';
+const METHOD_DOC = 'auto (weld when the materials weld, otherwise bond, braze or tab), weld, bond (adhesive), braze, filled (structural filler fillet), tab (fibre-reinforced overlay)';
+const ARGS = {
+  a: { default: null, doc: 'first part id (the one the weld metal and the symbol attach to)' },
+  b: { default: null, doc: 'second part id (moved by the root gap / bond line)' },
+  near: { default: null, doc: 'optional [x,y,z] near the joint, when the parts meet in more than one place' },
+  method: { default: 'auto', options: ['auto', 'weld', 'bond', 'braze', 'filled', 'tab'], doc: METHOD_DOC },
+  process: { default: 'auto', options: ['auto', '135', '136', '141', '131', '111', '121'], doc: 'ISO 4063 process number, or auto' },
+  labor_rate: { default: 60, doc: 'labour cost per hour (your currency), for the cost estimate' }
+};
+const __default = {
+  id: 'welding', name: 'Welding & joining', version: '1.0.0',
+  description: 'Suggests and builds welded, brazed, bonded, filled and fibre-reinforced joints between two parts for light, regular and heavy service — edge preparation, root gap, weld metal and ISO 2553 symbol — with time, cost and ease, by ISO 9692 / 2553 / 5817 and AWS D1.1 practice.',
+  types: {},
+  actions: {
+    analyze: {
+      query: true, doc: 'The joint between parts a and b: butt, tee, corner or lap; thicknesses; seam length; for each side whether it is an inside corner, how well a torch reaches it (and what is in the way), and the ISO 6947 welding position.',
+      args: { a: ARGS.a, b: ARGS.b, near: ARGS.near },
+      run(args, ctx) { const j = analyze(ctx, args), m = materialsOf(ctx, j); return { info: Object.assign(jointSummary(ctx, j, m), { method_auto: methodFor(m) }) }; }
+    },
+    advise: {
+      query: true, doc: `Three suggestions for the joint between a and b — ${DUTY_DOC} — each with the joint and its preparation (square, V, X, bevel, K, J, U), root gap and face, process, filler, sizes, passes, weld metal, welding position, time (fit-up, prep, welding, finishing, inspection), cost, ease (1–5) and the reasons. method: ${METHOD_DOC}.`,
+      args: ARGS,
+      run(args, ctx) { const a = advise(ctx, args); return { info: { summary: a.summary, method: a.method, method_auto: a.auto, options: Object.fromEntries(Object.entries(a.options).map(([k, o]) => [k, publicOption(o)])) } }; }
+    },
+    apply: {
+      doc: `Build one suggestion between a and b: cut the edge preparation out of the parts, open the root gap (bond line), place the weld metal (adhesive, filler, laminate, straps) as parts attached to a, and add the ISO 2553 weld symbol callout. duty: ${DUTY_DOC}.`,
+      args: Object.assign({ duty: { default: 'regular', options: ['light', 'regular', 'heavy'], doc: DUTY_DOC } }, ARGS),
+      run(args, ctx) {
+        const a = advise(ctx, args), duty = args.duty || 'regular', r = applyOps(ctx, args, a, duty), o = a.options[duty];
+        return { ops: r.ops, label: `${r.tag}: ${o.weld}`, info: Object.assign({ id: r.tag, summary: a.summary }, publicOption(o), r.gapNote ? { gap_note: r.gapNote } : {}) };
+      }
+    }
+  },
+  /* for the wizard (the host's UI): the same three suggestions with their drawable sections */
+  ui: { advise: (ctx, args) => advise(ctx, args), publicOption: (o) => publicOption(o), section: (ctx, adv, duty) => sectionOf(ctx, adv, duty), symbolText: (o) => symbolText(o) }
+};
+function publicOption(o) {
+  if (o.impossible) return { title: o.title, impossible: true, why: o.why };
+  return { title: o.title, method: o.method, joint: o.joint, weld: o.weld, prep: o.prep, gap_mm: o.gap || 0, full_penetration: o.fullPen || undefined, backing: o.backing || undefined, process: o.process, position: o.position, quality: o.quality, inspection: o.ndt, sizes: o.sizes, weld_metal: o.metal, time_min: o.time_min, cost: o.cost, ease: o.ease, steps: o.steps, why: o.why, notes: o.notes, symbol: o.symbol, iso: symbolText(o), intermittent: o.intermittent };
+}
+/* the weld symbol as one line of text (ISO 2553 order: size, symbol, length) */
+function symbolText(o) {
+  const s = o.symbol || {}, glyph = { fillet: '◺', square: '‖', V: 'V', bevel: '⊿', Y: 'Y', HY: 'K-Y', U: 'U', J: 'J', adhesive: 'ADH', tab: 'TAB', filled: 'FILL' }[s.sym] || s.sym;
+  return [s.size, glyph + (s.both ? ' both sides' : ''), s.length, s.contour === 'flat' ? 'flush' : '', s.finish ? `(${s.finish})` : '', s.backing ? `backing ${s.backing}` : '', s.seal ? '+ sealing run' : '', s.tail && s.tail.filter(Boolean).length ? `< ${s.tail.filter(Boolean).join(' / ')}` : ''].filter(Boolean).join(' ');
+}
+
+return { default: __default };
+})();
+
 __sf3.app = (() => {
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
 const { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } = __sf3.model;
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
+const welding = __sf3.welding.default;
+const { weldSymbolBlockSVG, jointSectionSVG, weldSymbolText } = __sf3.weldsymbol;
 const { drawingSVG, drawingDXF } = __sf3.drawing;
 const { autoConstraints, KINDS: SKETCH_KINDS, expandArcs, arcThrough, arcTangent, arcMid, splinePoints } = __sf3.sketch;
 const { interference, collisions, restBaseline } = __sf3.collide;
@@ -5923,6 +7079,7 @@ const { docDiff, applyDiff, isEmpty, inverse, changedSince, sameDoc } = __sf3.co
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
+registerAddon(welding);
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v === true) e.setAttribute(k, ''); else if (v != null && v !== false) e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
 /* toasts sit at the top of the views (the bottom belongs to the tool bar and the motion drawer); at most three at once */
@@ -5937,6 +7094,8 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  weldwiz: 'M3 20h18M12 20V7M12 20c0-3.2-2.6-5.6-6-5.6M12 20c0-3.2 2.6-5.6 6-5.6M18 3l.9 1.9L21 6l-2.1 1-.9 2-.9-2L15 6l2.1-1.1z',
+  callout: 'M3 21l6-8h12M13 13V7.5l5.5 5.5',
   people: 'M9 11a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.7.8 2.8 2.6 3 5.2',
   pin: 'M9 3h6l-1 6 3 3H7l3-3zM12 12v9',
   wrap: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3zM9 10h6M12 10v6',
@@ -5975,7 +7134,9 @@ const savePrefs = () => { try { localStorage.setItem('sf3.prefs', JSON.stringify
 if (prefs.theme) document.documentElement.setAttribute('data-theme', prefs.theme);
 const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
 views.setTheme(isDark());
-model.on(() => { collisionBase = null; if (views.motion && !anim) { motionPose = null; views.motion = null; views.collide = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
+if (prefs.callouts === false) views.showCallouts = false;
+model.on(() => { weldWizSoon();
+  collisionBase = null; if (views.motion && !anim) { motionPose = null; views.motion = null; views.collide = null; } views.rebuild(); refreshGhost(); views.draw(); renderTree(); renderProps(); save(); syncBar(); if (!$('#motion').hidden && !anim) openMotion(); });
 function apply(ops, label) { try { return model.apply(ops, label); } catch (e) { toast('⚠ ' + e.message, 3200); throw e; } }
 
 /* ---------- tree ---------- */
@@ -5996,13 +7157,15 @@ function subOf(o) {
     case 'sphere': return `Ø${fmt(p.diameter)}`;
     case 'edge': return `${p.style} ${fmt(p.size)}${o._resolved && o._resolved.round ? ' round' : ''} · on ${name(o.into)}`;
     case 'fillet': return `${p.style} ${fmt(p.size)} × ${fmt(p.length)}`;
-    case 'extrude': if (p.shape && p.shape !== 'points') return `${p.shape === 'rect' ? 'rectangle ' + fmt(p.width) + ' × ' + fmt(p.height) + (p.radius ? ' r' + fmt(p.radius) : '') : p.shape === 'slot' ? 'slot ' + fmt(p.width) + ' × ' + fmt(p.height) : (p.shape === 'polygon' ? p.sides + '-gon Ø' : 'circle Ø') + fmt(p.diameter)} · ${fmt(p.length)}${o.into ? ' · cut' : ''}`;
+    case 'extrude': if (o.meta && o.meta.joint) return `${o.meta.joint}${o.meta.duty ? ' ' + o.meta.duty : ''} · ${o.op === 'subtract' ? 'prep cut ' : ''}${fmt(p.length)} mm${o.meta.joins ? ' · ' + o.meta.joins.map(name).join(' + ') : ''}`;
+      if (p.shape && p.shape !== 'points') return `${p.shape === 'rect' ? 'rectangle ' + fmt(p.width) + ' × ' + fmt(p.height) + (p.radius ? ' r' + fmt(p.radius) : '') : p.shape === 'slot' ? 'slot ' + fmt(p.width) + ' × ' + fmt(p.height) : (p.shape === 'polygon' ? p.sides + '-gon Ø' : 'circle Ø') + fmt(p.diameter)} · ${fmt(p.length)}${o.into ? ' · cut' : ''}`;
     /* falls through */
     case 'loft': return `${p.profile.length} pts · ${fmt(p.length)}${(p.sections || []).length ? ' · ' + (p.sections.length + 2) + ' sections' : ''}${(p.guides || []).length ? ' · ' + p.guides.length + ' guide' + (p.guides.length > 1 ? 's' : '') : ''}${p.twist ? ' · ' + p.twist + '°' : ''}`;
     case 'revolve': return `${p.profile.length} pts · ${fmt(p.degrees)}°`;
     case 'sweep': return p.helix ? `coil · ${fmt(p.helix.turns)} turns` : `${p.profile.length} pts · ${p.path.length - 1} segments${p.smooth ? ' · smooth' : ''}${p.twist ? ' · ' + fmt(p.twist) + '° twist' : ''}${p.scale != null && +p.scale !== 1 ? ' · ×' + fmt(p.scale) + ' at end' : ''}`;
     case 'gear': return `${p.internal ? 'ring · ' : ''}m${fmt(p.module)} · ${p.teeth}T · ${p.style}${p.style !== 'spur' && p.helix ? ' ' + p.helix + '°' : ''}`;
     case 'pattern': { const n = [...(model.result.virtual || new Map()).values()].filter(v => v.pattern === o.id && v.source === (o.of || [])[0]).length + 1; return `${p.kind} ×${n} · ${(o.of || []).filter(i => (model.get(i) || {}).type !== 'edge').map(name).join(', ')}`; }
+    case 'callout': return p.symbol ? weldSymbolText(p.symbol) : (p.lines || [])[0] || 'note';
     case 'weld': return `${fmt(p.size)} ${p.profile}${p.all_around ? ' all round' : ''} · ${(o.joins || []).map(name).join(' + ')}`;
     case 'hole': { try { return holeSpec(p).label + (p.through ? ' · through' : ` · ${fmt(p.depth)} deep`); } catch (e) { return p.size + ' ' + p.kind; } }
     case 'instance': return `linked copy of ${name(o.of)}`;
@@ -6016,7 +7179,7 @@ function subOf(o) {
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
   }
 }
-const iconOf = (o) => (o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
+const iconOf = (o) => (o.meta && o.meta.joint ? 'weld' : o.type === 'edge' ? o.params.style : o.type === 'pattern' ? (o.params.kind === 'circular' ? 'circular' : o.params.kind === 'mirror' ? 'mirror' : 'pattern') : ICON[o.type] ? o.type : TYPES[o.type] && TYPES[o.type].addon ? 'addon' : o.type);
 /* ---------- motion: preview joint poses by moving the existing meshes (the model is untouched until you keep a pose) ---------- */
 let motionPose = null;
 let collisionBase = null, lastHit = null;
@@ -6103,14 +7266,14 @@ function runInterference() {
 }
 function closeCheck() { $('#check').hidden = true; views.setHighlights([]); }
 /* the ⋯ / right-click menu of a feature-list row */
-const META = new Set(['edge', 'pattern', 'weld', 'shell']);
+const META = new Set(['edge', 'pattern', 'weld', 'shell', 'callout']);
 function rowMenu(o, r) {
   const m = el('div', { class: 'menu', style: `left:${Math.min(r.left, innerWidth - 230)}px;top:${r.bottom + 4}px` }), idx = model.doc.objects.indexOf(o);
   const item = (t, fn, disabled) => m.append(el('button', { onclick: () => { m.remove(); fn(); }, disabled: disabled ? true : null }, t));
   item('Rename', () => { select(o.id); setTimeout(() => { const i = document.querySelector('#pbody input'); if (i) { i.focus(); i.select(); } }, 30); });
   item(o.suppressed ? 'Unsuppress' : 'Suppress (turn off, keep it)', () => apply([{ op: 'suppress', id: o.id }]));
   if (!['edge', 'pattern'].includes(o.type)) item(o.hidden ? 'Show' : 'Hide', () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]));
-  if (!['edge', 'pattern', 'weld'].includes(o.type)) { item('Duplicate  (Ctrl D)', () => { const r2 = apply([{ op: 'duplicate', id: o.id }])[0]; select(r2.id); }); item('Pattern…  (P)', () => { select(o.id); patternHint(o.id); }); }
+  if (!['edge', 'pattern', 'weld', 'callout'].includes(o.type)) { item('Duplicate  (Ctrl D)', () => { const r2 = apply([{ op: 'duplicate', id: o.id }])[0]; select(r2.id); }); item('Pattern…  (P)', () => { select(o.id); patternHint(o.id); }); }
   if (!META.has(o.type) && !o.into && o.type !== 'instance') item('Insert instance (linked copy)', () => { const r2 = apply([{ op: 'instance', of: o.id }])[0]; select(r2.id); toast('Linked copy: change the original and every instance follows', 2400); });
   const cfg = (model.doc.configs || []).find(c => c.name === model.doc.config);
   if (cfg) { const inCfg = (cfg.suppress || []).includes(o.id); item(inCfg ? `Include in “${cfg.name}”` : `Suppress in “${cfg.name}” only`, () => apply([{ op: 'config', action: 'set', name: cfg.name, suppress: inCfg ? cfg.suppress.filter(x => x !== o.id) : [...(cfg.suppress || []), o.id] }])); }
@@ -6126,7 +7289,9 @@ function treeOrder() {
   if ((prefs.treeMode || 'part') === 'history') return objs.map(o => ({ o, depth: o.into ? 1 : 0 }));
   const byId = new Map(objs.map(o => [o.id, o])), placed = new Set(), out = [];
   const rootOf = (o) => { let c = o; const seen = new Set(); while (c && c.into && byId.has(c.into) && !seen.has(c.id)) { seen.add(c.id); c = byId.get(c.into); } return c; };
-  const ownerOf = (o) => (o.type === 'pattern' ? rootOf(byId.get((o.of || [])[0]) || o) : o.type === 'weld' ? byId.get((o.joins || [])[0]) : o.into ? rootOf(o) : null);
+  /* a joint's weld metal / adhesive / laminate and its symbol sit under the part they are attached to */
+  const jointOwner = (o) => (o.type === 'callout' ? byId.get(o.on) : o.meta && o.meta.joint && o.mate && o.mate.to && byId.has(o.mate.to) ? rootOf(byId.get(o.mate.to)) : null);
+  const ownerOf = (o) => (o.type === 'pattern' ? rootOf(byId.get((o.of || [])[0]) || o) : o.type === 'weld' ? byId.get((o.joins || [])[0]) : o.into ? rootOf(o) : jointOwner(o));
   const kids = (root) => objs.filter(o => o !== root && !placed.has(o.id) && ownerOf(o) && ownerOf(o).id === root.id);
   for (const o of objs) {
     if (placed.has(o.id) || ownerOf(o)) continue;
@@ -6481,7 +7646,7 @@ function renderProps() {
   addToPartSection(o, sec);
   const s1 = sec(TYPES[o.type] ? TYPES[o.type].label : o.type);
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
-  const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
+  const keys = o.type === 'callout' ? [] : o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
     : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'end', 'draft', 'thin', 'twist', 'scale'] : ['length', 'end', 'draft', 'thin', 'open', 'twist', 'scale', 'direction'])
       : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs', 'splines', 'profile2', 'sections', 'guides'].includes(k) && !/^d\d+$/.test(k))
       : o.type === 'drape' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'mode', 'cell'] : ['depth', 'mode', 'cell'])
@@ -6505,6 +7670,8 @@ function renderProps() {
     s1.append(el('div', { class: 'f' }, 'repeats', el('span', null, (o.of || []).map(i => (model.get(i) || {}).name || i).join(', '))), el('div', { class: 'f' }, 'copies', el('span', null, String(new Set(copies.map(c => c.index)).size))));
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'Copies follow the original: change its size and every copy changes. about = {"obj": id, "conn": connector} sets the axis (circular) or plane (mirror).'));
   }
+  if (o.type === 'callout') calloutSection(o, s1);
+  if (o.meta && o.meta.joint) jointPartSection(o, s1);
   if (o.type === 'weld') {
     const r = o._resolved || {};
     s1.append(el('div', { class: 'f' }, 'joins', el('span', null, ...(o.joins || []).map((id, i) => [i ? ' + ' : '', el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(id); } }, (model.get(id) || {}).name || id)]).flat())));
@@ -6529,7 +7696,7 @@ function renderProps() {
     }
   }
   /* placement */
-  if (!['edge', 'pattern', 'weld'].includes(o.type)) {
+  if (!['edge', 'pattern', 'weld', 'callout'].includes(o.type)) {
     const s2 = sec('Placement');
     if (o.mate && o.mate.kind) {
       const m = o.mate, mate = (patch) => apply([Object.assign({}, m, { op: 'mate', id: o.id }, patch)]);
@@ -6590,15 +7757,212 @@ function renderProps() {
     mode.onchange = () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: mode.value }]);
     s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')), el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
   }
-  if (!['edge', 'pattern'].includes(o.type)) massSection(o, sec);
+  if (!['edge', 'pattern', 'callout'].includes(o.type)) massSection(o, sec);
   const s4 = sec('Object');
-  if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
+  if (o.type !== 'edge' && o.type !== 'pattern' && o.type !== 'callout') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
   s4.append(el('div', { class: 'btns' },
-    !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
-    !['pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', title: 'A copy beside it, with its holes and edges', onclick: () => { try { const r = apply([{ op: 'duplicate', id: o.id }])[0]; select(r.id); } catch (e) { /* toast shown */ } } }, 'Duplicate') : null,
+    !['edge', 'pattern', 'weld', 'callout'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
+    !['pattern', 'weld', 'callout'].includes(o.type) ? el('button', { class: 'btn', title: 'A copy beside it, with its holes and edges', onclick: () => { try { const r = apply([{ op: 'duplicate', id: o.id }])[0]; select(r.id); } catch (e) { /* toast shown */ } } }, 'Duplicate') : null,
     !o.into && !META.has(o.type) && model.result.bodies.some(b => b.id === o.id) ? el('button', { class: 'btn', title: 'Hollow this part to an even wall thickness (any shape)', onclick: () => shellHint(o) }, 'Shell…') : null,
     el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
     el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
+}
+/* ---------- weld / join wizard (the welding add-on): pick the seam (or the two parts), say what service the joint is
+   for, compare the three suggestions — preparation, gap, process, position, time, cost, ease and why — and build one:
+   the preparation is cut out of the parts, the gap opened, the weld metal (adhesive, filler, laminate) placed and the
+   ISO 2553 symbol added, all attached to the parts so they follow them ---------- */
+let weldWiz = null, weldWizT = null;
+const DUTY_TEXT = {
+  light: ['Light', 'static, low load — covers, guards, frames that carry little'],
+  regular: ['Regular', 'general structural work, steady loads'],
+  heavy: ['Heavy', 'dynamic or fatigue loading, impact, pressure, lifting']
+};
+const JOINT_TEXT = { tee: 'the end of one part on the face of the other', corner: 'the end of one part at the edge of the other', butt: 'end to end, in line', lap: 'overlapping faces' };
+const TIME_COL = { fit_up: '#7aa2ff', fit: '#7aa2ff', prep: '#e8672c', preheat: '#d93a2b', welding: '#14a394', apply: '#14a394', finishing: '#c9a227', inspection: '#8f8a82' };
+const cap1 = (t) => (t ? String(t)[0].toUpperCase() + String(t).slice(1) : '');
+function startWeldWizard() {
+  if (!ADDONS.get('welding')) { toast('The welding add-on is not loaded'); return; }
+  const b = selected && model.bodyContaining(selected), o = b && model.get(b.id);
+  setTool('weld-wiz', o && !META.has(o.type) ? b.id : null);
+}
+function weldWizHint() {
+  const a = tool && tool.data.a && model.get(tool.data.a);
+  hint(a ? `Weld wizard: now click the part to join to ${a.name} (or the seam between them)` : 'Weld wizard: click the seam where two parts meet — or click one part, then the other', [['Cancel', () => setTool(null)]]);
+}
+/* the part the click is next to: the inside-corner seam under it, else the nearest other part within a few mm */
+function partNear(pk, only) {
+  const R = model.result, A = R.bodies.find(b => b.id === pk.id); if (!A) return null;
+  const s = seamNear(pk); if (s && (!only || s.other === only) && s.dist <= 4) return { other: s.other, point: s.point, dist: s.dist, seam: true };
+  let best = null;
+  for (const B of R.bodies) {
+    if (B.id === A.id || B.hidden || B.virtual || B.weld || !model.get(B.id) || (only && B.id !== only)) continue;
+    const bb = B.solid.bbox(); let d2 = 0;
+    for (let k = 0; k < 3; k++) { const v = pk.point[k] < bb.min[k] ? bb.min[k] - pk.point[k] : pk.point[k] > bb.max[k] ? pk.point[k] - bb.max[k] : 0; d2 += v * v; }
+    const d = Math.sqrt(d2); if (!best || d < best.dist) best = { other: B.id, point: pk.point, dist: d };
+  }
+  return best;
+}
+function weldWizClick(pk) {
+  const t = tool, R = model.result;
+  if (!pk) { toast('Click on a part, near the joint'); return; }
+  if (R.virtual && R.virtual.has(pk.id)) { toast('That is a pattern copy — join the original'); return; }
+  if (!R.bodies.some(b => b.id === pk.id) || !model.get(pk.id)) { toast('Click on a part'); return; }
+  if (!t.data.a) {
+    const n = partNear(pk);
+    if (n && (n.seam || n.dist <= 1.5) && openWeldWizard(pk.id, n.other, n.point, true)) { setTool(null); return; }
+    t.data.a = pk.id; select(pk.id); weldWizHint(); return;
+  }
+  if (pk.id === t.data.a) { toast('Now click the other part'); return; }
+  const a = t.data.a, n = partNear(pk, a);
+  setTool(null); openWeldWizard(a, pk.id, n && n.dist <= 4 ? n.point : null);
+}
+function openWeldWizard(a, b, near, soft) {
+  const prev = weldWiz;
+  weldWiz = { a, b, near: near || null, method: prev ? prev.method : 'auto', process: prev ? prev.process : 'auto', rate: +prefs.weldRate || 60, duty: prefs.weldDuty || 'regular', applied: null, min: false };
+  computeWeldWiz();
+  if (soft && weldWiz.err) { weldWiz = prev; return false; }
+  renderWeldWizard(); syncBar(); return true;
+}
+function closeWeldWizard() { weldWiz = null; clearTimeout(weldWizT); $('#weldwiz').hidden = true; if (tool && tool.name === 'weld-wiz') setTool(null); syncBar(); }
+const weldWizArgs = () => { const w = weldWiz; return { a: w.a, b: w.b, near: w.near || undefined, method: w.method, process: w.process, labor_rate: w.rate }; };
+function computeWeldWiz() {
+  const w = weldWiz; if (!w) return;
+  try { w.adv = ADDONS.get('welding').ui.advise(model.addonContext(), weldWizArgs()); w.err = null; }
+  catch (e) { w.adv = null; w.err = e.message; }
+}
+/* the model changed (a material set here, an undo, someone else's edit): advise again, unless a suggestion was just built */
+function weldWizSoon() {
+  if (!weldWiz) return; clearTimeout(weldWizT);
+  weldWizT = setTimeout(() => {
+    const w = weldWiz; if (!w) return;
+    if (!model.get(w.a) || !model.get(w.b)) { closeWeldWizard(); return; }
+    if (w.applied && !model.doc.objects.some(o => (o.meta && o.meta.joint === w.applied.tag) || o.id === w.applied.tag + 'c')) w.applied = null;
+    if (!w.applied) computeWeldWiz();
+    renderWeldWizard();
+  }, 60);
+}
+function deleteJoint(tag) {
+  const ids = model.doc.objects.filter(o => (o.meta && o.meta.joint === tag) || (o.type === 'callout' && o.params.symbol && o.params.symbol.ref === tag)).map(o => o.id);
+  if (!ids.length) return;
+  apply(ids.map(id => ({ op: 'delete', id })), `Delete joint ${tag}`); select(null);
+  toast(`Joint ${tag} removed (its weld metal, cuts and symbol). A root gap it opened stays — undo to put the parts back.`, 3600);
+}
+function applyWeldDuty(duty) {
+  const w = weldWiz; if (!w || !w.adv) return;
+  const o = w.adv.options[duty], nm = (id) => (model.get(id) || {}).name || id;
+  let r; try { r = apply([{ op: 'addon', addon: 'welding', action: 'apply', args: Object.assign(weldWizArgs(), { duty }) }], `${DUTY_TEXT[duty][0]} service ${o.weld}: ${nm(w.a)} + ${nm(w.b)}`)[0]; } catch (e) { return; }
+  const info = (r && r.info) || {}, tag = info.id;
+  w.applied = { tag, duty, weld: o.weld, title: o.title, gapNote: info.gap_note || null };
+  w.duty = duty; prefs.weldDuty = duty; savePrefs();
+  const first = model.get(tag + 'a') || model.get(tag + 'a1') || model.get(tag + 'c');
+  if (first) select(first.id);
+  renderWeldWizard(); syncBar();
+  toast(`${tag}: ${o.weld} built — ${o.cuts.length ? 'preparation cut, ' : ''}${o.gap ? (o.method === 'weld' ? 'root gap' : 'bond line') + ' opened, ' : ''}${o.method === 'weld' ? 'weld metal' : 'joint material'} and symbol added`, 3400);
+}
+function renderWeldWizard() {
+  const box = $('#weldwiz'), w = weldWiz; if (!w) { box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = ''; box.classList.toggle('min', !!w.min);
+  const nm = (id) => (model.get(id) || {}).name || id;
+  box.append(el('div', { class: 'wwhead' }, el('b', null, 'Weld / join wizard'), el('span', { class: 'wwparts' }, nm(w.a), el('i', null, '  ⟷  '), nm(w.b)), el('span', { class: 'sp' }),
+    el('button', { class: 'btn', title: 'Pick other parts, or another seam between these', onclick: () => setTool('weld-wiz') }, 'Pick again'),
+    w.applied ? null : el('button', { class: 'btn', title: 'Swap the parts: the first carries the weld metal and the symbol, the other moves to open the gap', onclick: () => { [w.a, w.b] = [w.b, w.a]; computeWeldWiz(); renderWeldWizard(); } }, 'Swap'),
+    el('button', { class: 'btn', onclick: () => { w.min = !w.min; renderWeldWizard(); } }, w.min ? 'Show ▴' : 'Minimise ▾'),
+    el('button', { class: 'chain', title: 'Close (Esc)', 'aria-label': 'Close the weld wizard', onclick: closeWeldWizard }, '×')));
+  if (w.min) return;
+  if (w.err) { box.append(el('div', { class: 'warnline' }, w.err), el('div', { class: 'note' }, 'The wizard joins two separate parts that touch, or face each other across a gap of up to 6 mm. Mate them together first, then click the seam where they meet.')); return; }
+  const adv = w.adv, S = adv.summary, j = adv.j, th = S.thickness_mm;
+  /* the joint as found */
+  const chips = el('div', { class: 'wwchips' },
+    el('span', { class: 'wwchip', title: JOINT_TEXT[S.joint] || '' }, el('b', null, cap1(S.joint) + ' joint'), ' · ' + (JOINT_TEXT[S.joint] || '')),
+    el('span', { class: 'wwchip' }, th.stem != null ? `stem ${fmt(th.stem)} mm on ${fmt(th.base)} mm` : `${fmt(th.a)} mm + ${fmt(th.b)} mm`),
+    el('span', { class: 'wwchip' }, `seam ${fmt(S.length_mm)} mm`),
+    S.existing_gap_mm ? el('span', { class: 'wwchip' }, `gap now ${fmt(S.existing_gap_mm)} mm`) : null,
+    S.other_contacts ? el('span', { class: 'wwchip bad', title: 'The parts meet in more than one place: this is the largest. Pick again and click nearer the one you mean.' }, `${S.other_contacts} more place${S.other_contacts > 1 ? 's' : ''} where they meet`) : null,
+    ...S.sides.map(sd => el('span', { class: 'wwchip' + (sd.access === 'blocked' ? ' bad' : ''), title: sd.blocked_by ? 'in the way: ' + sd.blocked_by.join(', ') : 'torch access checked with rays from along the seam' }, `side ${sd.side}: ${sd.kind} · torch ${sd.access}${sd.blocked_by ? ' (' + sd.blocked_by.slice(0, 2).join(', ') + ')' : ''} · ${sd.position}`)));
+  box.append(chips);
+  /* what to factor in: the materials, the method, the process, the labour rate */
+  const matSel = (id) => materialSelect(((model.get(id) || {}).meta || {}).material || '', model.doc.material ? `model default (${(MATERIALS[model.doc.material] || {}).name || model.doc.material})` : 'not set — steel assumed', v => apply([{ op: 'set', id, meta: { material: v } }], `${nm(id)}: material`));
+  const meth = el('select', null, ...[['auto', `Auto — by the materials (${adv.auto.method})`], ['weld', 'Weld (fusion)'], ['bond', 'Bond (adhesive)'], ['braze', 'Braze'], ['filled', 'Filled (structural filler fillet)'], ['tab', 'Fibre-reinforced (tabbing / laminate)']].map(([v, t]) => el('option', { value: v, selected: w.method === v }, t)));
+  meth.onchange = () => { w.method = meth.value; computeWeldWiz(); renderWeldWizard(); };
+  const proc = el('select', { disabled: adv.method !== 'weld' ? true : null }, ...[['auto', 'Auto — by material, thickness, position'], ['135', '135 MAG / GMAW'], ['136', '136 FCAW flux-cored'], ['131', '131 MIG (aluminium)'], ['141', '141 TIG / GTAW'], ['111', '111 MMA / stick'], ['121', '121 SAW submerged arc']].map(([v, t]) => el('option', { value: v, selected: String(w.process) === v }, t)));
+  proc.onchange = () => { w.process = proc.value; computeWeldWiz(); renderWeldWizard(); };
+  const rate = el('input', { type: 'number', min: 1, step: 1, value: w.rate, inputmode: 'decimal' });
+  rate.addEventListener('keydown', e => e.stopPropagation());
+  rate.onchange = () => { const v = +rate.value; if (v > 0) { w.rate = v; prefs.weldRate = v; savePrefs(); computeWeldWiz(); renderWeldWizard(); } };
+  box.append(el('div', { class: 'wwin' }, field(nm(w.a).slice(0, 14), matSel(w.a)), field(nm(w.b).slice(0, 14), matSel(w.b)), field('joint by', meth), field('process', proc), field('labour / h', rate)));
+  const mnote = adv.method !== adv.auto.method && w.method !== 'auto' ? `You chose ${adv.method}; by the materials it would be ${adv.auto.method}.` : adv.auto.note || adv.auto.dissimilar || null;
+  if (mnote) box.append(el('div', { class: 'note' }, mnote));
+  /* the service question */
+  const seg = el('div', { class: 'seg' }, ...['light', 'regular', 'heavy'].map(d => el('button', { class: w.duty === d ? 'on' : '', onclick: () => { w.duty = d; prefs.weldDuty = d; savePrefs(); renderWeldWizard(); } }, DUTY_TEXT[d][0])));
+  box.append(el('div', { class: 'wwq' }, el('b', null, 'What service is this joint for?'), seg, el('span', { class: 'note' }, DUTY_TEXT[w.duty][1] + ' — the suggestion for it is outlined; compare all three.')));
+  if (w.applied) {
+    const A = w.applied;
+    box.append(el('div', { class: 'wwdone' }, el('span', { class: 'ok' }, '✓'), el('span', null, `Built ${A.tag}: ${A.title} — ${A.weld}.${A.gapNote ? ' ' + A.gapNote + '.' : ''}`),
+      el('button', { class: 'btn', onclick: () => { const f = model.get(A.tag + 'c'); if (f) select(f.id); } }, 'Select the symbol'),
+      el('button', { class: 'btn', onclick: () => $('#undo').click() }, 'Undo (try another)'),
+      el('button', { class: 'btn pri', onclick: closeWeldWizard }, 'Done')));
+  }
+  box.append(el('div', { class: 'wwcards' }, ...['light', 'regular', 'heavy'].map(d => weldCard(d, adv.options[d], adv))));
+  box.append(el('div', { class: 'note' }, 'Suggestions follow ISO 9692-1/-3 (preparations), ISO 2553 (symbols), ISO 5817 (quality levels), ISO 4063 (processes), ISO 6947 (positions), AWS D1.1 minimum fillet and lap sizes, EN 1993-1-8 throats and IIW fatigue practice; bonded and laminated joints follow adhesive-maker and marine FRP practice. Times and costs are estimates for planning. Check against your design code, the WPS and the procedure qualification before production.'));
+}
+function weldCard(duty, o, adv) {
+  const w = weldWiz, W = ADDONS.get('welding').ui, [title, blurb] = DUTY_TEXT[duty];
+  const card = el('div', { class: 'wwcard' + (w.duty === duty ? ' pick' : '') });
+  const ease = o.impossible ? null : Math.round(o.ease);
+  card.append(el('div', { class: 'wwct' }, el('b', null, title + ' service'), o.impossible ? null : el('span', { class: 'ease', title: 'ease of making it: 5 = an apprentice in the flat position, 1 = a coded welder overhead' }, '●'.repeat(ease) + '○'.repeat(5 - ease) + ' ' + fmt(o.ease))));
+  card.append(el('div', { class: 'wwduty' }, blurb));
+  if (o.impossible) { card.append(el('div', { class: 'warnline' }, o.title), el('ul', { class: 'why' }, ...o.why.map(x => el('li', null, x)))); return card; }
+  const pub = W.publicOption(o);
+  card.append(el('div', { class: 'wwbig' }, el('span', null, el('b', null, fmt(o.time_min.total)), ' min'), el('span', null, el('b', null, fmt(o.cost.total)), ` at ${fmt(o.cost.rate_per_h)} / h`)));
+  card.append(el('div', { class: 'wwweld' }, cap1(o.weld)));
+  const sec = el('div', { class: 'wwsec' });
+  try { sec.innerHTML = jointSectionSVG(W.section(model.addonContext(), adv, duty), { width: 280, height: 160, dark: isDark(), id: 'wws' + duty, label: 'section through the joint: ' + o.weld }); } catch (e) { sec.append(el('div', { class: 'note' }, 'no section: ' + e.message)); }
+  const sym = el('div', { class: 'wwsym' }); sym.innerHTML = weldSymbolBlockSVG(o.symbol, { scale: 3.6, label: pub.iso });
+  card.append(sec, sym, el('div', { class: 'mono wwiso' }, pub.iso));
+  const weld = o.method === 'weld', rows = [
+    ['prep', o.prep && o.prep.text],
+    [weld ? 'root gap' : 'bond line', o.gap ? fmt(o.gap) + ' mm' : null],
+    ['backing', o.backing ? (o.backing === 'MR' ? 'removable (ceramic) backing' : 'permanent backing strip') : null],
+    ['process', weld ? `${o.process.code} ${o.process.name}` : o.process.name],
+    [weld ? 'filler' : 'material', o.process.filler],
+    ['gas', o.process.gas],
+    ['position', o.position && o.position.code ? `${o.position.code} ${o.position.name}${o.position.worst ? ` · back side ${o.position.worst} ${o.position.worst_name}` : ''}` : null],
+    ['quality', o.quality], ['inspection', o.ndt],
+    ['intermittent', o.intermittent ? `${o.intermittent.n} × ${o.intermittent.l} mm at ${o.intermittent.e} mm pitch` : null],
+    [weld ? 'weld metal' : 'size', o.metal ? `${fmt(o.metal.mass_g)} g · ${fmt(o.metal.volume_cm3)} cm³ · ${o.sizes.passes} pass${o.sizes.passes > 1 ? 'es' : ''}` : o.resin_kg ? `${fmt(o.resin_kg)} kg resin / filler` : o.sizes && o.sizes.bond_area_mm2 ? `bond area ${fmt(o.sizes.bond_area_mm2)} mm²` : null],
+    ['weld length', o.sizes && o.sizes.weld_length_mm ? fmt(o.sizes.weld_length_mm) + ' mm' : null]
+  ].filter(([, v]) => v != null && v !== '');
+  card.append(el('dl', { class: 'wwdl' }, ...rows.flatMap(([k, v]) => [el('dt', null, k), el('dd', null, String(v))])));
+  /* time: where the minutes go */
+  const tm = Object.entries(o.time_min).filter(([k, v]) => k !== 'total' && v > 0), tot = tm.reduce((s2, [, v]) => s2 + v, 0) || 1;
+  card.append(el('div', { class: 'wwbar', title: 'time per joint' }, ...tm.map(([k, v]) => el('i', { style: `width:${(v / tot * 100).toFixed(1)}%;background:${TIME_COL[k] || '#999'}`, title: `${label(k)} ${fmt(v)} min` }))));
+  card.append(el('div', { class: 'wwleg' }, ...tm.map(([k, v]) => el('span', null, el('i', { style: `background:${TIME_COL[k] || '#999'}` }), `${label(k)} ${fmt(v)}`))));
+  const c = o.cost; card.append(el('div', { class: 'note' }, `cost: labour ${fmt(c.labour)}${c.filler != null ? ` · filler ${fmt(c.filler)}` : ''}${c.gas != null ? ` · gas ${fmt(c.gas)}` : ''}${c.materials != null ? ` · materials ${fmt(c.materials)}` : ''}`));
+  const det = (cls, t, items, ordered) => (items && items.length ? el('details', { class: cls }, el('summary', null, `${t} (${items.length})`), el(ordered ? 'ol' : 'ul', null, ...items.map(x => el('li', null, x)))) : null);
+  card.append(...[det('', 'Why this', o.why), det('notes', 'Watch out', o.notes), det('', 'Steps', o.steps, true)].filter(Boolean));
+  card.append(el('button', { class: 'btn' + (w.duty === duty ? ' pri' : ''), disabled: w.applied ? true : null, title: w.applied ? 'Undo the one built to try another' : 'Cut the preparation, open the gap, place the weld metal and add the symbol', onclick: () => applyWeldDuty(duty) }, `Build ${title.toLowerCase()}`));
+  return card;
+}
+/* Properties for a weld symbol / joint note */
+function calloutSection(o, s1) {
+  const p = o.params, on = model.get(o.on), tag = p.symbol && p.symbol.ref;
+  if (p.symbol) { const d = el('div', { class: 'wwsym' }); d.innerHTML = weldSymbolBlockSVG(p.symbol, { scale: 3.4 }); s1.append(d, el('div', { class: 'mono' }, weldSymbolText(p.symbol))); }
+  for (const t of p.lines || []) s1.append(el('div', { class: 'note' }, t));
+  s1.append(el('div', { class: 'f' }, 'labels', on ? el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(on.id); } }, on.name) : el('span', { class: 'warnline' }, 'its part was deleted')));
+  const parts = tag ? model.doc.objects.filter(x => x.meta && x.meta.joint === tag) : [], links = [];
+  parts.forEach((x, i) => { if (i) links.push(', '); links.push(el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(x.id); } }, x.name)); });
+  if (parts.length) s1.append(el('div', { class: 'f' }, 'joint', el('span', null, ...links)));
+  s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show symbol' : 'Hide symbol'), tag && parts.length ? el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint') : null));
+  s1.append(el('div', { class: 'note' }, 'ISO 2553 (system A): a symbol on the solid reference line is on the arrow side, on the dashed line the other side; the tail carries process, quality level and inspection. It moves with the part it labels.'));
+}
+/* Properties for a joint's weld metal, adhesive, laminate, strap or preparation cut */
+function jointPartSection(o, s1) {
+  const tag = o.meta.joint, c = model.doc.objects.find(x => x.type === 'callout' && x.params.symbol && x.params.symbol.ref === tag), kids = [`${tag}${o.meta.duty ? ' · ' + o.meta.duty + ' service' : ''}`];
+  const joins = (o.meta.joins || []).filter(id => model.get(id));
+  if (joins.length) { kids.push(' · '); joins.forEach((id, i) => { if (i) kids.push(' + '); kids.push(el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(id); } }, model.get(id).name)); }); }
+  s1.append(el('div', { class: 'f' }, 'joint', el('span', null, ...kids)));
+  if (o.meta.notes) s1.append(el('div', { class: 'note' }, o.meta.notes));
+  s1.append(el('div', { class: 'btns' }, c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
 }
 /* ---------- add-on action forms (right panel) ---------- */
 let addonForm = null;
@@ -6659,6 +8023,7 @@ function syncBar() {
 
   const cs = $('#cfgSel'), cfgs = model.doc.configs || [];
   cs.hidden = !cfgs.length; if (cfgs.length) { cs.innerHTML = ''; cs.append(el('option', { value: '' }, 'Default'), ...cfgs.map(c => el('option', { value: c.name, selected: model.doc.config === c.name ? true : null }, c.name))); }
+  $('#weldWizBtn').classList.toggle('on', !!(tool && tool.name === 'weld-wiz') || !!weldWiz);
   $('#sectionBtn').classList.toggle('on', !!views.section); $('#motionBtn').classList.toggle('on', !$('#motion').hidden); $('#checkBtn').classList.toggle('on', !$('#check').hidden);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
@@ -6681,6 +8046,7 @@ const VIEW = {
   dims: () => { views.showDims = !views.showDims; syncBar(); views.draw(); },
   explode: () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); },
   cog: () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); },
+  callouts: () => { views.showCallouts = views.showCallouts === false; prefs.callouts = views.showCallouts; savePrefs(); views.draw(); },
   theme: () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); },
   zoom: (k) => { const ps = views.panes(), o = ps.find(q => q.id !== '3d'); if (o) views.zoomOrtho(o, o.x + o.w / 2, o.y + o.h / 2, k); if (ps.some(q => q.id === '3d')) views.zoom3d(k); views.draw(); }
 };
@@ -6692,12 +8058,13 @@ $('#viewBtn').onclick = (e) => {
   for (const [l, label, key] of [['4', 'All four views', '0'], ['front', 'FRONT only', '1'], ['top', 'TOP only', '2'], ['right', 'RIGHT only', '3'], ['3d', '3D only', '4']]) item(label, views.layout === l, () => VIEW.layout(l), key);
   item('Fit everything', null, () => views.fitAll(), 'F'); item('Zoom in', null, () => VIEW.zoom(1.25), 'wheel'); item('Zoom out', null, () => VIEW.zoom(0.8), 'wheel');
   m.append(el('div', { class: 'mh' }, 'Show'));
-  item('Hidden lines (dashed)', views.showHidden, VIEW.hidden, 'H'); item('Dimensions', views.showDims, VIEW.dims, 'D'); item('Pulled apart (exploded)', views.explode > 0.5, VIEW.explode, 'E'); item('Centre of gravity', !!views.showCoG, VIEW.cog);
+  item('Hidden lines (dashed)', views.showHidden, VIEW.hidden, 'H'); item('Dimensions', views.showDims, VIEW.dims, 'D'); item('Pulled apart (exploded)', views.explode > 0.5, VIEW.explode, 'E'); item('Centre of gravity', !!views.showCoG, VIEW.cog); item('Weld symbols / callouts', views.showCallouts !== false, VIEW.callouts);
   m.append(el('div', { class: 'mh' }, 'Dragging in the 3D view'));
   item('Orbits (right-drag pans)', prefs.drag3d !== 'pan', () => { prefs.drag3d = 'orbit'; savePrefs(); }); item('Pans (right-drag orbits)', prefs.drag3d === 'pan', () => { prefs.drag3d = 'pan'; savePrefs(); });
   m.append(el('div', { class: 'mh' }, 'Theme')); item(isDark() ? 'Light theme' : 'Dark theme', null, VIEW.theme);
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
+$('#weldWizBtn').onclick = () => (tool && tool.name === 'weld-wiz' ? setTool(null) : startWeldWizard());
 $('#shellBtn').onclick = () => { const id = placeOn(selected) || (selected && model.bodyContaining(selected) ? rootOf(selected) : null); if (id) shellHint(model.get(id)); else setTool('pick', { prompt: 'Shell: click the part to hollow', then: (pid) => { const rid = rootOf(pid); if (model.bodyContaining(rid)) shellHint(model.get(rid)); } }); };
 $('#patternBtn').onclick = () => { if (selected) patternHint(selected); else setTool('pick', { prompt: 'Pattern / mirror: click the part or feature to repeat', then: (pid) => patternHint(pid) }); };
 $('#checkBtn').onclick = () => { if (!$('#check').hidden) closeCheck(); else runInterference(); };
@@ -6709,6 +8076,7 @@ $('#moreBtn').onclick = (e) => {
   for (const [t, f] of [['Bolt (threaded)…', () => fastenerHint('bolt')], ['Nut (threaded)…', () => fastenerHint('nut')], ['Spring / coil…', () => coilHint()], ['Plane on a face…', () => setTool('plane')], ['Fillet strip', () => addShape('fillet')]]) m.append(el('button', { onclick: () => { m.remove(); f(); } }, t));
   for (const a of listAddons()) {
     m.append(el('div', { class: 'mh' }, a.name));
+    if (a.id === 'welding') m.append(el('button', { onclick: () => { m.remove(); startWeldWizard(); } }, 'Weld / join wizard…'));
     for (const [t, d] of Object.entries(a.types)) m.append(el('button', { onclick: () => { m.remove(); addShape(t); } }, 'Add ' + d.label.toLowerCase()));
     for (const k of Object.keys(a.actions)) m.append(el('button', { onclick: () => { m.remove(); openAddonForm(a.id, k); } }, k[0].toUpperCase() + k.slice(1) + '…'));
   }
@@ -6900,6 +8268,7 @@ function setTool(name, arg) {
   if (!name) hint(null);
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
+  else if (name === 'weld-wiz') { tool.data.a = typeof arg === 'string' ? arg : null; weldWizHint(); }
   else if (name === 'edge-weld') {
     hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [['Done', () => setTool(null)]], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
     const [sz, pf] = document.querySelectorAll('#hint [data-k]');
@@ -7260,7 +8629,7 @@ stage.addEventListener('pointermove', (e) => {
     else if (d.seg === 'spline' && d.points.length) views.preview = { pane: pane.id, points: sketchPath(d, false, { p }), snap };
     else views.preview = { pane: pane.id, points: sketchPath(d), cursor: d.seg === 'arc' && d.points.length ? null : p, snap };
   }
-  stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube') ? 'pointer' : tool ? 'crosshair' : 'default';
+  stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube' || h.kind === 'callout') ? 'pointer' : tool ? 'crosshair' : 'default';
   views.draw();
 });
 stage.addEventListener('pointerup', (e) => {
@@ -7269,6 +8638,7 @@ stage.addEventListener('pointerup', (e) => {
   const hit = views.hitOverlay(x, y);
   if (hit && hit.kind === 'plane' && tool && tool.name === 'sketch-face') { const pc = worldConnectors(model.result, hit.id).find(c => c.name === 'plane'); if (pc) startFaceSketch({ id: hit.id, point: pc.o, normal: pc.n }); return; }
   if (hit && hit.kind === 'plane' && !tool) { select(hit.id); return; }
+  if (hit && hit.kind === 'callout' && !tool) { select(hit.id); return; }
   if (hit && hit.kind === 'dim' && !tool) { editDim(hit, x, y); return; }
   if (hit && hit.kind === 'measure' && !tool) { dimOptions(hit, x, y); return; }
   if (!tool) { const pk = views.pick(pane, x, y); select(pk ? pk.id : null); return; }
@@ -7349,6 +8719,7 @@ function clickTool(pane, x, y, hit, e) {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on the part to cut'); return; }
     const id = model.resolveId(pk.id); setTool(null); splitHint(rootOf(id), selected && (model.get(selected) || {}).type === 'plane' ? selected : null); return;
   }
+  if (t.name === 'weld-wiz') { weldWizClick(views.pick(pane, x, y)); return; }
   if (t.name === 'pick') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part'); return; }
     const id = model.resolveId(pk.id), then = t.data.then; setTool(null); if (id) then(id); return;
@@ -7524,7 +8895,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && k === 'y') { e.preventDefault(); $('#redo').click(); return; }
   if (mod && k === 'd' && selected) { e.preventDefault(); try { const r = apply([{ op: 'duplicate', id: selected }])[0]; select(r.id); } catch (err) { /* toast shown */ } return; }
   if (mod) return;
-  if (k === 'escape') { setTool(null); select(null); return; }
+  if (k === 'escape') { if (!tool && weldWiz) { closeWeldWizard(); return; } setTool(null); select(null); return; }
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
@@ -7894,7 +9265,7 @@ async function runCmd(cmd, a) {
   }
   throw new Error('Unknown command ' + cmd);
 }
-window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, startFaceSketch, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear, collab, shareModel, joinRoom, undoMine, redoMine, leaveRoom };
+window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, openWeldWizard, closeWeldWizard, startFaceSketch, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear, collab, shareModel, joinRoom, undoMine, redoMine, leaveRoom };
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 /* the 2D board link only makes sense when both are served by the SketchFlow server */
 if (!bridge.token || !/^https?:$/.test(location.protocol)) { const a = document.querySelector('a[href="/"]'); if (a) a.remove(); }
