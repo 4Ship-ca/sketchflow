@@ -45,6 +45,10 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Rollback bar, suppress, reorder | `rollback`, `suppress`, `move` ops; drag rows in History view; ⋯ / right-click menus | New features go in at the bar; order rules are checked (a hole stays after what it cuts) |
 | Mate types (revolute, slider, cylindrical, planar) and animate | `joint` / `drive` ops, the Motion drawer (J) | Gear mates follow continuously; poses are previews until you keep one |
 | Hole feature, shell | `hole` (ISO tables, click a face, auto edge dimensions), `shell` | Through holes stay through when the part changes. Shell works on any closed part: an inward offset of every face (see below) |
+| Sketch arcs | `arcs: [{i, c, ccw}]` on a profile: segment i is an arc around centre c | Arcs are entities, not segments. The solver treats each centre as two unknowns held equidistant from both ends, so an arc adds one freedom: its radius. Profiles are cut into 6° chords only when the solid is built, and all chords of an arc share one surface id, so the arc is one smooth face |
+| Sketch on a plane / any face, mate connectors | Every flat face of a shape's own geometry is a face connector (`face:<surface>`, besides the named ones). A sketch on a face opens a view square to it. Reference `plane` objects come from a face, a gap and a tilt | Faces that a named connector covers are skipped, and so are curved surfaces. Connector u axes are local X projected onto the face, so they stay put when sizes change |
+| Extrude end conditions, draft, thin, rib | `end: blind / symmetric / through`, `draft`, `thin`, `open` | Through all is a fixed 4 m reach, so a cut stays through when the part grows. Draft offsets the end profile with mitred corners, refusing angles that close it. Thin subtracts the inward offset. Open thickens a polyline centred on its line |
+| Helix / coil, split | `sweep` with `helix: {radius, pitch, turns, left}`, `helix` op; `split` op with `halfspace` tools | A split is a half-space block mated to the plane and subtracted, so it follows the plane. *Keep both* makes an in-place copy and cuts the other side |
 | Sketch constraints | `constraints` on a polyline profile; `constrain` / `unconstrain` ops | Levenberg–Marquardt from the drawn shape (the smallest change that satisfies everything), degrees of freedom by Jacobian rank, conflicts named. Values are ordinary parameters (d1, d2…) so they link, take formulas and switch per configuration |
 | Text (Onshape: sketch text + extrude) | `text {target, face \| at, text, height, depth, mode: emboss \| engrave, path: line \| arc \| arc-inside \| points}` | A single-stroke engraving font thickened to a stroke weight; characters placed rigidly along the path (each turned to its tangent). Emboss = boolean add, engrave = boolean remove. Anchored at its own origin, so editing the words never moves it |
 | Interference check, collision detection | `model_check`, the Check button (I), Motion's *collisions* / *stop at contact* | Exact BSP intersection for moderate parts, a voxel estimate for big ones; motion frames use inset surface probes with grid-accelerated ray parity, so touching never counts as a hit |
@@ -148,10 +152,10 @@ Built so far, on top of the first version:
 
 Still to come, roughly in order of how much each unlocks:
 
-1. **Sketch constraints with arcs**: tangent, concentric, point-on-curve. Polylines are constrained today.
+1. **More sketch relations**: point-on-curve, symmetric, midpoint, arc length; splines.
 2. **Draft, rib and loft guide curves.** Taper an extrude with its scale for now.
 3. **Motion studies**: plots of position, speed and clearance over a sweep (first contact is reported today).
-4. **Text wrapped onto curved faces** (a cylinder's side), and outline fonts loaded from a file.
+4. **Text wrapped onto curved faces** (a cylinder's side), outline fonts from a file; sketching on curved faces (wrap / project).
 5. **Formulas on mate offsets and slides.** Driving dimensions cover most placement needs today.
 6. **More on drawings**: section views on the sheet, GD&T and notes.
 7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be 10–100× faster on large booleans.

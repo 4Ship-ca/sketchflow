@@ -13,7 +13,7 @@ const VIEWS = {
   right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] },
   iso: (() => { const f = V.norm([1, -1, 1]), r = V.norm(V.cross([0, 0, 1], f)), u = V.cross(f, r); return { r, u, f }; })()
 };
-const SMOOTH = (sid) => /:(side|surface|arc|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid);
+const SMOOTH = (sid) => /:(side|surface|arc\d*|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid);
 const SHEETS = { A4: [297, 210], A3: [420, 297], A2: [594, 420] };
 const SCALES = [10, 5, 4, 2, 1, 1 / 2, 1 / 2.5, 1 / 4, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100];
 const fmt = (v) => (Math.round(v * 100) / 100).toString();
@@ -88,7 +88,7 @@ function viewDims(model, view) {
       const a = M4.point(M, d.a), b = M4.point(M, d.b), dir = V.norm(V.sub(b, a));
       let v = d.view; if (v === 'auto') { let best = 'front', bs = -1; for (const w of ['front', 'top', 'right']) { const sc = 1 - Math.abs(V.dot(dir, VIEWS[w].f)); if (sc > bs) { bs = sc; best = w; } } v = best; }
       if (v !== view || Math.abs(V.dot(dir, B.f)) > 0.2) continue;
-      out.push({ a: P(a), b: P(b), text: (d.kind === 'diameter' ? 'Ø' : '') + fmt(ob.params[d.param]), center: c, owner: ob.id });
+      out.push({ a: P(a), b: P(b), text: (d.kind === 'diameter' ? 'Ø' : d.kind === 'radius' ? 'R' : '') + fmt(ob.params[d.param]), center: c, owner: ob.id });
     }
   }
   for (const md of model.doc.dims || []) {

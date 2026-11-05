@@ -338,13 +338,16 @@ export function extrude(profile, o) {
   o = o || {}; let pts = ccw(cleanProfile(profile)); const L = +o.length || 10, tw = (+o.twist || 0) * Math.PI / 180;
   const sc = Array.isArray(o.scale) ? o.scale : [o.scale == null ? 1 : +o.scale, o.scale == null ? 1 : +o.scale];
   const dir = o.dir ? V.norm(o.dir) : [0, 0, 1], steps = Math.max(1, o.divisions || (tw ? Math.ceil(Math.abs(tw) / (Math.PI / 24)) : 1));
+  /* draft: the end profile is the start one offset (inward when negative), corners mitred */
+  const endPts = o.offsetEnd ? offsetPolygon(pts, o.offsetEnd) : null;
+  if (o.offsetEnd && (!endPts || endPts.length !== pts.length)) throw new Error('that draft closes the profile up before the end: use a smaller angle or a shorter length');
   const cap = triangulate(pts), rings = [];
   for (let k = 0; k <= steps; k++) {
     const t = k / steps, a = tw * t, sx = 1 + (sc[0] - 1) * t, sy = 1 + (sc[1] - 1) * t, c = Math.cos(a), s = Math.sin(a);
     const off = V.mul(dir, L * t / (dir[2] || 1));
-    rings.push(pts.map(([x, y]) => { const X = x * sx, Y = y * sy; return [X * c - Y * s + off[0], X * s + Y * c + off[1], off[2]]; }));
+    rings.push(pts.map(([x0, y0], i) => { const x = endPts ? x0 + (endPts[i][0] - x0) * t : x0, y = endPts ? y0 + (endPts[i][1] - y0) * t : y0, X = x * sx, Y = y * sy; return [X * c - Y * s + off[0], X * s + Y * c + off[1], off[2]]; }));
   }
-  return ringSolid(rings, cap, (i) => 'side' + i, false, 'start', 'end');
+  return ringSolid(rings, cap, o.sideSid || ((i) => 'side' + i), false, 'start', 'end');
 }
 /* loft between two different closed profiles (resampled to the same count, start points aligned) */
 export function loft(profA, profB, o) {
@@ -417,6 +420,36 @@ export function sweep(profile, path, o) {
 /* make sure polygons face outward (positive volume) */
 function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
 
+/* ---------- 2D offsets (draft, thin walls, ribs) ---------- */
+/* a closed polygon moved outward by d (inward when d < 0), corners mitred; null when it turns inside out */
+export function offsetPolygon(pts, d) {
+  const P = ccw(cleanProfile(pts)), n = P.length; if (n < 3) return null;
+  const lines = [];
+  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = dy / L, ny = -dx / L; lines.push([[a[0] + nx * d, a[1] + ny * d], [dx / L, dy / L]]); }
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [p1, d1] = lines[(i + n - 1) % n], [p2, d2] = lines[i], den = d1[0] * d2[1] - d1[1] * d2[0];
+    if (Math.abs(den) < 1e-9) { out.push(p2); continue; }
+    const u = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den; out.push([p1[0] + d1[0] * u, p1[1] + d1[1] * u]);
+  }
+  /* each edge must keep its direction (no edge flipped by a too-large inward offset) */
+  for (let i = 0; i < n; i++) { const a = out[i], b = out[(i + 1) % n], e = [P[(i + 1) % n][0] - P[i][0], P[(i + 1) % n][1] - P[i][1]]; if ((b[0] - a[0]) * e[0] + (b[1] - a[1]) * e[1] < 0) return null; }
+  return area2(out) > 1e-9 ? out : null;
+}
+/* an open polyline thickened to a closed outline of width t (centred on the line, mitred joins, square ends) */
+export function thickenPolyline(pts, t) {
+  const P = pts.filter((p, i) => i === 0 || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) > 1e-9), n = P.length, h = t / 2;
+  if (n < 2) throw new Error('an open profile needs at least two points');
+  if (!(t > 0)) throw new Error('a thin wall needs a thickness above 0');
+  const dir = (i) => { const a = P[i], b = P[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+  const side = (s) => P.map((p, i) => {
+    const d0 = i > 0 ? dir(i - 1) : dir(0), d1 = i < n - 1 ? dir(i) : dir(n - 2), n0 = [-d0[1], d0[0]], n1 = [-d1[1], d1[0]];
+    const m = [n0[0] + n1[0], n0[1] + n1[1]], ml = Math.hypot(m[0], m[1]) || 1, cos = (m[0] * n1[0] + m[1] * n1[1]) / ml, k = h / Math.max(0.2, cos);
+    return [p[0] + s * m[0] / ml * k, p[1] + s * m[1] / ml * k];
+  });
+  const L = side(1), Rt = side(-1);
+  return L.concat(Rt.reverse());
+}
 /* ---------- offset (for shells): every face moves along its normal by offsetFor(face); each vertex goes to where its
    faces' moved planes meet (least squares where more than three meet, e.g. on curved facets). Exact for flat-faced
    parts (mitred corners) as long as the offset is smaller than the thinnest section and the tightest convex rounding. */

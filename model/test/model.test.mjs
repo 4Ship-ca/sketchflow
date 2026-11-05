@@ -1,5 +1,5 @@
 /* SketchFlow v2 model tests: node model/test/model.test.mjs */
-import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim } from '../js/model.js';
+import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim, dimsOf } from '../js/model.js';
 import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
 import { textSolid, layoutText } from '../js/text.js';
 import * as K0 from '../js/kernel.js';
@@ -336,6 +336,62 @@ let featErr = null; try { Fe.apply([{ op: 'feature', target: 'b', face: 'nowhere
 ok('an unknown face is refused with the list of faces', /no face “nowhere”[\s\S]*top/.test(featErr || ''), featErr);
 const fa = Fe.faceAt('b', [10, 25, 15], [0, 1, 0]);
 ok('faceAt turns a point on a face into that face and a slide on it', fa && fa.face === 'back' && fa.off < 1e-9 && fa.slide.length === 2);
+/* true arcs in sketches: centres solved, radius dimensions drive them, tangency holds */
+const Ar_n = new Model();
+Ar_n.apply([{ op: 'extrude', id: 'sl', profile: [[0, 0], [40, 0], [40, 20], [0, 20]], arcs: [{ i: 1, c: [40, 10], ccw: true }, { i: 3, c: [0, 10], ccw: true }], length: 10, fixed: true }]);
+const slotV_n = (r) => { const n = Math.max(2, Math.ceil(Math.PI / (6 * Math.PI / 180))); return 0.5 * n * r * r * Math.sin(Math.PI / n) * 2; };
+ok('arcs are real profile segments (a slot with round ends, exact to its chords)', near(Ar_n.result.bodies[0].solid.volume(), (800 + slotV_n(10)) * 10, 1e-6), Ar_n.result.bodies[0].solid.volume());
+Ar_n.apply([{ op: 'constrain', id: 'sl', type: 'radius', i: 1 }, { op: 'constrain', id: 'sl', type: 'fix', i: 0, at: [0, 0] }, { op: 'constrain', id: 'sl', type: 'h', i: 0 }, { op: 'constrain', id: 'sl', type: 'h', i: 2 }, { op: 'constrain', id: 'sl', type: 'tangent', i: 0, j: 1 }, { op: 'constrain', id: 'sl', type: 'tangent', i: 1, j: 2 }]);
+const rp_n = Ar_n.get('sl').params.constraints.find(c => c.type === 'radius').p;
+ok('a radius dimension measures the arc', near(Ar_n.get('sl').params[rp_n], 10, 1e-9) && Ar_n.describe().objects[0].sketch.arcs.length === 2);
+Ar_n.apply([{ op: 'set', id: 'sl', params: { [rp_n]: 15 } }]);
+const sp_n = Ar_n.get('sl').params, sa_n = sp_n.arcs.find(a => a.i === 1);
+ok('changing the radius moves the arc and its tangent lines with it', Ar_n.result.sketch.get('sl').ok && near(sp_n.profile[2][1], 30, 1e-5) && near(sa_n.c[1], 15, 1e-5) && near(Math.hypot(sp_n.profile[1][0] - sa_n.c[0], sp_n.profile[1][1] - sa_n.c[1]), 15, 1e-5));
+ok('a radius shows as a dimension (R) on the part', dimsOf(Ar_n.get('sl')).some(d => d.kind === 'radius' && d.param === rp_n));
+let arcErr_n = null; try { Ar_n.apply([{ op: 'constrain', id: 'sl', type: 'radius', i: 0 }]); } catch (e) { arcErr_n = e.message; }
+ok('radius on a straight segment is refused', /not an arc/.test(arcErr_n || ''), arcErr_n);
+const Cn_n = new Model();
+Cn_n.apply([{ op: 'extrude', id: 'w', profile: [[-20, 0], [20, 0], [10, 0.01], [-10, 0.01]], arcs: [{ i: 1, c: [0, 0], ccw: true }, { i: 3, c: [0, 0.3], ccw: false }], length: 5, fixed: true, constraints: [{ type: 'concentric', i: 1, j: 3 }] }]);
+const ca_n = Cn_n.get('w').params.arcs;
+ok('concentric arcs share a centre', Cn_n.result.sketch.get('w').ok && near(ca_n[0].c[0], ca_n[1].c[0], 1e-6) && near(ca_n[0].c[1], ca_n[1].c[1], 1e-6));
+/* every flat face is a face connector, so inclined and side faces take features */
+const Fc_n = new Model();
+Fc_n.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [60, 0], [60, 10], [10, 10], [10, 40], [0, 40]], length: 20, fixed: true }]);
+const lf_n = worldConnectors(Fc_n.result, 'L').filter(c => c.kind === 'face').map(c => c.name);
+ok('an extrude\'s inner side faces are face connectors', lf_n.includes('face:side2') && lf_n.includes('face:side3'), lf_n);
+const Wg_n = new Model(); Wg_n.apply([{ op: 'add', type: 'wedge', id: 'w', params: { width: 60, depth: 40, height: 30 } }]);
+const slope_n = worldConnectors(Wg_n.result, 'w').find(c => c.name === 'slope'), wv0_n = Wg_n.result.bodies[0].solid.volume();
+const [bs_n] = Wg_n.apply([{ op: 'feature', target: 'w', at: slope_n.o, normal: slope_n.n, shape: 'cylinder', params: { diameter: 8, height: 5 } }]);
+ok('a boss on an inclined face stands square to it', Wg_n.get(bs_n.id).mate.a === 'slope' && Wg_n.result.bodies[0].solid.volume() > wv0_n && Math.abs(V.dot(M4.dir(Wg_n.result.world.get(bs_n.id), [0, 0, 1]), slope_n.n) - 1) < 1e-9);
+/* extrude end conditions, draft, thin walls and ribs */
+const ex1_n = (extra) => { const q2 = new Model(); q2.apply([Object.assign({ op: 'extrude', id: 'e', profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, fixed: true }, extra)]); return q2; };
+const sym_n = ex1_n({ end: 'symmetric' }).result.bodies[0].solid.bbox();
+ok('symmetric extrude goes half each way', near(sym_n.min[2], -10, 1e-9) && near(sym_n.max[2], 10, 1e-9));
+const dr_n = ex1_n({ draft: 10 }).result.bodies[0].solid.volume(), e2_n = 20 - 2 * 20 * Math.tan(10 * Math.PI / 180);
+ok('draft tapers the walls (a frustum of the right size)', near(dr_n, 20 / 3 * (400 + e2_n * e2_n + 20 * e2_n), 1e-6), dr_n);
+ok('a thin closed profile is a wall of that thickness', near(ex1_n({ thin: 2 }).result.bodies[0].solid.volume(), (400 - 256) * 20, 1e-9));
+const Rb_n = new Model(); Rb_n.apply([{ op: 'extrude', id: 'rib', profile: [[0, 0], [30, 0], [30, 20]], open: true, thin: 3, length: 10, fixed: true }]);
+ok('an open profile with a thickness is a rib', near(Rb_n.result.bodies[0].solid.volume(), 3 * 50 * 10, 1e-9));
+const Th_n = new Model(); Th_n.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }, { op: 'extrude', id: 'c', shape: 'circle', diameter: 10, end: 'through', length: 5, mate: { to: 'b', a: 'top', b: 'end', flip: false }, into: 'b', mode: 'subtract' }]);
+const thV_n = 0.5 * 48 * 25 * Math.sin(2 * Math.PI / 48) * 20;
+ok('a through-all cut goes right through, and still does when the part grows', near(80000 - Th_n.result.bodies[0].solid.volume(), thV_n, 1e-6) && (Th_n.apply([{ op: 'set', id: 'b', params: { height: 35 } }]), near(80 * 50 * 35 - Th_n.result.bodies[0].solid.volume(), thV_n * 35 / 20, 1e-6)));
+/* helix sweep (springs) */
+const Sp_n = new Model(); Sp_n.apply([{ op: 'helix', id: 'sp_n', wire: 2, radius: 10, pitch: 5, turns: 4, fixed: true }]);
+const spb_n = Sp_n.result.bodies[0].solid.bbox(), wireA_n = 0.5 * 24 * 1 * Math.sin(2 * Math.PI / 24);
+ok('a spring: wire swept along a helix, the right length and size', near(Sp_n.result.bodies[0].solid.volume(), wireA_n * 4 * Math.hypot(2 * Math.PI * 10, 5), 0.02) && near(spb_n.max[0], 11, 0.02) && near(spb_n.max[2] - spb_n.min[2], 22, 0.05), { v: Sp_n.result.bodies[0].solid.volume(), spb_n });
+let pitchErr_n = null; try { new Model().apply([{ op: 'helix', wire: 3, pitch: 2 }]); } catch (e) { pitchErr_n = e.message; }
+ok('a pitch smaller than the wire is refused (coils would overlap)', /coils would overlap/.test(pitchErr_n || ''));
+/* reference planes and splitting */
+const Pl_n = new Model(); Pl_n.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }, { op: 'plane', id: 'p1', target: 'b', face: 'top', offset: -10 }]);
+ok('a plane is reference geometry: no body, no mass, a face connector to use', Pl_n.result.bodies.length === 1 && worldConnectors(Pl_n.result, 'p1').some(c => c.name === 'plane' && near(c.o[2], 10, 1e-9)) && massReport(Pl_n.doc, Pl_n.result).parts.length === 1);
+for (const [keep, want] of [['below', [[0, 10]]], ['above', [[10, 20]]], ['both', [[0, 10], [10, 20]]]]) {
+  const q3 = new Model(); q3.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }, { op: 'plane', id: 'p1', target: 'b', face: 'top', offset: -10 }, { op: 'split', target: 'b', plane: 'p1', keep }]);
+  const got = q3.result.bodies.map(bb => [bb.solid.bbox().min[2], bb.solid.bbox().max[2]]);
+  ok(`split by a plane, keep ${keep}`, got.length === want.length && got.every((g, k) => near(g[0], want[k][0], 1e-9) && near(g[1], want[k][1], 1e-9)) && q3.result.bodies.every(bb => near(bb.solid.volume(), 40000, 1e-9)), got);
+}
+const Pt_n = new Model(); Pt_n.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }, { op: 'plane', id: 'p2', target: 'b', face: 'top', tilt: 30 }]);
+const ptn_n = worldConnectors(Pt_n.result, 'p2').find(c => c.name === 'plane').n;
+ok('a plane tilts about the face', near(ptn_n[2], Math.cos(Math.PI / 6), 1e-9) && near(Math.abs(ptn_n[1]), 0.5, 1e-9));
 /* sketch constraints on a polyline profile */
 const Sc = new Model();
 Sc.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [61, 1.5], [60, 9], [11, 10.5], [9, 41], [1, 40]], length: 10, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'h', i: 2 }, { type: 'v', i: 3 }, { type: 'h', i: 4 }, { type: 'v', i: 5 }] }]);

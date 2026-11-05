@@ -3,7 +3,7 @@
    hidden edges dashed, curved-surface silhouettes per view. 3D pane: orbit + corner-cube navigation. */
 import * as K from './kernel.js';
 import { dimsOf, worldConnectors, massReport, measureDim } from './model.js';
-const { V } = K;
+const { V } = K, M4point = (m, p) => K.M4.point(m, p);
 
 const PANES = ['top', '3d', 'front', 'right'];
 /* ortho bases: right, up, toward-viewer */
@@ -80,6 +80,13 @@ export class Views {
     return [{ id: 'top', x: 0, y: 0, w: hw - g / 2, h: hh - g / 2 }, { id: '3d', x: hw + g / 2, y: 0, w: W - hw - g / 2, h: hh - g / 2 }, { id: 'front', x: 0, y: hh + g / 2, w: hw - g / 2, h: H - hh - g / 2 }, { id: 'right', x: hw + g / 2, y: hh + g / 2, w: W - hw - g / 2, h: H - hh - g / 2 }];
   }
   paneAt(x, y) { return this.panes().find(p => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h) || null; }
+  /* a view square to any face (normal n, pointing at the viewer): the 'face' pane, for sketching on that face */
+  setFaceView(n, label, centre) {
+    const f = V.norm(n), up0 = Math.abs(f[2]) > 0.99 ? [0, 1, 0] : [0, 0, 1], u = V.norm(V.sub(up0, V.mul(f, V.dot(up0, f)))), r = V.cross(u, f);
+    BASIS.face = { r, u, f }; LABEL.face = label || 'FACE'; if (centre) this.ortho.c = centre.slice();
+    return BASIS.face;
+  }
+  basisOf(id) { return BASIS[id]; }
   /* ---------- cameras ---------- */
   camDir3d() { const y = this.cam.yaw * Math.PI / 180, p = this.cam.pitch * Math.PI / 180; return [Math.cos(p) * Math.sin(y), -Math.cos(p) * Math.cos(y), Math.sin(p)]; }  /* from target toward eye */
   vp(pane) {
@@ -167,7 +174,7 @@ export class Views {
   freeLines(lb) { if (!lb) return; for (const k of ['a', 'b', 's', 't']) if (lb[k]) this.gl.deleteBuffer(lb[k]); }
   silhouettes(id, buf, dir) {
     const key = id + '|' + dir.map(v => v.toFixed(2)).join(','); let s = this.silCache.get(key);
-    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
+    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc\d*|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
     return s;
   }
   /* ---------- drawing ---------- */
@@ -251,6 +258,7 @@ export class Views {
       if (this.connectorsFor && still) this.drawConnectors(c, pane, cam);
       if (this.showCoG && still) this.drawCoG(c, pane, cam);
       if (still && pane.id !== '3d') this.drawSketchGlyphs(c, pane, cam);
+      if (still) this.drawPlanes(c, pane, cam);
       if (this.preview && this.preview.pane === pane.id) this.drawPreview(c, pane, cam);
       if (pane.id === '3d') this.drawCube(c, pane, cam);
       c.restore();
@@ -301,7 +309,7 @@ export class Views {
       c.beginPath(); c.moveTo(a2.x, a2.y); c.lineTo(b2.x, b2.y); c.stroke();
       const head = (p, s) => { c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + s * ux * 7 - uy * 2.6, p.y + s * uy * 7 + ux * 2.6); c.lineTo(p.x + s * ux * 7 + uy * 2.6, p.y + s * uy * 7 - ux * 2.6); c.closePath(); c.fill(); };
       head(a2, 1); head(b2, -1);
-      const txt = (linked ? '=' : '') + (it.d && it.d.kind === 'diameter' ? 'Ø' : '') + (it.measure && !driving ? '(' + fmt(it.value) + ')' : fmt(it.value)), lx = (a2.x + b2.x) / 2 + nx * 9, ly = (a2.y + b2.y) / 2 + ny * 9;
+      const txt = (linked ? '=' : '') + (it.d && it.d.kind === 'diameter' ? 'Ø' : it.d && it.d.kind === 'radius' ? 'R' : '') + (it.measure && !driving ? '(' + fmt(it.value) + ')' : fmt(it.value)), lx = (a2.x + b2.x) / 2 + nx * 9, ly = (a2.y + b2.y) / 2 + ny * 9;
       c.font = '600 11.5px "JetBrains Mono", ui-monospace, monospace'; const tw = c.measureText(txt).width;
       c.fillStyle = this.dark ? 'rgba(20,21,25,0.85)' : 'rgba(255,255,255,0.88)'; c.fillRect(lx - tw / 2 - 4, ly - 8, tw + 8, 16);
       c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, lx, ly); c.textAlign = 'left'; c.textBaseline = 'alphabetic';
@@ -314,6 +322,22 @@ export class Views {
     return ref.p || null;
   }
   /* the selected profile's constraints, as small badges on its segments (in the views that see its plane) */
+  /* reference planes: a dashed square with its name (click the name to select it) */
+  drawPlanes(c, pane, cam) {
+    const R = this.model.result, O = this.O; if (!R.planes || !R.planes.length) return;
+    for (const id of R.planes) {
+      const o = this.model.get(id), M = R.world.get(id); if (!o || !M || o.hidden) continue;
+      const h = (+o.params.size || 60) / 2, P = (x, y) => this.project(pane, V.sub(M4point(M, [x, y, 0]), O), cam), q = [P(-h, -h), P(h, -h), P(h, h), P(-h, h)];
+      const area = Math.abs((q[1].x - q[0].x) * (q[3].y - q[0].y) - (q[3].x - q[0].x) * (q[1].y - q[0].y)), sel = this.sel === id;
+      c.save(); c.strokeStyle = sel ? '#ff7b3d' : '#5b8def'; c.lineWidth = sel ? 2 : 1.3; c.setLineDash([6, 4]);
+      c.beginPath(); q.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); c.closePath(); c.stroke();
+      if (area > 30) { c.fillStyle = sel ? 'rgba(255,123,61,0.07)' : 'rgba(91,141,239,0.06)'; c.fill(); }
+      c.setLineDash([]); c.font = '600 10.5px "Figtree", system-ui, sans-serif'; c.fillStyle = sel ? '#ff7b3d' : '#5b8def';
+      const lx = Math.min(...q.map(p => p.x)), ly = Math.min(...q.map(p => p.y)), tw = c.measureText(o.name).width;
+      c.fillText(o.name, lx + 3, ly - 4); this.overlayHits.push({ kind: 'plane', id, x: lx, y: ly - 15, w: tw + 8, h: 14, pane: pane.id });
+      c.restore();
+    }
+  }
   drawSketchGlyphs(c, pane, cam) {
     const o = this.sel && this.model.get(this.sel); if (!o || !o.params || !Array.isArray(o.params.constraints) || !o.params.constraints.length || !Array.isArray(o.params.profile)) return;
     const R = this.model.result, M = R.world.get(o.id); if (!M) return;
@@ -367,7 +391,7 @@ export class Views {
   }
   /* the sketch grid (snap step), thinned out until lines are at least 8 px apart, every fifth line a little stronger */
   drawGrid(c, pane, cam, step) {
-    const B = BASIS[pane.id], o = this.project(pane, [0, 0, 0], cam), px = this.project(pane, B.r, cam).x - o.x; if (!(Math.abs(px) > 1e-9)) return;
+    const B = BASIS[pane.id], g0 = this.sketchGridAt && pane.id === 'face' ? this.sketchGridAt : [0, 0, 0], o = this.project(pane, g0, cam), px = this.project(pane, V.add(g0, B.r), cam).x - o.x; if (!(Math.abs(px) > 1e-9)) return;
     let st = step; while (Math.abs(px) * st < 8) st *= 5;
     const s = Math.abs(px) * st, x0 = o.x + Math.ceil((pane.x - o.x) / s) * s, y0 = o.y + Math.ceil((pane.y - o.y) / s) * s;
     c.save(); c.lineWidth = 1;

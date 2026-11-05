@@ -93,6 +93,8 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
 | `model_import` | an STL / OBJ file from disk as a mesh part |
 | `model_check` | interference (which parts overlap, by how much, exact for moderate parts) and a motion sweep that reports the first contact of a joint |
+| `model_query` | geometry questions: every face of a part with the connector name to target it by, its normal, centre and area; edges; distances and angles between faces; section areas; bounding boxes |
+| `model_reference` | the op reference: every op in one line, or one op / topic in full with a worked example (works without the browser) |
 | `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
 
 **In the browser:**
@@ -107,13 +109,25 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 
   The Features group in the toolbar has the same tools. Bosses, cuts, holes, text and face sketches are mated to their face, so they follow it when the part changes.
 - **Sketch**: draw in FRONT, TOP or RIGHT with the sketch bar.
-  - **Lines:** Line and Arc. An arc is its end point, then a point it passes through, and arcs mix freely with lines.
+  - **Lines:** Line, Arc and Tangent arc, mixed freely.
+    - An arc is its end point, then a point it passes through.
+    - A tangent arc carries on smoothly from the last segment and stays tangent.
+    - Arcs are real sketch arcs, not short segments: give them an **R dimension**, make two **tangent** or **concentric**, set radii **equal**, or turn any segment into an arc (⌒ in Properties → Sketch).
   - **Shapes:** Rectangle, Circle, Slot, Polygon.
   - **Snap ▾:** grid on or off, with a step of 0.5–25 mm; points, corners and centres; edge midpoints; horizontal / vertical only; 15° angles. A green marker shows what you snapped to, with the length so far.
   - **Undo point**, **Close shape**, **Cancel**.
 
   Then choose Extrude, Revolve or Loft (Loft asks for the end profile).
-- **Sketch on a face** (*On face* in the toolbar, or *On a face…* in the sketch bar): click a flat face, and the view square to it opens for drawing. Then choose *Extrude · join*, *Cut into*, *Cut through* or *New part*. The result is mated to that face.
+  - Extrude options: **symmetric** (half each way), **through all** (for cuts, and it stays through as the part grows), **draft** (taper °), and **thin** (a wall of that thickness).
+  - **Finish open** leaves the outline open: a **rib** or thin plate of a thickness you choose.
+- **Sketch on a face** (*On face* in the toolbar, or *On a face…* in the sketch bar): click **any** flat face, inclined ones included, and a view square to it opens with the grid on the face. Then choose *Extrude · join*, *Cut into*, *Cut through* or *New part*. The result is mated to that face.
+- Every flat face of a shape can be a target: a wedge's slope, an extrude's side faces, the flat ring of a revolve. That covers holes, text, bosses, cuts, sketches and mates.
+- **More ▾** (in the Add bar):
+  - **Spring / coil**: wire Ø, coil radius, pitch, turns, hand.
+  - **Plane on a face**: a reference plane on a face, with a gap and a tilt. Sketch on it, mate to it, or split with it.
+  - Fillet strip, and the add-ons (gears).
+- **Split** (Features): cut a part with a plane, keeping the side below, above, or both as two parts.
+- Mates take a **tilt** too, so parts and planes can sit at an angle to a face.
 - **Sketch constraints**: a drawn polyline gets horizontal / vertical relations and its first point fixed automatically, so a sloppy sketch comes out square. In Properties → Sketch, give any segment a driving dimension, or relate two segments (parallel, perpendicular, equal, angle). The status line says how many degrees of freedom are left and names any conflicting constraint.
 - *Mate* (M): click the part, then its connector, then the target connector.
 - *Union / Subtract / Intersect*: click the target, then the tool.

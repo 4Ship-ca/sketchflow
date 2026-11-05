@@ -4,7 +4,7 @@
    evaluated in list order — editable at any time. Edge treatments (fillet / weld / chamfer) are objects too.
    One API — apply(ops) — serves the UI and the MCP bridge, so an LLM builds with the same JSON a click produces. */
 import * as K from './kernel.js';
-import { solveSketch, KINDS as SKETCH_KINDS, measure as measureConstraint } from './sketch.js';
+import { solveSketch, KINDS as SKETCH_KINDS, measure as measureConstraint, expandArcs, arcMid } from './sketch.js';
 import { textSolid, layoutText, TEXT_PATHS, TEXT_ALIGN } from './text.js';
 const { V, M4 } = K;
 export { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText };
@@ -16,10 +16,17 @@ export const TYPES = {
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
-  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], length: 20, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
-  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], profile2: null, length: 30, twist: 0, constraints: [] } },
-  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], degrees: 360, constraints: [] } },
-  sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]] } },
+  /* end: blind | symmetric (both ways, half each) | through (through everything, for cuts); draft: taper ° (inward);
+     thin: a wall of that thickness (a closed profile becomes a tube-like wall; an open one, open: true, a rib / thin plate) */
+  extrude: { label: 'Extrude', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], length: 20, end: 'blind', draft: 0, thin: 0, open: false, twist: 0, scale: 1, direction: [0, 0, 1], shape: 'points', x: 0, y: 0, width: 40, height: 20, radius: 0, diameter: 20, sides: 6, constraints: [] } },
+  loft: { label: 'Loft', params: { profile: [[-10, -10], [10, -10], [10, 10], [-10, 10]], arcs: [], profile2: null, length: 30, twist: 0, constraints: [] } },
+  revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], arcs: [], degrees: 360, constraints: [] } },
+  /* helix: {radius, pitch, turns, left} sweeps the profile along a helix instead of path (springs, coils, threads' cores) */
+  sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], helix: null } },
+  /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
+  plane: { label: 'Plane', params: { size: 60 } },
+  /* everything on one side of a plane (a big block): the tool a split uses */
+  halfspace: { label: 'Half-space', params: { size: 4000 } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
   /* a linked copy of another part: same shape and features, its own place */
   instance: { label: 'Instance', params: {} },
@@ -94,6 +101,9 @@ function connectorsOf(o, solid) {
     case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
     case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
+    case 'sweep': if (p.helix) { const h = p.helix, rw = Math.max(...(p.profile || [[1, 0]]).map(q => Math.hypot(q[0], q[1]))), H = (+h.pitch || 0) * (+h.turns || 0); return [conn('bottom', [0, 0, -rw], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, H + rw], [0, 0, 1], [1, 0, 0]), conn('axis', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')]; } break;
+    case 'plane': return [conn('plane', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('back', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('center', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center')];
+    case 'halfspace': return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0])];
     /* text: its anchor (the line's middle / start / end, an arc's centre) on the bottom and top faces, so editing the words never moves it */
     case 'text': return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, +p.depth || 1], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, (+p.depth || 1) / 2], [0, 0, 1], [1, 0, 0], 'center')];
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
@@ -102,9 +112,10 @@ function connectorsOf(o, solid) {
       /* features: start/end faces + bounding-box faces & centre (add-on shapes add their own connectors first) */
       const T = TYPES[o.type], c = T && T.def && T.def.connectors ? T.def.connectors(p, addonApi).slice() : [];
       if (o.type === 'extrude' || o.type === 'loft') {
-        const cen = centroid2(o.type === 'extrude' && p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1], L = p.length;
-        const end = o.type === 'extrude' ? V.add([cen[0], cen[1], 0], V.mul(dir, L / (dir[2] || 1))) : [cen[0], cen[1], L];
-        c.push(conn('start', [cen[0], cen[1], 0], [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
+        const cen = centroid2(o.type === 'extrude' && p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile), dir = o.type === 'extrude' ? V.norm(p.direction || [0, 0, 1]) : [0, 0, 1];
+        const L = o.type === 'extrude' && p.end === 'through' ? THROUGH : p.length, z0 = o.type === 'extrude' && p.end === 'symmetric' ? -L / 2 : 0, along = (z) => V.mul(dir, z / (dir[2] || 1));
+        const start = V.add([cen[0], cen[1], 0], along(z0)), end = V.add([cen[0], cen[1], 0], along(z0 + L));
+        c.push(conn('start', start, [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
       }
       if (solid && !solid.isEmpty()) {
         const b = solid.bbox(), m = V.lerp(b.min, b.max, 0.5);
@@ -294,6 +305,60 @@ function replayFor(start, steps, root, R, ok) {
   }
   return { base: b, skipped, blocked: null };
 }
+/* ---------- extrude end conditions, draft and thin walls; helix paths ---------- */
+const THROUGH = 4000;   /* "through all": far enough to come out of any part */
+function buildExtrude(p) {
+  const shaped = p.shape && p.shape !== 'points', open = !shaped && !!p.open, t = +p.thin || 0, end = p.end || 'blind';
+  const L = end === 'through' ? THROUGH : +p.length; if (!(L > 0)) throw new Error('length must be above 0');
+  let prof, sides = null;
+  if (shaped) prof = shapeProfile(p);
+  else { const X = expandArcs(p.profile, p.arcs, { open }); prof = X.pts; sides = X.sides; }
+  if (open) { if (!(t > 0)) throw new Error('an open profile is a thin wall: give it a thickness (thin)'); prof = K.thickenPolyline(prof, t); sides = null; }
+  /* keep each side face named after its own segment, whichever way round the profile was drawn */
+  if (sides && K.area2(prof) < 0) { const N = prof.length, sd = sides; prof = prof.slice().reverse(); sides = prof.map((_, k) => sd[((N - 2 - k) % N + N) % N]); }
+  const draft = +p.draft || 0, offEnd = draft ? -L * Math.tan(draft * Math.PI / 180) : 0;
+  if (Math.abs(draft) >= 89) throw new Error('draft must be between -89° and 89°');
+  const one = (outline, names) => K.extrude(outline, { length: L, twist: p.twist, scale: p.scale, dir: p.direction, offsetEnd: offEnd || undefined, sideSid: names ? (i) => names[i] || 'side' + i : undefined });
+  let s = one(prof, sides);
+  if (t > 0 && !open) { const inner = K.offsetPolygon(prof, -t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`); s = s.subtract(one(inner, null).tag('inner')); }
+  if (end === 'symmetric') { const dir = V.norm(p.direction || [0, 0, 1]); s = s.transform(M4.translate(V.mul(dir, -L / 2 / (dir[2] || 1)))); }
+  return s;
+}
+/* a helix along +z from the origin: radius, pitch (rise per turn), turns; left-handed when left is true */
+function helixPath(h) {
+  const r = +h.radius, pitch = +h.pitch, turns = +h.turns, sgn = h.left ? -1 : 1;
+  if (!(r > 0 && pitch > 0 && turns > 0)) throw new Error('a helix needs radius, pitch and turns above 0');
+  if (turns > 200) throw new Error('at most 200 turns');
+  const n = Math.max(12, Math.ceil(turns * 36)), out = [];
+  for (let k = 0; k <= n; k++) { const a = sgn * 2 * Math.PI * turns * k / n; out.push([r * Math.cos(a), r * Math.sin(a), pitch * turns * k / n]); }
+  return out;
+}
+/* every flat face of a shape is a face connector too ("face:<surface>"), so inclined and side faces can take holes,
+   text, bosses, sketches and mates. Faces that a named connector already covers are skipped; curved surfaces too. */
+const FACE_CONN_CACHE = new WeakMap();
+function faceConnectors(s, have) {
+  if (!s || s.isEmpty()) return [];
+  const hit = FACE_CONN_CACHE.get(s), hk = have.filter(h => h.kind === 'face').map(h => h.name + h.o.map(v => v.toFixed(4)) + h.n.map(v => v.toFixed(4))).join('|');
+  if (hit && hit.hk === hk) return hit.out;
+  const out = faceConnectorsOf(s, have); FACE_CONN_CACHE.set(s, { hk, out }); return out;
+}
+function faceConnectorsOf(s, have) {
+  const groups = new Map();
+  for (const q of s.polys) {
+    let g = groups.get(q.sid); if (!g) groups.set(q.sid, g = { sid: q.sid, n: q.plane.n, w: q.plane.w, area: 0, c: [0, 0, 0], curved: false });
+    if (V.dot(g.n, q.plane.n) < 1 - 1e-6 || Math.abs(g.w - q.plane.w) > 1e-6 * (1 + Math.abs(g.w))) g.curved = true;
+    const a = q.v[0].p; for (let i = 1; i < q.v.length - 1; i++) { const b = q.v[i].p, c = q.v[i + 1].p, ar = V.len(V.cross(V.sub(b, a), V.sub(c, a))) / 2; g.area += ar; g.c = V.add(g.c, V.mul(V.add(V.add(a, b), c), ar / 3)); }
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.curved || g.area < 1e-6 || out.length >= 64) continue;
+    const c = V.mul(g.c, 1 / g.area);
+    if (have.some(h => h.kind === 'face' && V.dot(h.n, g.n) > 1 - 1e-6 && Math.abs(V.dot(V.sub(c, h.o), g.n)) < 1e-6)) continue;
+    let u = V.sub([1, 0, 0], V.mul(g.n, g.n[0])); if (V.len(u) < 0.1) u = V.sub([0, 1, 0], V.mul(g.n, g.n[1]));
+    out.push(conn('face:' + g.sid.split(':').pop(), c, g.n, u));
+  }
+  return out;
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -305,10 +370,12 @@ function buildLocal(o) {
     case 'cone': return K.cylinder(p.diameter / 2, Math.max(0, (p.top || 0) / 2), p.height, p.segments || SEG);
     case 'sphere': return K.sphere(p.diameter / 2, p.segments || 32);
     case 'fillet': return K.edgePiece([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], p.size, p.style || 'fillet', p.length);
-    case 'extrude': return K.extrude(p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, { length: p.length, twist: p.twist, scale: p.scale, dir: p.direction });
-    case 'loft': return K.loft(p.profile, p.profile2 || p.profile, { length: p.length, twist: p.twist });
-    case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
-    case 'sweep': return K.sweep(p.profile, p.path);
+    case 'extrude': return buildExtrude(p);
+    case 'loft': { const A = expandArcs(p.profile, p.arcs).pts; return K.loft(A, p.profile2 || A, { length: p.length, twist: p.twist }); }
+    case 'revolve': return K.revolve(expandArcs(p.profile, p.arcs).pts, { degrees: p.degrees });
+    case 'sweep': return K.sweep(p.profile, p.helix ? helixPath(p.helix) : p.path);
+    case 'plane': return K.Solid.empty();
+    case 'halfspace': return K.box(+p.size || 4000, +p.size || 4000, (+p.size || 4000) / 2);
     case 'hole': return buildHole(p);
     case 'text': return textSolid(p);
     case 'mesh': return meshSolid(o);
@@ -341,7 +408,7 @@ export function dimsOf(o) {
     }
     case 'extrude': {
       const prof = p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, c = centroid2(prof), dir = V.norm(p.direction || [0, 0, 1]);
-      const out = [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')], x = +p.x || 0, y = +p.y || 0;
+      const z0 = p.end === 'symmetric' ? -p.length / 2 : 0, out = p.end === 'through' ? [] : [D('length', V.add([c[0], c[1], 0], V.mul(dir, z0 / (dir[2] || 1))), V.add([c[0], c[1], 0], V.mul(dir, (z0 + p.length) / (dir[2] || 1))), 'auto')], x = +p.x || 0, y = +p.y || 0;
       /* a shape's own sizes are dimensions in its sketch plane */
       if (p.shape === 'rect' || p.shape === 'slot') out.push(D('width', [x - p.width / 2, y - p.height / 2, 0], [x + p.width / 2, y - p.height / 2, 0], 'auto'), D('height', [x - p.width / 2, y - p.height / 2, 0], [x - p.width / 2, y + p.height / 2, 0], 'auto'));
       if (p.shape === 'circle' || p.shape === 'polygon') out.push(D('diameter', [x - p.diameter / 2, y, 0], [x + p.diameter / 2, y, 0], 'auto', 'diameter'));
@@ -362,6 +429,7 @@ function constraintDims(p, rz) {
     if (c.type === 'length') out.push({ param: c.p, a: L3(P[c.i % n]), b: L3(P[(c.i + 1) % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixx') out.push({ param: c.p, a: L3([0, P[c.i % n][1]]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixy') out.push({ param: c.p, a: L3([P[c.i % n][0], 0]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
+    if (c.type === 'radius') { const a = (p.arcs || []).find(q => q.i === c.i); if (a) out.push({ param: c.p, a: L3(a.c), b: L3(arcMid(P[c.i % n], P[(c.i + 1) % n], a.c, a.ccw)), view: 'auto', kind: 'radius' }); }
   }
   return out;
 }
@@ -544,10 +612,10 @@ export function evaluate(doc, opts) {
   R.config = cfg ? cfg.name : null;
   /* constrained profiles are solved before anything is built (their values may be linked parameters) */
   for (const o of doc.objects) {
-    const q = o.params; if (!q || !Array.isArray(q.constraints) || !q.constraints.length || !Array.isArray(q.profile) || (q.shape && q.shape !== 'points')) continue;
+    const q = o.params; if (!q || !Array.isArray(q.profile) || (q.shape && q.shape !== 'points') || !((Array.isArray(q.constraints) && q.constraints.length) || (Array.isArray(q.arcs) && q.arcs.length))) continue;
     try {
-      const res = solveSketch(q.profile, q.constraints, q); R.sketch.set(o.id, res);
-      if (res.ok) q.profile = res.points;
+      const res = solveSketch(q.profile, q.constraints || [], q, q.arcs || [], { open: !!q.open }); R.sketch.set(o.id, res);
+      if (res.ok) { q.profile = res.points; if (q.arcs && q.arcs.length) q.arcs = res.arcs; }
       else R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: the sketch can't satisfy ${res.conflicts.map(c => SKETCH_KINDS[c.type].label.toLowerCase() + ' ' + (c.i + 1) + (c.j != null ? '/' + (c.j + 1) : '')).join(', ') || 'all its constraints'} — remove one` });
     } catch (e) { R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${e.message}` }); }
   }
@@ -561,7 +629,7 @@ export function evaluate(doc, opts) {
     /* a through hole is as deep as its part is big (so it stays through when the part changes) */
     if (o.type === 'hole' && o.params.through && o.into && R.local.has(o.into)) { const bb = R.local.get(o.into).bbox(), L = Math.ceil(V.len(V.sub(bb.max, bb.min)) + 2); if (o.params.depth !== L) o.params.depth = L; }
     if (o.type === 'instance') { const src = byId.get(o.of); R.conns.set(o.id, src && R.conns.has(src.id) ? R.conns.get(src.id) : []); if (!src) R.errors.set(o.id, 'its source part was deleted'); continue; }
-    try { const s = cachedLocal(o); R.local.set(o.id, s); R.conns.set(o.id, connectorsOf(o, s)); }
+    try { const s = cachedLocal(o); R.local.set(o.id, s); const cs = connectorsOf(o, s); R.conns.set(o.id, o.type === 'mesh' || o.type === 'halfspace' ? cs : cs.concat(faceConnectors(s, cs))); }
     catch (e) { R.errors.set(o.id, e.message); let c = []; try { c = connectorsOf(o, null); } catch (e2) { /* an add-on shape with bad parameters has no connectors */ } R.conns.set(o.id, c); }
   }
   /* world transforms: mates resolved from the ground outward */
@@ -591,8 +659,8 @@ export function evaluate(doc, opts) {
           const Fa = M4.mul(Mt, frameOf(tc)), slide = m.slide || [0, 0];
           const T = M4.translate([slide[0] || 0, slide[1] || 0, m.offset || 0]);
           const flip = m.flip ? [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1] : M4.ident();
-          const Rz = M4.axisAngle([0, 0, 1], m.angle || 0);
-          M = M4.mul(Fa, M4.mul(T, M4.mul(flip, M4.mul(Rz, M4.inv(frameOf(sc))))));
+          const Rz = M4.axisAngle([0, 0, 1], m.angle || 0), Rt = m.tilt ? M4.axisAngle([1, 0, 0], m.tilt) : M4.ident();   /* tilt: about the target face's u axis */
+          M = M4.mul(Fa, M4.mul(T, M4.mul(Rt, M4.mul(flip, M4.mul(Rz, M4.inv(frameOf(sc)))))));
         }
       }
     }
@@ -708,6 +776,7 @@ export function evaluate(doc, opts) {
       R.bodies.push({ id: o.id, solid: isol, color: o.color || src.color || (sm ? sm.color : null), name: o.name, hidden: !!o.hidden, instance: o.of });
       R.roots.push(o.id); continue;
     }
+    if (o.type === 'plane' || o.type === 'halfspace') { R.planes = R.planes || []; if (o.type === 'plane') R.planes.push(o.id); continue; }   /* reference geometry, no body */
     const s = cachedBody(o.id);
     if (s.isEmpty() && !R.errors.has(o.id)) R.warnings.push({ kind: 'empty', id: o.id, text: `${o.name}: nothing left after its booleans` });
     const mat = MATERIALS[(o.meta || {}).material] || MATERIALS[doc.material];
@@ -902,7 +971,7 @@ export function findEdge(s, ref) {
   }
   return e;
 }
-const SMOOTH = /:(side|surface|rev\d+|arc|bore|rim)$/;
+const SMOOTH = /:(side|surface|rev\d+|arc\d*|bore|rim)$/;
 /* all crease segments between the same two surfaces, chained into an ordered loop / polyline */
 function edgeLoop(s, segs, sids) {
   const want = sids.slice().sort().join('|'), mine = [];
@@ -1157,13 +1226,14 @@ export class Model {
           x.mate = extra; this.recompute(); return { label: `Mate ${x.name} (${o.kind})`, id: x.id };
         }
         const tconns = o.to === 'origin' ? ORIGIN_CONNS : (this.result.conns.get(o.to) || connectorsOf(need(o.to), null));
+        if (!this.result.conns.has(x.id) && x.type !== 'instance') this.recompute();   /* a part added in this batch: build it first so its own connectors exist */
         const sconns = this.result.conns.get(x.id) || (x.type === 'instance' ? this.result.conns.get(x.of) : null) || connectorsOf(x, null);
         const a = o.a || 'top', b = o.b || 'bottom';
         if (!tconns.find(c => c.name === a)) throw new Error(`No connector “${a}” on the target. Try: ${tconns.map(c => c.name).join(', ')}`);
         if (!sconns.find(c => c.name === b)) throw new Error(`No connector “${b}” on ${x.name}. Try: ${sconns.map(c => c.name).join(', ')}`);
         const kindA = tconns.find(c => c.name === a).kind, kindB = sconns.find(c => c.name === b).kind;
         const flip = o.flip != null ? !!o.flip : (kindA === 'face' && kindB === 'face') || (kindA === 'side' && kindB === 'side');
-        x.mate = { to: o.to, a, b, flip, offset: num(o.offset, 0), angle: num(o.angle, 0), slide: o.slide || [0, 0] };
+        x.mate = { to: o.to, a, b, flip, offset: num(o.offset, 0), angle: num(o.angle, 0), slide: o.slide || [0, 0] }; if (num(o.tilt, 0)) x.mate.tilt = num(o.tilt, 0);
         this.recompute(); return { label: 'Mate ' + x.name, id: x.id };
       }
       case 'unmate': { const x = need(o.id); const M = this.result.world.get(x.id); x.mate = null; if (M) x.pose = poseFromMatrix(M); this.recompute(); return { label: 'Unmate ' + x.name, id: x.id }; }
@@ -1323,6 +1393,43 @@ export class Model {
         }
         return out;
       }
+      case 'plane': {
+        /* a reference plane on a face (gap along its normal, tilt about its u axis, turn about the normal), or at a pose */
+        const name = o.name || `Plane ${d.objects.filter(x => x.type === 'plane').length + 1}`, params = { size: +o.size || 60 };
+        if (!o.target) return Object.assign(this.op({ op: 'add', type: 'plane', id: o.id, name, params, at: o.at, rot: o.rot, fixed: true, stack: false }), { label: 'Add ' + name });
+        const t = need(o.target); let face = o.face || 'top', slide = o.slide || [0, 0];
+        if (o.at) { const f = this.faceAt(t.id, W(o.at), o.normal); if (!f) throw new Error(`no flat face of ${t.name} there`); face = f.face; slide = f.slide; }
+        if (!worldConnectors(this.result, t.id).some(c => c.name === face)) throw new Error(`${t.name} has no connector “${face}”`);
+        const r = this.op({ op: 'add', type: 'plane', id: o.id, name, params, mate: { to: t.id, a: face, b: 'back', offset: +o.offset || 0, angle: +o.angle || 0, tilt: +o.tilt || 0, slide }, stack: false });
+        return { label: `${name} on ${t.name} (${face}${o.offset ? ', ' + o.offset + ' mm out' : ''}${o.tilt ? ', tilted ' + o.tilt + '°' : ''})`, id: r.id, name };
+      }
+      case 'split': {
+        /* cut a part with a plane: keep the side below it (against its normal), above it, or both as two parts */
+        const t = need(o.target), root = (this.bodyContaining(t.id) || {}).id || t.id, keep = o.keep || 'below';
+        if (!['below', 'above', 'both'].includes(keep)) throw new Error('keep is below, above or both');
+        let to, conn = o.conn;
+        if (typeof o.plane === 'string') { const pl = need(o.plane); to = pl.id; if (!conn) conn = 'plane'; }
+        else if (o.plane && o.plane.obj) { to = need(o.plane.obj).id; conn = o.plane.conn || 'top'; }
+        else throw new Error('plane: the id of a plane, or {obj, conn} (a face connector of a part)');
+        if (!worldConnectors(this.result, to).some(c => c.name === conn)) throw new Error(`no connector “${conn}” on ${need(to).name}`);
+        /* a half-space mated to that plane: flipped it fills the side the plane's normal points to (above), else the other side */
+        const cutOff = (target, side) => this.op({ op: 'add', type: 'halfspace', name: `Split: remove ${side} ${need(to).name}`, params: { size: THROUGH }, mate: { to, a: conn, b: 'bottom', flip: side === 'above', offset: 0 }, into: target, mode: 'subtract', stack: false });
+        if (keep === 'both') {
+          const cp = this.op({ op: 'duplicate', id: root, offset: [0, 0], name: (o.name || this.get(root).name) + ' (above)' });
+          cutOff(root, 'above'); cutOff(cp.id, 'below');
+          this.recompute(); return { label: `Split ${t.name} in two`, id: root, other: cp.id };
+        }
+        cutOff(root, keep === 'below' ? 'above' : 'below');
+        this.recompute(); return { label: `Split ${t.name}, keeping ${keep}`, id: root };
+      }
+      case 'helix': {
+        /* a coil spring (or any profile swept along a helix): wire diameter, coil radius (to the wire's centre), pitch, turns */
+        const wire = +o.wire || 2, seg = 24, prof = o.profile || Array.from({ length: seg }, (_, k) => [wire / 2 * Math.cos(2 * Math.PI * k / seg), wire / 2 * Math.sin(2 * Math.PI * k / seg)]);
+        const helix = { radius: +o.radius || 10, pitch: +o.pitch || 5, turns: +o.turns || 5, left: !!o.left };
+        if (!o.profile && helix.pitch <= wire) throw new Error(`a pitch of ${helix.pitch} is no more than the ${wire} wire: the coils would overlap (use a pitch above ${wire})`);
+        const r = this.op({ op: 'add', type: 'sweep', id: o.id, name: o.name || 'Spring', params: { profile: prof, helix, path: [[0, 0, 0], [0, 0, 1]] }, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, fixed: o.fixed, stack: o.stack });
+        return { label: `Helix: ${helix.turns} turns, pitch ${helix.pitch}, R${helix.radius}`, id: r.id, name: r.name };
+      }
       case 'feature': {
         /* a boss (a boolean add standing on a face) or a cut (a boolean remove sunk flush into it): a simple shape mated
            to a face of a part, at a point on it, so it follows the face when the part changes */
@@ -1406,7 +1513,7 @@ export class Model {
         const k = SKETCH_KINDS[o.type]; if (!k) throw new Error(`type is one of ${Object.keys(SKETCH_KINDS).join(', ')}`);
         const c = { type: o.type, i: Math.round(o.i) }; if (k.args === 2) c.j = Math.round(o.j);
         if (o.type === 'fix') c.at = o.at || q.profile[c.i % q.profile.length].slice();
-        if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c) * 1e4) / 1e4; } }
+        if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c, q.arcs); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c, q.arcs) * 1e4) / 1e4; } }
         q.constraints = [...q.constraints.filter(e => !(e.type === c.type && e.i === c.i && e.j === c.j && !k.value)), c];
         if (o.type === 'h') q.constraints = q.constraints.filter(e => !(e.type === 'v' && e.i === c.i)); if (o.type === 'v') q.constraints = q.constraints.filter(e => !(e.type === 'h' && e.i === c.i));
         this.recompute(); const st = this.result.sketch.get(x.id);
@@ -1502,7 +1609,7 @@ export class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
-          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints } : undefined,
+          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
