@@ -4028,7 +4028,14 @@ class Views {
     this.dark = true; this.tool = null; this.connectorsFor = null; this.preview = null;
     this.colors = { bg: [0.08, 0.085, 0.1], grid: 'rgba(255,255,255,0.06)', edge: [0.9, 0.92, 0.95, 1], hidden: [0.6, 0.66, 0.75, 0.75], sel: [1, 0.48, 0.24], ink: '#e8eaf0', dim: '#ff7b3d', label: '#8d93a3' };
     this.resize(); this.rebuild(); this.fitAll();
-    new ResizeObserver(() => { this.resize(); this.draw(); }).observe(canvas.parentElement);
+    /* the page can open while its frame is still 0 px wide (an embedded viewer lays it out later): a fit made then is
+       kept pending and done once the panes have a size; after that a resize keeps what the ortho panes show */
+    new ResizeObserver(() => {
+      const before = this.fitSpan(); this.resize(); const after = this.fitSpan();
+      if (this.pendingFit || !(before > 40)) { if (after > 40) this.fitAll(); }
+      else if (after > 40 && Math.abs(after - before) > 0.5) this.ortho.s = Math.max(0.02, Math.min(200, this.ortho.s * after / before));
+      this.draw();
+    }).observe(canvas.parentElement);
   }
   setTheme(dark) {
     this.dark = dark;
@@ -4529,11 +4536,15 @@ class Views {
     for (const b of R.bodies) { if (b.solid.isEmpty() || b.hidden) continue; const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k]); mx[k] = Math.max(mx[k], bb.max[k]); } }
     if (!isFinite(mn[0])) { mn = [-50, -50, 0]; mx = [50, 50, 50]; }
     const O = R.originPoint, c = V.sub(V.lerp(mn, mx, 0.5), O), size = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 20);
-    const p = this.panes().find(q => q.id === 'front') || this.panes()[0];
-    this.ortho.c = c; this.ortho.s = Math.min(p.w, p.h) * 0.7 / size;
-    this.cam.target = c; this.cam.dist = size * 2.6;
+    const span = this.fitSpan();
+    this.ortho.c = c; this.cam.target = c; this.cam.dist = size * 2.6;
+    /* no room yet (the frame is not laid out): fit when it is */
+    if (!(span > 40)) { this.pendingFit = true; if (!(this.ortho.s > 0) || !isFinite(this.ortho.s)) this.ortho.s = 3; this.draw(); return; }
+    this.pendingFit = false; this.ortho.s = Math.max(0.02, Math.min(200, span * 0.7 / size));
     this.draw();
   }
+  /* the size a fit is made for: the smaller side of the FRONT pane (or of the one pane shown) */
+  fitSpan() { const p = this.panes().find(q => q.id === 'front') || this.panes()[0]; return p ? Math.min(p.w, p.h) : 0; }
   zoomOrtho(pane, px, py, k) {
     const B = BASIS[pane.id], before = this.planeXY(pane, px, py);
     this.ortho.s = Math.max(0.02, Math.min(200, this.ortho.s * k));
