@@ -539,10 +539,10 @@ function renderProps() {
     s.append(field('Name', textInput(model.doc.name, v => apply([{ op: 'rename', name: v }]))));
     s.append(el('div', { class: 'f' }, 'Bodies', el('span', null, `${R.bodies.filter(b => !b.weld).length} parts${R.bodies.some(b => b.weld) ? ' · ' + R.bodies.filter(b => b.weld).length + ' welds' : ''} · ${model.doc.objects.length} features · ${R.ms.toFixed(0)} ms`)));
     const og = R.originRef; s.append(el('div', { class: 'f' }, 'World origin', el('span', null, og ? (model.get(og.obj) || {}).name + ' · ' + og.conn : 'board 0,0,0')));
-    const partsAll = model.doc.objects.filter(o => !['edge', 'pattern', 'weld'].includes(o.type) && !o.into), own = partsAll.filter(o => o.meta && (o.meta.material || o.meta.density));   /* welds take their part's material */
+    const partsAll = model.doc.objects.filter(o => !META.has(o.type) && !o.into), own = partsAll.filter(o => o.meta && (o.meta.material || o.meta.density));   /* welds take their part's material */
     s.append(field('material for parts without one', materialSelect(model.doc.material, '— none —', v => apply([{ op: 'material', material: v }]))));
     s.append(el('div', { class: 'note' }, own.length === partsAll.length ? `All ${partsAll.length} parts have their own material, so this default changes nothing.` : `${partsAll.length - own.length} of ${partsAll.length} parts use this default; ${own.length} have their own.`));
-    if (model.doc.material && own.length) s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply(own.map(o => ({ op: 'set', id: o.id, meta: { material: model.doc.material, density: null } })), `All parts ${MATERIALS[model.doc.material].name}`) }, `Use ${MATERIALS[model.doc.material].name} for all ${partsAll.length} parts`)));
+    if (model.doc.material && own.some(o => o.meta.material !== model.doc.material)) s.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply(own.map(o => ({ op: 'set', id: o.id, meta: { material: model.doc.material, density: null } })), `All parts ${MATERIALS[model.doc.material].name}`) }, `Use ${MATERIALS[model.doc.material].name} for all ${partsAll.length} parts`)));
     /* configurations: named tables of variable values (S / M / L…) */
     const cfgs = model.doc.configs || [], varNames = Object.keys(model.doc.vars || {});
     const sc = sec('Configurations');
@@ -2058,7 +2058,9 @@ function connectorReport(id) {
   return worldConnectors(model.result, id).map(c => ({ name: c.name, kind: c.kind, at: r3(V.sub(c.o, O)), normal: r3(c.n), u: r3(c.u), v: r3(V.cross(c.n, c.u)) }));
 }
 async function snapshotFor(a) {
-  const keep = { layout: views.layout, yaw: views.cam.yaw, pitch: views.cam.pitch, hidden: views.showHidden, dims: views.showDims };
+  /* the picture shows the parts in their own colours: no selection tint (the user's selection comes back afterwards) */
+  const keep = { layout: views.layout, yaw: views.cam.yaw, pitch: views.cam.pitch, hidden: views.showHidden, dims: views.showDims, sel: views.sel };
+  views.sel = null;
   const dirs = { front: [0, -1, 0], top: [0, 0, 1], right: [1, 0, 0], iso: [1, -1, 1], back: [0, 1, 0], left: [-1, 0, 0], bottom: [0, 0, -1] };
   try {
     if (a.layout) views.layout = a.layout;
@@ -2074,7 +2076,9 @@ async function snapshotFor(a) {
   } finally {
     if (a.joints && a.keep !== true) clearPreview();
     if (a.section && a.keep !== true) views.section = keep.section || null;
-    if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); views.draw(); }
+    views.sel = keep.sel;
+    if (a.keep !== true) { views.layout = keep.layout; views.cam.yaw = keep.yaw; views.cam.pitch = keep.pitch; views.showHidden = keep.hidden; views.showDims = keep.dims; syncBar(); }
+    views.draw();
   }
 }
 async function runCmd(cmd, a) {

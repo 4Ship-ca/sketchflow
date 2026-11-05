@@ -49,3 +49,40 @@ The figures are for the current release. Spline ends now meet a line as a true c
 ![Section through the housing and the threaded neck](pump-housing-section.png)
 
 The same checks run in `npm test` (model suite). The example must rebuild with no warnings and a fully defined sketch, weigh 597.75 g, and show no interference. One turn of the cap must lift it exactly 3 mm, still clear of the neck.
+
+## Crow shelf bracket: built over MCP, welded with the weld wizard
+
+![Crow shelf bracket, isometric](crow-shelf-bracket-iso.png)
+
+A heavy shelf bracket: one 1" × ¼" (25.4 × 6.35 mm) steel flat bar bent to 16" on the wall and 14" under the shelf, braced by a ¼" plate cut as a crow in a Northwest Coast formline-inspired style. The crow's breast is the strut: its tail is welded to the wall leg low down, and its wing and head are welded under the arm. Everything was made with MCP tool calls from an AI client: `model_build` batches for the parts, and `model_addon` calls to the welding add-on for the joints.
+
+| File | What it is |
+|---|---|
+| [`crow-shelf-bracket.sf3d.json`](crow-shelf-bracket.sf3d.json) | The finished model. Open it with File → *Example: Crow shelf bracket*, File → *Open model file…*, or `model_session {action:"example", id:"crow-shelf-bracket"}` |
+| [`crow-shelf-bracket.step`](crow-shelf-bracket.step) | The assembly as STEP (AP214), vetted on export: the bar has 5 holes (genus 5), the crow 13 cut-outs (genus 13) and no loose islands, and the four weld beads are their own bodies |
+| [`crow-shelf-bracket.ops.json`](crow-shelf-bracket.ops.json) | The recipe: the six batches as they were sent, each with its label. The weld steps are `{op:"addon", addon:"welding", action:"apply"}`, so `model_build` replays them too |
+
+![Front view: the crow and its two weld symbols](crow-shelf-bracket-front.png)
+
+### How it is made
+
+| Step | Op(s) | What it shows |
+|---|---|---|
+| Bar | `extrude` with two `arcs` | The L as one profile with a bend: inside radius one thickness (6.35), outside two. It is extruded 1" (`end:"symmetric"`) and stood up with `rot:[90,0,0]` |
+| Crow | `extrude` with 19 `splines` | The outline is a closed spline profile: rounded tail and wing feathers, three curved talons, the breast curve, a hooked beak. Its straight edges sit exactly on the bar's inner faces |
+| Formline | 13 × `extrude {end:"through", into:"crow", mode:"subtract"}` | The eye is a lens cut as two crescents round a pupil. The wing-joint and hip ovoids are rings cut as two halves round an inner ovoid. There is a trigon between wing and head, a breast line, and feather and tail splits. Every cut is bridged, so nothing falls out of a laser-cut plate |
+| Screws | 5 × `hole {M5, countersink, through}` | Three in the wall leg (the top one takes the tension; the open "window" behind the wing leaves driver room), two up into the shelf |
+| Joints | `model_addon welding analyze / advise / apply` | The add-on finds two separate places where the crow meets the bar: 174 mm under the arm and 74 mm on the wall leg. Each is a tee, 6.35 on 6.35, open both sides. For regular service it gives double fillets a3 by 135 MAG (ISO 5817-C), welded overhead / vertical as modelled, so the welder turns the bracket over. `apply` places the fillets and the ISO 2553 symbols |
+
+### What was checked
+
+| Call | Result |
+|---|---|
+| `model_query {what:"bbox"}` | 355.6 × 25.4 × 406.4 mm: 14" × 1" × 16" |
+| `model_check` | `{"overlaps": []}`: the fillets sit in the corners, inset 0.02 mm from the parts |
+| `model_mass` | bar 941.9 g, crow 1992.5 g, weld metal 42.3 g: **2.98 kg** |
+| `model_export` | `.sf3d.json`, STEP (vetted), STL, drawing SVG + DXF with both weld symbols and a weld schedule, parts list CSV |
+
+The crow is formline-*inspired*, not a Haida design. Haida crests and formline designs belong to Haida artists and families. For a piece made to sell or show, commission or license the design from a Haida artist.
+
+The same checks run in `npm test` (welding suite): the example must load with no warnings, measure 16" × 14" × 1", have two welded joints with symbols and no overlaps, and weigh about 2.98 kg.

@@ -5,6 +5,7 @@ import welding from '../addons/welding.js';
 import { interference } from '../js/collide.js';
 import { weldSymbol, weldSymbolText, weldSymbolBlockSVG, jointSectionSVG } from '../js/weldsymbol.js';
 import { drawingSVG, drawingDXF } from '../js/drawing.js';
+import { exampleDoc } from '../js/examples.js';
 registerAddon(welding);
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { cond ? pass++ : fail++; console.log((cond ? 'ok  ' : 'FAIL') + ' ' + name + (info !== undefined ? ' → ' + JSON.stringify(info) : '')); };
@@ -117,6 +118,16 @@ ok('a tabbed composite tee: filler fillets and laminate, carbon fibre, no overla
 const md = tee(); run(md, 'apply', { a: 'plate', b: 'web', duty: 'regular' }); md.apply([{ op: 'delete', id: 'plate' }]);
 ok('delete the part: its weld symbol goes too', !md.doc.objects.some(o => o.type === 'callout'));
 
+/* a stem notched where it meets the plate touches in two places: two joints, picked by near, each welded only where it touches */
+const nm = new Model(); nm.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 200, depth: 60, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' }, material: 'steel' }, { op: 'extrude', id: 'rib', profile: [[-80, 10], [-20, 10], [-20, 30], [20, 30], [20, 10], [80, 10], [80, 60], [-80, 60]], length: 6, end: 'symmetric', at: [0, 0, 0], rot: [90, 0, 0], fixed: true, material: 'steel' }]);
+const nj = query(nm, 'analyze', { a: 'plate', b: 'rib', near: [50, 0, 10] }), nj2 = query(nm, 'analyze', { a: 'plate', b: 'rib', near: [-50, 0, 10] });
+ok('a notched stem: each place it touches is its own joint (60 mm each, one more found)', nj.joint === 'tee' && nj.length_mm === 60 && nj.other_contacts === 1 && nj2.length_mm === 60, [nj.length_mm, nj.other_contacts]);
+run(nm, 'apply', { a: 'plate', b: 'rib', near: [50, 0, 10], duty: 'regular' });
+const nb = nm.doc.objects.filter(o => o.meta && o.meta.joint && !o.into).map(o => nm.result.bodies.find(b => b.id === o.id).solid.bbox());
+run(nm, 'apply', { a: 'plate', b: 'rib', near: [-50, 0, 10], duty: 'regular' });
+ok('a second joint gets its own tag, parts and symbol (W2)', nm.doc.objects.filter(o => o.meta && o.meta.joint === 'W2' && !o.into).length === 2 && nm.get('W2c') && nm.get('W2c').params.symbol.ref === 'W2' && nm.callouts().length === 2, nm.doc.objects.map(o => o.id));
+ok('…and the weld runs along that place only, not across the notch', nb.length === 2 && nb.every(bb => bb.min[0] > 19 && bb.max[0] < 81), nb.map(bb => [bb.min[0].toFixed(1), bb.max[0].toFixed(1)]));
+
 /* ---------- symbols, sections, drawings ---------- */
 const fil = weldSymbol({ sym: 'fillet', size: 'a5' }), both = weldSymbol({ sym: 'fillet', both: true, size: 'a5' });
 ok('ISO 2553 system A: one-sided symbols get the dashed identification line, double-sided ones do not', fil.lines.some(l => l[4]) && !both.lines.some(l => l[4]));
@@ -134,6 +145,13 @@ ok('drawings carry the weld symbol and a weld schedule (SVG)', svg.includes('WEL
 const one = tee(); run(one, 'apply', { a: 'plate', b: 'web', duty: 'light' });
 ok('…and in DXF, on a WELDS layer; a one-sided weld has the dashed identification line', /\nWELDS\n/.test(dxf) && dxf.includes('WELD SCHEDULE') && !/WELDS\n6\nHIDDEN/.test(dxf) && /WELDS\n6\nHIDDEN/.test(drawingDXF(one, { sheet: 'A3' })));
 ok('…a joint’s metal and prep cuts carry no dimensions of their own on the sheet', !/>122</.test(svg));
+
+/* the bundled crow shelf bracket (built over MCP): it loads clean, two welded joints, nothing overlaps, 16" × 14" outside */
+const cb = new Model(exampleDoc('crow-shelf-bracket')), cbb = cb.result.bodies.find(b => b.id === 'bar').solid.bbox();
+ok('the crow shelf bracket example loads with no errors or warnings', !cb.result.errors.size && !cb.result.warnings.length, cb.result.warnings.map(w => w.text));
+ok('…16" × 14" outside, 1" wide', near(cbb.max[2] - cbb.min[2], 406.4, 1e-6) && near(cbb.max[0] - cbb.min[0], 355.6, 1e-6) && near(cbb.max[1] - cbb.min[1], 25.4, 1e-6));
+ok('…two welded joints, each with its symbol, and no overlaps', cb.callouts().length === 2 && new Set(cb.doc.objects.filter(o => o.meta && o.meta.joint).map(o => o.meta.joint)).size === 2 && !interference(cb).filter(c => c.volume > 1).length);
+ok('…about 3 kg of steel', near(massReport(cb.doc, cb.result).total_mass_g, 2977, 30), massReport(cb.doc, cb.result).total_mass_g);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

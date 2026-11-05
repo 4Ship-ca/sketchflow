@@ -155,7 +155,8 @@ export function layoutSheet(model, opts = {}) {
   let cl = []; try { cl = opts.welds === false || typeof model.callouts !== 'function' ? [] : model.callouts(); } catch (e) { cl = []; }
   for (const k of cl) {
     let best = null;
-    for (const v of ['front', 'top', 'right']) { if (!ext[v].bbox) continue; const B = VIEWS[v], score = 1 - Math.abs(V.dot(k.dir, B.f)) + 0.3 * Math.abs(V.dot(k.along, B.f)); if (!best || score > best.score) best = { v, score }; }
+    /* the view where the joint shows as a line (its seam square to the line of sight), the leader lying flat on the sheet */
+    for (const v of ['front', 'top', 'right']) { if (!ext[v].bbox) continue; const B = VIEWS[v], score = 1 - Math.abs(V.dot(k.along, B.f)) + 0.5 * (1 - Math.abs(V.dot(k.dir, B.f))); if (!best || score > best.score + 1e-9) best = { v, score }; }
     if (!best) continue;
     const B = VIEWS[best.v], q = V.sub(k.point, O), at = toSheet(best.v, [V.dot(q, B.r), V.dot(q, B.u)]);
     let dx = V.dot(k.dir, B.r), dy = V.dot(k.dir, B.u); const l = Math.hypot(dx, dy);

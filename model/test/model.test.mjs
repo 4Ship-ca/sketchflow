@@ -550,5 +550,11 @@ ok('one turn of the screw-jointed cap lifts it by the thread pitch (3 mm)', near
 ok('…and it stays clear of the neck threads while it turns', interference(Ex_t).length === 0);
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
+/* model coordinates stay the board's when the first part is placed by coordinates (an extrude's bottom is mid start face) */
+const Or = new Model(); Or.apply([{ op: 'extrude', id: 'l', profile: [[0, 0], [100, 0], [100, 10], [0, 10]], length: 20, at: [0, 0, 0], rot: [90, 0, 0], fixed: true }], 'L', { relative: true });
+Or.apply([{ op: 'add', type: 'box', id: 'k', params: { width: 10, depth: 10, height: 10 }, at: [50, 0, 10], fixed: true }], 'K', { relative: true });
+ok('a part placed by coordinates keeps the board origin: the next op lands where it was asked', JSON.stringify(Or.result.originPoint) === '[0,0,0]' && Math.abs(Or.result.bodies.find(b => b.id === 'k').solid.bbox().min[2] - 10) < 1e-9, Or.result.originPoint);
+const Om = new Model(); Om.apply([{ op: 'add', type: 'box', id: 'p', params: { width: 40, depth: 40, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }]);
+ok('…a part mated to the origin is still the origin reference (its bottom)', Om.result.originRef && Om.result.originRef.obj === 'p' && Om.result.originRef.conn === 'bottom', Om.result.originRef);
 console.log(`\n${pass} passed, ${fail} failed · eval ${m.result.ms.toFixed(1)} ms for ${m.doc.objects.length} objects`);
 process.exit(fail ? 1 : 0);

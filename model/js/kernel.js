@@ -1076,7 +1076,10 @@ export const lineKey = (a, b) => {
   let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2]; const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
   if (dx < -1e-9 || (Math.abs(dx) < 1e-9 && (dy < -1e-9 || (Math.abs(dy) < 1e-9 && dz < 0)))) { dx = -dx; dy = -dy; dz = -dz; }
   const t = a[0] * dx + a[1] * dy + a[2] * dz, cx = a[0] - dx * t, cy = a[1] - dy * t, cz = a[2] - dz * t;
-  return { key: `${Math.round(dx * 2e3)},${Math.round(dy * 2e3)},${Math.round(dz * 2e3)}|${Math.round(cx * 1e2)},${Math.round(cy * 1e2)},${Math.round(cz * 1e2)}`, d: [dx, dy, dz], c: [cx, cy, cz] };
+  /* the grid is offset by an odd fraction: round sizes (a ¼" plate's face at 3.175, a 0.005 step) would otherwise sit exactly
+     on a rounding boundary, and 1e-15 of noise from a boolean would put two pieces of one edge in different buckets */
+  const g = (v, sc) => Math.round(v * sc + 0.2367);
+  return { key: `${g(dx, 2e3)},${g(dy, 2e3)},${g(dz, 2e3)}|${g(cx, 1e2)},${g(cy, 1e2)},${g(cz, 1e2)}`, d: [dx, dy, dz], c: [cx, cy, cz] };
 };
 /* creases: boundaries between different surfaces (robust to T-junctions created by booleans) */
 export function creaseEdges(solid) {

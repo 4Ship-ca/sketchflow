@@ -64,6 +64,27 @@ function contacts(api, sa, sb, maxGap) {
   }
   return groups.filter(g => g.B.length);
 }
+/* the separate places where two parts touch on one plane (a notched or stitched edge touches in several): the overlaps of
+   their faces, grouped where they meet, each with the faces of either part that take part in it */
+function splitContact(Vv, g) {
+  let best = null, bl = 0;
+  for (const q of g.B.concat(g.A)) for (let i = 0; i < q.v.length; i++) { const e = Vv.sub(q.v[(i + 1) % q.v.length].p, q.v[i].p), l = Vv.len(e); if (l > bl) { bl = l; best = Vv.mul(e, 1 / l); } }
+  if (!best) return [g];
+  const e1 = Vv.norm(Vv.sub(best, Vv.mul(g.n, Vv.dot(best, g.n)))), e2 = Vv.cross(g.n, e1);
+  const ra = g.A.map(q => rectOf(Vv, [q], e1, e2)), rb = g.B.map(q => rectOf(Vv, [q], e1, e2)), cells = [], tol = 0.05;
+  for (let i = 0; i < ra.length; i++) for (let k = 0; k < rb.length; k++) {
+    const a = ra[i], b = rb[k], u0 = Math.max(a.u0, b.u0), u1 = Math.min(a.u1, b.u1), v0 = Math.max(a.v0, b.v0), v1 = Math.min(a.v1, b.v1);
+    if (u1 - u0 > 1e-6 && v1 - v0 > 1e-6) cells.push({ u0, u1, v0, v1, i, k });
+  }
+  if (!cells.length) return [];
+  const up = cells.map((c, i) => i), find = (i) => (up[i] === i ? i : (up[i] = find(up[i])));
+  for (let x = 0; x < cells.length; x++) for (let y = x + 1; y < cells.length; y++) {
+    const a = cells[x], b = cells[y];
+    if (a.u0 <= b.u1 + tol && b.u0 <= a.u1 + tol && a.v0 <= b.v1 + tol && b.v0 <= a.v1 + tol) up[find(x)] = find(y);
+  }
+  const comps = new Map(); cells.forEach((c, i) => { const r = find(i); if (!comps.has(r)) comps.set(r, []); comps.get(r).push(c); });
+  return [...comps.values()].map(list => Object.assign({}, g, { A: [...new Set(list.map(c => c.i))].map(i => g.A[i]), B: [...new Set(list.map(c => c.k))].map(k => g.B[k]) }));
+}
 function rectOf(Vv, polys, e1, e2) { let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; for (const q of polys) for (const x of q.v) { const u = Vv.dot(x.p, e1), v = Vv.dot(x.p, e2); u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); } return { u0, u1, v0, v1 }; }
 /* distance from p along dir until the ray leaves the solid (its thickness there) */
 function depthAlong(Vv, sol, p, dir) {
@@ -124,7 +145,7 @@ function analyze(ctx, args) {
   const ba = ctx.bodyOf(args.a), bb = ctx.bodyOf(args.b);
   if (!ba || !bb) throw new Error('both parts need geometry');
   if (ba.id === bb.id) throw new Error(`${A0.name} and ${B0.name} are one part already (a boolean merged them) — join separate parts`);
-  const groups = contacts(api, ba.solid, bb.solid, args.max_gap == null ? 6 : +args.max_gap);
+  const groups = contacts(api, ba.solid, bb.solid, args.max_gap == null ? 6 : +args.max_gap).flatMap(g => splitContact(Vv, g));
   if (!groups.length) throw new Error(`${ctx.get(ba.id).name} and ${ctx.get(bb.id).name} do not touch or face each other within 6 mm — mate them together first`);
   const joints = [];
   for (const g of groups) {
@@ -586,9 +607,15 @@ function shifter(Vv, j, g, moved) {
 }
 /* the adhesive layer's own frame: across the contact patch, its thickness along the contact normal */
 const layerSeam = (Vv, j) => ({ s: j.e2, y: j.c, e1: j.e1, L: j.length, O: Vv.add(j.origin, Vv.mul(j.e1, j.rect.u0)) });
+/* a joint's tag (W1, W2…) names all its parts (W1a, W1p1, W1c…): the next one not used by any of them */
+function freeTag(ctx) {
+  const objs = (ctx.doc && ctx.doc.objects) || [], used = (t) => objs.some(o => o.id === t || (o.id.startsWith(t) && /^[a-zA-Z]/.test(o.id.slice(t.length))) || (o.meta && o.meta.joint === t));
+  let n = 1; while (used('W' + n)) n++;
+  return 'W' + n;
+}
 function applyOps(ctx, args, adv, duty) {
   const opt = adv.options[duty]; if (!opt || opt.impossible) throw new Error(opt ? opt.why.join('; ') : 'no such duty (light, regular or heavy)');
-  const j = adv.j, Vv = ctx.api.V, ops = [], tag = args.id || ctx.newId('W'), name = (id) => (ctx.get(id) || {}).name || id;
+  const j = adv.j, Vv = ctx.api.V, ops = [], tag = args.id || freeTag(ctx), name = (id) => (ctx.get(id) || {}).name || id;
   const matA = ctx.material(j.a) || 'steel', matB = ctx.material(j.b) || 'steel', weldMat = opt.method === 'weld' ? (MAT[matA] && MAT[matA].weld ? matA : MAT[matB] && MAT[matB].weld ? matB : 'steel') : null;
   /* 1. the root gap / bond line */
   const g = planGap(ctx, j, opt), { mover, fixed, add } = g, Bobj = ctx.get(mover);

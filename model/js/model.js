@@ -891,7 +891,11 @@ export function evaluate(doc, opts) {
   };
   for (const o of doc.objects) if (!META.has(o.type)) worldOf(o.id);
   /* ephemeral world origin: a connector the user (or the first object) chose; display coordinates are relative to it */
-  const og = doc.origin && byId.get(doc.origin.obj) ? doc.origin : (ground ? { obj: ground, conn: 'bottom' } : null);
+  /* by default the ground part's bottom — when that part is mated to the origin. A ground placed by coordinates (at / fixed)
+     was placed in board coordinates: they stay the model's, or every later op given in model coordinates would land off by
+     wherever that part's bottom face happens to be (an extrude's is the middle of its start face) */
+  const gob = ground && byId.get(ground);
+  const og = doc.origin && byId.get(doc.origin.obj) ? doc.origin : (gob && gob.mate && gob.mate.to === 'origin' ? { obj: ground, conn: 'bottom' } : null);
   if (og) { const c = (R.conns.get(og.obj) || []).find(x => x.name === og.conn); if (c) R.originPoint = M4.point(R.world.get(og.obj), c.o); }
   R.originRef = og;
   /* floating = not grounded, not fixed, no mate chain to the ground / origin, and not welded to something that is */

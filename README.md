@@ -88,7 +88,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_build` | add / set / mate / boolean / edge / extrude / loft / revolve / sweep / delete / origin / ground / fix / cleanup / dim, as one atomic batch; `look:true` returns a picture |
 | `model_describe` | parameters, positions from the origin, mates, connector names (with positions and normals on request), volumes, warnings |
 | `model_view` | a picture of the four views or one view, from any direction |
-| `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say, **share** (a link for live editing together), **room** (who's in it and what they're doing) |
+| `model_session` | undo, redo, new, demo, example (the bundled pump housing and crow shelf bracket), load a `.sf3d.json`, select, say, **share** (a link for live editing together), **room** (who's in it and what they're doing) |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process), `gears/pair`, `welding/advise` (weld, bond or laminate suggestions for light, regular and heavy service) or `welding/apply` |
 | `model_import` | an STL, OBJ or STEP file from disk as mesh parts (STEP: planar faces, each solid kept in place) |
@@ -98,6 +98,8 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_export` | **STEP** (AP214 solids for CAD, vetted before it is saved), STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
 
 **The pump housing example** ([examples/](examples/README.md)). Claude built it in one session using nothing but MCP calls. Load it from File → *Example: Pump housing*, or with `model_session {action:"example", id:"pump-housing"}`. It shows:
+
+**The crow shelf bracket example** ([examples/](examples/README.md#crow-shelf-bracket-built-over-mcp-welded-with-the-weld-wizard)). A 1" × ¼" steel bar bent to 16" × 14", braced by a laser-cut ¼" crow in a Northwest Coast formline-inspired style. It was built over MCP and welded through the welding add-on: two seams, fillets a3, ISO 2553 symbols on the drawing. Load it from File → *Example: Crow shelf bracket*.
 - a fully constrained flange sketch, with arcs, tangents, equal radii and driving dimensions (0 degrees of freedom);
 - spline-profile gussets in a circular pattern, and a counterbored M6 hole pattern;
 - a wedge pad with a modelled M5 tapped hole. Claude placed the hole after asking `model_query` for the pad's sloped face;
