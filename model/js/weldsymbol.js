@@ -105,7 +105,7 @@ export function weldSymbolCanvas(ctx, spec, x, y, scale = 3, color = '#1a1a1a', 
   ctx.setLineDash([]);
   for (const [cx, cy, r, a0, a1] of P.arcs) { ctx.beginPath(); ctx.arc(X(cx), Y(cy), r * scale, -a1, -a0); ctx.stroke(); }
   if (P.flag) { ctx.beginPath(); P.flag.forEach(([u, v], i) => (i ? ctx.lineTo(X(u), Y(v)) : ctx.moveTo(X(u), Y(v)))); ctx.closePath(); ctx.fill(); }
-  for (const t of P.texts) { ctx.font = `600 ${Math.round(t.size * scale)}px Inter, system-ui, sans-serif`; ctx.textAlign = t.anchor === 'middle' ? 'center' : t.anchor === 'end' ? 'right' : 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t.text, X(t.x), Y(t.y)); }
+  for (const t of P.texts) { ctx.font = `600 ${Math.max(9, Math.round(t.size * scale))}px Inter, system-ui, sans-serif`; ctx.textAlign = t.anchor === 'middle' ? 'center' : t.anchor === 'end' ? 'right' : 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t.text, X(t.x), Y(t.y)); }
   ctx.restore();
   return P.box;
 }

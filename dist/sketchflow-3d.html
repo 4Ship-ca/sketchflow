@@ -1465,7 +1465,7 @@ function weldSymbolCanvas(ctx, spec, x, y, scale = 3, color = '#1a1a1a', opts = 
   ctx.setLineDash([]);
   for (const [cx, cy, r, a0, a1] of P.arcs) { ctx.beginPath(); ctx.arc(X(cx), Y(cy), r * scale, -a1, -a0); ctx.stroke(); }
   if (P.flag) { ctx.beginPath(); P.flag.forEach(([u, v], i) => (i ? ctx.lineTo(X(u), Y(v)) : ctx.moveTo(X(u), Y(v)))); ctx.closePath(); ctx.fill(); }
-  for (const t of P.texts) { ctx.font = `600 ${Math.round(t.size * scale)}px Inter, system-ui, sans-serif`; ctx.textAlign = t.anchor === 'middle' ? 'center' : t.anchor === 'end' ? 'right' : 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t.text, X(t.x), Y(t.y)); }
+  for (const t of P.texts) { ctx.font = `600 ${Math.max(9, Math.round(t.size * scale))}px Inter, system-ui, sans-serif`; ctx.textAlign = t.anchor === 'middle' ? 'center' : t.anchor === 'end' ? 'right' : 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t.text, X(t.x), Y(t.y)); }
   ctx.restore();
   return P.box;
 }
@@ -4154,7 +4154,7 @@ class Views {
   freeLines(lb) { if (!lb) return; for (const k of ['a', 'b', 's', 't']) if (lb[k]) this.gl.deleteBuffer(lb[k]); }
   silhouettes(id, buf, dir) {
     const key = id + '|' + dir.map(v => v.toFixed(2)).join(','); let s = this.silCache.get(key);
-    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc\d*|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > 64) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
+    if (!s) { const segs = K.silhouetteEdges(buf.solid, dir, (sid) => /:(side|surface|arc\d*|rev\d+|teeth|bore|rim)$/.test(sid) || /side$/.test(sid)); s = { segs, buf: this.lineBuf(segs) }; this.silCache.set(key, s); if (this.silCache.size > Math.max(64, this.buffers.size * 6)) { const k0 = this.silCache.keys().next().value; this.freeLines(this.silCache.get(k0).buf); this.silCache.delete(k0); } }
     return s;
   }
   /* ---------- drawing ---------- */
@@ -4172,7 +4172,7 @@ class Views {
       gl.clearColor(...C.bg, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const cam = this.vp(pane), ortho = pane.id !== '3d';
       /* faces */
-      const mp = this.meshProg; gl.useProgram(mp.p); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O); this.setClip(mp);
+      const mp = this.meshProg; this.useProg(mp); gl.uniformMatrix4fv(mp.loc.uVP, false, cam.M); gl.uniform3fv(mp.loc.uO, this.O); this.setClip(mp);
       gl.uniform3fv(mp.loc.uL, V.norm(V.add(V.mul(cam.f, 0.6), [0.3, 0.2, 0.75])));
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
@@ -4183,7 +4183,7 @@ class Views {
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       /* edges: visible solid, hidden dashed (drawings) */
-      const lp = this.lineProg; gl.useProgram(lp.p); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]); this.setClip(lp);
+      const lp = this.lineProg; this.useProg(lp); gl.uniformMatrix4fv(lp.loc.uVP, false, cam.M); gl.uniform3fv(lp.loc.uO, this.O); gl.uniform2fv(lp.loc.uVp, [w / 2, h / 2]); this.setClip(lp);
       const passes = ortho && this.showHidden ? ['hidden', 'visible'] : ['visible'];
       for (const pass of passes) {
         gl.depthFunc(pass === 'hidden' ? gl.GREATER : gl.LEQUAL); gl.depthMask(false);
@@ -4199,9 +4199,9 @@ class Views {
       gl.depthFunc(gl.LEQUAL); gl.depthMask(true); gl.uniformMatrix4fv(lp.loc.uM, false, IDENT);
       if (this.highlights.length) {
         gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        const mp2 = this.meshProg; gl.useProgram(mp2.p); gl.uniformMatrix4fv(mp2.loc.uVP, false, cam.M); gl.uniform3fv(mp2.loc.uO, this.O); gl.uniformMatrix4fv(mp2.loc.uM, false, IDENT); gl.uniform1f(mp2.loc.uClipOn, 0);
+        const mp2 = this.meshProg; this.useProg(mp2); gl.uniformMatrix4fv(mp2.loc.uVP, false, cam.M); gl.uniform3fv(mp2.loc.uO, this.O); gl.uniformMatrix4fv(mp2.loc.uM, false, IDENT); gl.uniform1f(mp2.loc.uClipOn, 0);
         for (const h of this.highlights) { gl.uniform3fv(mp2.loc.uC, [1, 0.23, 0.23]); gl.uniform1f(mp2.loc.uA, 0.55); this.bindAttr(mp2.loc.aP, h.mesh, 3); this.bindAttr(mp2.loc.aN, h.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, h.count); }
-        gl.disable(gl.BLEND); gl.useProgram(lp.p); gl.uniform4fv(lp.loc.uC, [0.85, 0.1, 0.1, 1]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.6 * dpr); gl.uniform1f(lp.loc.uClipOn, 0);
+        gl.disable(gl.BLEND); this.useProg(lp); gl.uniform4fv(lp.loc.uC, [0.85, 0.1, 0.1, 1]); gl.uniform1f(lp.loc.uDash, 0); gl.uniform1f(lp.loc.uW, 1.6 * dpr); gl.uniform1f(lp.loc.uClipOn, 0);
         for (const h of this.highlights) this.drawLines(lp, h.edges);
         gl.enable(gl.DEPTH_TEST);
       }
@@ -4211,6 +4211,13 @@ class Views {
     this.drawOverlay();
   }
   bindAttr(loc, buf, size) { const gl = this.gl; if (loc < 0 || loc == null) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
+  /* switch program with only its own attribute arrays on: one left on by the other program (pointing at a buffer freed
+     since, e.g. after a rebuild) makes WebGL refuse the draw — the first pane drawn lost its faces that way */
+  useProg(prog) {
+    const gl = this.gl; gl.useProgram(prog.p);
+    const own = new Set(Object.entries(prog.loc).filter(([k, v]) => /^a[A-Z]/.test(k) && typeof v === 'number' && v >= 0).map(([, v]) => v));
+    for (let i = 0; i < (this.maxAttribs || (this.maxAttribs = Math.min(16, gl.getParameter(gl.MAX_VERTEX_ATTRIBS)))); i++) if (!own.has(i)) gl.disableVertexAttribArray(i);
+  }
   drawLines(lp, L) { if (!L || !L.count) return; const gl = this.gl; this.bindAttr(lp.loc.aA, L.a, 3); this.bindAttr(lp.loc.aB, L.b, 3); this.bindAttr(lp.loc.aS, L.s, 1); this.bindAttr(lp.loc.aT, L.t, 1); gl.drawArrays(gl.TRIANGLES, 0, L.count); }
   /* overlap regions from the interference check: red, seen through everything */
   setHighlights(solids) {
@@ -4338,8 +4345,8 @@ class Views {
     }
     c.restore();
   }
-  /* weld symbols and joint notes (ISO 2553): an arrow onto the joint, the reference line with its symbol, sizes and tail;
-     the notes under it when it (or the part it labels) is selected. Click one to select it. */
+  /* weld symbols and joint notes (ISO 2553): an arrow onto the joint, the reference line with its symbol, sizes and tail
+     (orange when it or the part it labels is selected; its notes are in Properties). Click one to select it. */
   drawCallouts(c, pane, cam) {
     let list; try { list = this.model.callouts(); } catch (e) { return; }
     if (!list.length) return;
@@ -4354,7 +4361,7 @@ class Views {
       if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6;
       const n = Math.hypot(dx, dy); dx /= n; dy /= n;
       /* the reference line runs away from the joint: to the left when the leader leaves to the left */
-      let left = dx < -0.05; const spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' }, scale = 3.4;
+      let left = dx < -0.05; const spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' }, scale = Math.max(2.4, Math.min(3.4, pane.w / 150));
       /* a symbol that would run out of the pane turns to the other side */
       const over = (lf, ddx) => { const Q = weldSymbol(spec, { left: lf }), x0 = p.x + ddx * 38; return Math.max(0, pane.x + 4 - (x0 + Q.box.x0 * scale)) + Math.max(0, x0 + (Q.box.x0 + Q.box.w) * scale - (pane.x + pane.w - 4)); };
       if (over(left, dx) > 0 && over(!left, -dx) < over(left, dx)) { left = !left; dx = -dx; }
@@ -4374,12 +4381,6 @@ class Views {
       c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(kx, ky); c.stroke();
       const s = 7, w = 2.6; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + dx * s - dy * w, p.y + dy * s + dx * w); c.lineTo(p.x + dx * s + dy * w, p.y + dy * s - dx * w); c.closePath(); c.fill();
       weldSymbolCanvas(c, spec, kx, ky, scale, col, { left });
-      if (sel && k.lines.length) {
-        c.font = '600 10.5px "Figtree", system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
-        const lw = Math.max(...k.lines.map(t => c.measureText(t).width)), bx = Math.max(pane.x + 6, Math.min(left ? kx - lw : kx, pane.x + pane.w - lw - 6)), by = ky + 6 * scale + 4;
-        c.fillStyle = this.dark ? 'rgba(20,21,25,0.86)' : 'rgba(255,255,255,0.9)'; c.fillRect(bx - 3, by - 11, lw + 6, k.lines.length * 13 + 4);
-        c.fillStyle = col; k.lines.forEach((t, i) => c.fillText(t, bx, by + i * 13));
-      }
       c.restore();
       this.overlayHits.push({ kind: 'callout', id: k.id, x: box.x, y: box.y, w: box.w, h: box.h, pane: pane.id });
     }
