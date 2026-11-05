@@ -44,10 +44,13 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Part properties, mass properties | `meta {material, density, fill, part_no, supplier, notes, quantity}` | Mass, centre of gravity and inertia per part and for the assembly, a "does it stand" balance check, and a parts list (CSV) |
 | Rollback bar, suppress, reorder | `rollback`, `suppress`, `move` ops; drag rows in History view; ⋯ / right-click menus | New features go in at the bar; order rules are checked (a hole stays after what it cuts) |
 | Mate types (revolute, slider, cylindrical, planar) and animate | `joint` / `drive` ops, the Motion drawer (J) | Gear mates follow continuously; poses are previews until you keep one |
-| Hole feature, shell | `hole` (ISO tables, click a face, auto edge dimensions), `shell` | Through holes stay through when the part changes |
+| Hole feature, shell | `hole` (ISO tables, click a face, auto edge dimensions), `shell` | Through holes stay through when the part changes. Shell works on any closed part: an inward offset of every face (see below) |
+| Sketch constraints | `constraints` on a polyline profile; `constrain` / `unconstrain` ops | Levenberg–Marquardt from the drawn shape (the smallest change that satisfies everything), degrees of freedom by Jacobian rank, conflicts named. Values are ordinary parameters (d1, d2…) so they link, take formulas and switch per configuration |
+| Text (Onshape: sketch text + extrude) | `text {target, face \| at, text, height, depth, mode: emboss \| engrave, path: line \| arc \| arc-inside \| points}` | A single-stroke engraving font thickened to a stroke weight; characters placed rigidly along the path (each turned to its tangent). Emboss = boolean add, engrave = boolean remove. Anchored at its own origin, so editing the words never moves it |
+| Interference check, collision detection | `model_check`, the Check button (I), Motion's *collisions* / *stop at contact* | Exact BSP intersection for moderate parts, a voxel estimate for big ones; motion frames use inset surface probes with grid-accelerated ray parity, so touching never counts as a hit |
 | Configurations, versions | `config` op (variable tables + suppression), File → Save version / Versions | Switch sizes from the toolbar |
 | Part instances (assembly reuse) | `instance` op: linked copies | The parts list counts them |
-| Drawings | SVG/DXF sheet: third-angle views, hidden lines, dimensions, parts list, title block | Generated from the live model in about 0.2 s |
+| Drawings | SVG/DXF sheet: third-angle views, hidden lines, dimensions, parts list, title block; an assembly gets an exploded isometric with balloons tied to the parts list | Generated from the live model in about 0.2 s. Balloons ring the view in the direction of their part and are spread so none overlap; item numbers are the parts list's own |
 | Custom features (FeatureScript) | Add-ons: plain JS objects with shapes, mate kinds and actions | No imports; the same add-on serves the UI form and the AI tool (`model_addon`). See ADDONS.md |
 | Topological naming | An edge is stored as **the two surface ids it lies between** (e.g. `plate:front | plate:right`) plus a point | It survives size changes. If the faces disappear it falls back to the nearest edge, then warns |
 | Variables / expressions | `#name` model variables; any numeric parameter can be `=formula` (`=plate.depth - 2*#wall`) | Editing a size offers to make same-size, same-direction sizes follow it (leader/follower), so links happen as a by-product of normal editing |
@@ -55,6 +58,23 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Drawings | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
+
+### Shell: an offset, not a scale
+
+A scaled copy subtracted from the part gives uneven walls: a 100 × 20 box scaled to fit 2 mm walls on its long sides gets 0.4 mm walls on its short ones. It also breaks on anything non-convex, where the scaled copy pokes out through an inside corner. A shell has to move every face inward by the same distance along its own normal.
+
+`K.offsetSolid` does that on the triangle mesh. Each face plane moves by its offset, and each vertex goes to where its faces' moved planes meet. Three planes give an exact point, so flat-faced parts get exact mitred walls. More than three (curved facets) are solved by least squares. The open face moves outward by a hair, so the cavity breaks through it. The inner solid is subtracted from the part.
+
+The offset can fold over, and a fold is detected in two ways:
+- **Inside one flat face:** a triangle fan across a seam between coplanar pieces can fold even though the face itself is fine. Such a face is rebuilt from its moved outline: loops chained, holes bridged, ear-clipped, and checked to be simple.
+- **A real fold:** a section thinner than two walls, or a rounding tighter than the wall, moves vertices closer to the original surface than one wall. A distance check over a spatial grid finds them.
+
+When there is a real fold, the model **replays the part's own feature history** without the steps that fold:
+- **A rounding smaller than the wall** is left out of the cavity basis. That gives exactly the true erosion: a sharp inner corner.
+- **A unioned boss or rib thinner than two walls** is left out too, so it stays solid, and a warning names it.
+- **A cut cannot be left out** without thinning a wall, so a cut that folds is reported by name.
+
+The walls themselves are always taken from the real part. Results are cached by shape. Typical times: 2–40 ms, about 250 ms for a 32-segment sphere.
 
 ### Merge or join: fillet vs weld
 
@@ -119,17 +139,21 @@ Built so far, on top of the first version:
 - configurations and saved versions
 - linked instances
 - STL/OBJ import
-- drawing sheets (SVG/DXF)
+- drawing sheets (SVG/DXF), with exploded isometrics and parts-list balloons for assemblies
 - parametric sketch shapes
+- the polyline sketch constraint solver
+- interference checks and collision detection during motion
+- shell on any shape (offset, with replay for features thinner than the walls)
+- text: emboss / engrave, straight, on an arc or along a path
 
 Still to come, roughly in order of how much each unlocks:
 
-1. **A sketch constraint solver** for free polylines: coincident, parallel, perpendicular, tangent, equal, dimensioned edges. Rectangles, circles, slots and polygons already keep their sizes as parameters.
+1. **Sketch constraints with arcs**: tangent, concentric, point-on-curve. Polylines are constrained today.
 2. **Draft, rib and loft guide curves.** Taper an extrude with its scale for now.
-3. **Collision detection during motion**, and motion studies: plots of position, speed and clearance.
-4. **Interference check** between parts in an assembly (one click, using the BSP intersect).
+3. **Motion studies**: plots of position, speed and clearance over a sweep (first contact is reported today).
+4. **Text wrapped onto curved faces** (a cylinder's side), and outline fonts loaded from a file.
 5. **Formulas on mate offsets and slides.** Driving dimensions cover most placement needs today.
-6. **Assembly-level drawings**: exploded views with balloons tied to the parts list, section views on the sheet, GD&T and notes.
+6. **More on drawings**: section views on the sheet, GD&T and notes.
 7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be 10–100× faster on large booleans.
 8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
 9. **More add-ons**: bearings and shafts, sheet metal, extrusion profiles, pipe and tube.
@@ -138,8 +162,9 @@ Still to come, roughly in order of how much each unlocks:
 
 ```bash
 node model/test/kernel.test.mjs   # volumes against closed forms: primitives, booleans, extrude/loft/revolve/sweep, edge pieces
-node model/test/model.test.mjs    # stacking, mates, booleans, auto fillet add/subtract, topological edges, round edges, patterns, welds, mass/balance, warnings, undo
+node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, undo
 node model/test/gears.test.mjs    # gears mesh (no overlap; a half-tooth error overlaps), helical/herringbone/ring, trains, planetary, advisor
 node model/test/addons.test.mjs   # the add-on contract and the fasteners example
+node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact
 node build.mjs                    # single-file builds in dist/
 ```

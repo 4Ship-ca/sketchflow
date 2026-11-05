@@ -1,6 +1,9 @@
 /* SketchFlow v2 model tests: node model/test/model.test.mjs */
 import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim } from '../js/model.js';
 import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
+import { textSolid, layoutText } from '../js/text.js';
+import * as K0 from '../js/kernel.js';
+const { V, M4 } = K0;
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { cond ? pass++ : fail++; console.log((cond ? 'ok  ' : 'FAIL') + ' ' + name + (info !== undefined ? ' → ' + JSON.stringify(info) : '')); };
 const near = (a, b, t = 1e-3) => Math.abs(a - b) <= t * Math.max(1, Math.abs(b));
@@ -214,6 +217,29 @@ Sh.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, hei
 ok('shell hollows a box to its walls, open on top', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 30 - 76 * 46 * 28, 1e-6));
 Sh.apply([{ op: 'set', id: 'b', params: { height: 40 } }]);
 ok('shell walls stay the same when the part changes', near(Sh.result.bodies[0].solid.volume(), 80 * 50 * 40 - 76 * 46 * 38, 1e-6));
+/* general shell: an inward offset of every face, so any shape gets even walls */
+const shellOf = (ops) => { const m2 = new Model(); m2.apply(ops); return m2; };
+const ShL = shellOf([{ op: 'add', type: 'extrude', id: 'e', params: { profile: [[0, 0], [60, 0], [60, 10], [10, 10], [10, 40], [0, 40]], length: 30 } }, { op: 'shell', target: 'e', thickness: 2, open: 'end' }]);
+ok('shell an L-profile extrude: mitred walls, open at its end', near(ShL.result.bodies[0].solid.volume(), 900 * 30 - (56 * 6 + 6 * 30) * 28, 1e-6));
+const ShU = shellOf([{ op: 'add', type: 'box', id: 'a', params: { width: 60, depth: 30, height: 10 } }, { op: 'add', type: 'box', id: 'r', params: { width: 10, depth: 30, height: 40 }, mate: { to: 'a', a: 'top', b: 'bottom', slide: [-25, 0] }, into: 'a', mode: 'union' }, { op: 'shell', target: 'a', thickness: 2 }]);
+ok('shell a boolean union (closed): one cavity through both parts', near(ShU.result.bodies[0].solid.volume(), 30000 - (56 * 6 + 6 * 40) * 26, 1e-6), ShU.result.bodies[0].solid.volume());
+const ShC = shellOf([{ op: 'add', type: 'cylinder', id: 'c', params: { diameter: 40, height: 30 } }, { op: 'shell', target: 'c', thickness: 2, open: 'top' }]);
+const apo = 20 * Math.cos(Math.PI / 48) - 2, inArea = 48 * apo * apo * Math.tan(Math.PI / 48), outArea = 24 * 400 * Math.sin(2 * Math.PI / 48);
+ok('shell a cylinder: walls even all round, open on top', near(ShC.result.bodies[0].solid.volume(), outArea * 30 - inArea * 28, 1e-6));
+const filletBox = (r) => [{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 30 } }, { op: 'edge', target: 'b', near: [0, -25, 30], style: 'fillet', size: r }];
+const pre = shellOf(filletBox(1)).result.bodies[0].solid.volume(), ShF = shellOf([...filletBox(1), { op: 'shell', target: 'b', thickness: 2, open: 'bottom' }]);
+ok('a rounding smaller than the wall gets a sharp inner corner (exact)', near(ShF.result.bodies[0].solid.volume(), pre - 76 * 46 * 28, 1e-6) && !ShF.result.warnings.some(w => w.kind === 'shell'));
+const ShF5 = shellOf([...filletBox(5), { op: 'shell', target: 'b', thickness: 2, open: 'bottom' }]), pre5 = shellOf(filletBox(5)).result.bodies[0].solid.volume();
+ok('a rounding bigger than the wall stays round inside (radius minus the wall)', near(pre5 - ShF5.result.bodies[0].solid.volume(), 76 * 46 * 28 - (1 - Math.PI / 4) * 9 * 76, 2e-3));
+const bossOps = [{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 30 } }, { op: 'add', type: 'cylinder', id: 'boss', name: 'Boss', params: { diameter: 4, height: 8 }, mate: { to: 'b', a: 'top', b: 'bottom' }, into: 'b', mode: 'union' }];
+const preB = shellOf(bossOps).result.bodies[0].solid.volume(), ShB = shellOf([...bossOps, { op: 'shell', target: 'b', thickness: 3, open: 'bottom' }]);
+ok('a boss thinner than two walls stays solid, and says so', near(ShB.result.bodies[0].solid.volume(), preB - 74 * 44 * 27, 1e-6) && ShB.result.warnings.some(w => w.kind === 'shell' && /Boss stays solid/.test(w.text)));
+let thinErr = null; try { shellOf([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 6 } }, { op: 'shell', target: 'b', thickness: 5 }]); } catch (e) { thinErr = e.message; }
+ok('walls thicker than the part allows: refused with the reason', /thinner than two walls/.test(thinErr || ''), thinErr);
+let webErr = null; try { shellOf([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 30 } }, { op: 'add', type: 'box', id: 'pk', name: 'Pocket', params: { width: 60, depth: 30, height: 27 }, mate: { to: 'b', a: 'top', b: 'top', flip: false }, into: 'b', mode: 'subtract' }, { op: 'shell', target: 'b', thickness: 2 }]); } catch (e) { webErr = e.message; }
+ok('a cut that leaves a web thinner than two walls is named', /Pocket leaves a section thinner than two walls/.test(webErr || ''), webErr);
+const ShP = shellOf([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 30 } }, { op: 'add', type: 'box', id: 'pk', params: { width: 60, depth: 30, height: 27 }, mate: { to: 'b', a: 'top', b: 'top', flip: false }, into: 'b', mode: 'subtract' }, { op: 'shell', target: 'b', thickness: 2, open: 'bottom' }]);
+ok('open underneath, the same pocket floor is simply a wall (exact)', near(ShP.result.bodies[0].solid.volume(), 71400 - (76 * 46 * 28 - 64 * 34 * 27), 1e-6));
 /* configurations, instances, imported meshes, versions */
 const Cf = new Model();
 Cf.apply([{ op: 'var', name: 'len', value: 100 }, { op: 'add', type: 'box', id: 'bar', params: { width: '=#len', depth: 20, height: 10 } }, { op: 'add', type: 'cylinder', id: 'h', params: { diameter: 6, height: 12 }, mate: { to: 'bar', a: 'top', b: 'top', flip: false, offset: 1 }, into: 'bar', mode: 'subtract' }]);
@@ -246,6 +272,57 @@ const sheet = layoutSheet(Sk);
 ok('a drawing sheet has visible and hidden lines, dimensions and a title block', sheet.lines.some(l => !l.hidden) && sheet.lines.some(l => l.hidden) && sheet.dims.length > 2 && sheet.title.fields.some(([k]) => k === 'SCALE'), { lines: sheet.lines.length, hidden: sheet.lines.filter(l => l.hidden).length, dims: sheet.dims.length, scale: sheet.scale });
 const svgOut = drawingSVG(Sk), dxfOut = drawingDXF(Sk);
 ok('drawings export as SVG and DXF', /^<\?xml[\s\S]*<svg[\s\S]*<\/svg>$/.test(svgOut) && /SECTION[\s\S]*ENTITIES[\s\S]*\nEOF$/.test(dxfOut) && (dxfOut.match(/\nLINE\n/g) || []).length > 20);
+/* exploded isometric with balloons tied to the parts list */
+const Ex = new Model();
+Ex.apply([{ op: 'add', type: 'box', id: 'plate', name: 'Plate', params: { width: 120, depth: 60, height: 8 } },
+  { op: 'add', type: 'cylinder', id: 'post', name: 'Post', params: { diameter: 10, height: 30 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-40, 0] } },
+  { op: 'pattern', of: 'post', kind: 'linear', count: 3, spacing: 40, direction: [1, 0, 0] },
+  { op: 'add', type: 'box', id: 'cap', name: 'Cap', params: { width: 120, depth: 20, height: 6 }, mate: { to: 'plate', a: 'top', b: 'bottom', offset: 30 } }]);
+const exS = layoutSheet(Ex), exItems = bom(Ex.doc, Ex.result).lines;
+const plainS = layoutSheet(Ex, { exploded: false });
+ok('an assembly drawing shows an exploded isometric', exS.exploded && exS.labels.some(l => l.text === 'EXPLODED ISOMETRIC') && !plainS.exploded && plainS.labels.some(l => l.text === 'ISOMETRIC') && !plainS.balloons.length);
+ok('one balloon per parts-list item, numbered as the list (the 3 posts are one item)', exS.balloons.length === exItems.length && exItems.length === 3 && exS.balloons.map(b => b.item).join() === exItems.map(l => l.item).join() && exItems.find(l => l.part === 'Post').quantity === 3, { balloons: exS.balloons.map(b => b.item), items: exItems.map(l => l.part + '×' + l.quantity) });
+const isoPts = exS.lines.filter(l => l.view === 'iso').flatMap(l => [l.a, l.b]), inBox = (p, q) => p[0] >= q.min[0] - 1e-6 && p[0] <= q.max[0] + 1e-6 && p[1] >= q.min[1] - 1e-6 && p[1] <= q.max[1] + 1e-6;
+const isoBox = { min: [Math.min(...isoPts.map(p => p[0])), Math.min(...isoPts.map(p => p[1]))], max: [Math.max(...isoPts.map(p => p[0])), Math.max(...isoPts.map(p => p[1]))] };
+const apart = exS.balloons.every((b, i) => exS.balloons.every((c, j) => i === j || Math.hypot(b.at[0] - c.at[0], b.at[1] - c.at[1]) >= 2 * b.r + 1));
+ok('balloons sit outside the view, inside the frame, apart, each leader on its part', apart && exS.balloons.every(b => !inBox(b.at, isoBox) && b.at[0] - b.r >= exS.m && b.at[0] + b.r <= exS.W - exS.m && b.at[1] - b.r >= exS.m && b.at[1] + b.r <= exS.H - exS.m && inBox(b.anchor, isoBox)), exS.balloons);
+const exSvg = drawingSVG(Ex), exDxf = drawingDXF(Ex);
+ok('balloons export to SVG (circle + number) and DXF (CIRCLE on a BALLOONS layer)', (exSvg.match(/class="bn">\d+</g) || []).length === 3 && (exDxf.match(/\nCIRCLE\n8\nBALLOONS\n/g) || []).length === 3);
+const spread = (S) => { const P2 = S.lines.filter(l => l.view === 'iso').flatMap(l => [l.a, l.b]); return Math.max(...P2.map(p => p[1])) - Math.min(...P2.map(p => p[1])); };
+ok('the exploded view pulls the parts apart', spread(exS) / exS.isoScale > spread(plainS) / plainS.isoScale * 1.2);
+/* text: emboss (boolean add) and engrave (boolean remove), straight or on an arc */
+const tx = (p) => textSolid(Object.assign({ height: 10, depth: 1, weight: 1.2 }, p));
+const tLine = tx({ text: 'HELLO' }), tb = tLine.bbox();
+ok('text is centred on its anchor, cap height as asked', near(tb.min[0], -tb.max[0], 1e-6) && tb.max[1] - tb.min[1] >= 10 - 1e-6 && tb.max[1] - tb.min[1] < 10.6 && near(tb.max[2], 1, 1e-9), tb);
+ok('lower case prints as capitals; unknown characters as ?', near(tx({ text: 'hello' }).volume(), tLine.volume(), 1e-9) && near(tx({ text: '~' }).volume(), tx({ text: '?' }).volume(), 1e-9));
+const Tx = new Model();
+Tx.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 60, height: 6 } }]);
+const tpv0 = Tx.result.bodies[0].solid.volume();
+const [emb] = Tx.apply([{ op: 'text', target: 'plate', text: 'SKETCH', height: 10, depth: 1.5 }]);
+ok('emboss: a boolean add standing on the face (one body, exactly the text\'s volume more)', Tx.result.bodies.length === 1 && near(Tx.result.bodies[0].solid.volume() - tpv0, tx({ text: 'SKETCH', depth: 1.5 }).volume(), 1e-6) && near(Tx.result.bodies[0].solid.bbox().max[2], 7.5, 1e-9));
+const tpv1 = Tx.result.bodies[0].solid.volume();
+const [eng] = Tx.apply([{ op: 'text', target: 'plate', face: 'bottom', text: 'FLOW 3D', height: 8, depth: 0.8, weight: 1, mode: 'engrave' }]);
+ok('engrave: a boolean remove cut in flush with the face', near(tpv1 - Tx.result.bodies[0].solid.volume(), textSolid({ text: 'FLOW 3D', height: 8, depth: 0.8, weight: 1 }).volume(), 1e-6) && near(Tx.result.bodies[0].solid.bbox().min[2], 0, 1e-9));
+const W0 = Tx.result.world.get(eng.id), xs = M4.dir(W0, [1, 0, 0]), ys = M4.dir(W0, [0, 1, 0]);
+ok('text on any face reads the right way round (its x × up is the face normal)', V.dot(V.cross(xs, ys), [0, 0, -1]) > 0.999);
+const tv = () => Tx.result.bodies[0].solid.volume(), before = tv();
+Tx.apply([{ op: 'set', id: emb.id, params: { text: 'SKETCHFLOW' } }]);
+ok('editing the words keeps the text where it was and rebuilds it', tv() > before && near(Tx.result.world.get(emb.id)[12], 0, 1e-9));
+const arcT = tx({ text: 'ROUND BADGE', height: 6, weight: 0.8, path: 'arc', radius: 30 });
+const arcPts = arcT.polys.flatMap(q => q.v.map(v => Math.hypot(v.p[0], v.p[1])));
+ok('arc text: letters stand on the arc, tops outward, centred at the top', Math.min(...arcPts) > 30 - 0.8 && Math.max(...arcPts) < 36.6 && arcT.bbox().min[1] > 0 && near(arcT.bbox().min[0] + arcT.bbox().max[0], 0, 0.6));
+const inT = tx({ text: 'MADE 2026', height: 5, weight: 0.7, path: 'arc-inside', radius: 30 }), inPts = inT.polys.flatMap(q => q.v.map(v => Math.hypot(v.p[0], v.p[1])));
+ok('arc-inside text: along the bottom, tops toward the centre', Math.max(...inPts) < 30 + 0.7 && Math.min(...inPts) > 30 - 5.7 && inT.bbox().max[1] < 0);
+const D2 = new Model(); D2.apply([{ op: 'add', type: 'cylinder', id: 'disc', params: { diameter: 80, height: 5 } }]);
+const dv0 = D2.result.bodies[0].solid.volume();
+D2.apply([{ op: 'text', target: 'disc', text: 'ROUND BADGE', path: 'arc', radius: 30, height: 6, depth: 0.8, weight: 0.8 }, { op: 'text', target: 'disc', text: 'MADE 2026', path: 'arc-inside', radius: 30, height: 5, depth: 0.6, weight: 0.7, mode: 'engrave' }]);
+ok('a badge: arc text embossed over the top and engraved under the bottom of a disc', near(D2.result.bodies[0].solid.volume() - dv0, arcT.volume() * 0.8 / 1 - inT.volume() * 0.6 / 1, 1e-6));
+const pathT = layoutText({ text: 'AB', height: 10, weight: 1.2, path: 'points', points: [[0, 0], [10, 0], [10, 30]], align: 'start' });
+ok('text follows a polyline path, each letter turned to its tangent', pathT.chars[0].strokes[0][0][1] < 1e-9 && pathT.chars.length === 2);
+let longErr = null; try { tx({ text: 'A VERY LONG TEXT THAT GOES ALL THE WAY ROUND', path: 'arc', radius: 10 }); } catch (e) { longErr = e.message; }
+ok('text longer than its arc is refused with the numbers', /longer than the arc/.test(longErr || ''));
+const [clk] = Tx.apply([{ op: 'text', target: 'plate', at: [30, 15, 7.5], normal: [0, 0, 1], text: 'X', height: 6, depth: 1 }]);
+ok('a click on a face places the text there (face found from the normal)', Tx.get(clk.id).mate.a === 'top' && near(Tx.result.world.get(clk.id)[12], 30, 1e-6) && near(Tx.result.world.get(clk.id)[13], 15, 1e-6));
 /* sketch constraints on a polyline profile */
 const Sc = new Model();
 Sc.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [61, 1.5], [60, 9], [11, 10.5], [9, 41], [1, 40]], length: 10, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'h', i: 2 }, { type: 'v', i: 3 }, { type: 'h', i: 4 }, { type: 'v', i: 5 }] }]);

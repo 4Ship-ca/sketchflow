@@ -23,6 +23,7 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  text: 'M5 7V5h14v2M12 5v14M9 19h6',
   box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5', wedge: 'M4 18h16L4 6zM4 6l4-2 12 12', cylinder: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6',
   cone: 'M12 3L5 18M12 3l7 15M5 18c0 1.7 3.1 3 7 3s7-1.3 7-3-3.1-3-7-3-7 1.3-7 3z', sphere: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12c0 1.9 4 3.5 9 3.5s9-1.6 9-3.5',
   fillet: 'M4 20V4M4 20h16M4 8c0 7 5 12 12 12', weld: 'M4 20V4M4 20h16M4 12a8 8 0 0 0 8 8', chamfer: 'M4 20V4M4 20h16M4 10l10 10', sketch: 'M4 18l5-12 6 8 5-6M4 18h16',
@@ -82,6 +83,7 @@ function subOf(o) {
     case 'instance': return `linked copy of ${name(o.of)}`;
     case 'mesh': { const mm = (model.doc.meshes || {})[p.ref || o.id]; return `imported mesh${mm && mm.tris ? ' · ' + mm.tris.toLocaleString() + ' triangles' : ''}${p.scale !== 1 ? ' · ×' + p.scale : ''}`; }
     case 'shell': return `${fmt(p.thickness)} mm walls${p.open && p.open !== 'none' ? ' · open ' + p.open : ''} · on ${name(o.into)}`;
+    case 'text': return `“${String(p.text).slice(0, 24)}” · ${fmt(p.height)} mm${p.path && p.path !== 'line' ? ' · ' + (p.path === 'points' ? 'on a path' : p.path === 'arc' ? 'arc R' + fmt(p.radius) : 'arc (inside) R' + fmt(p.radius)) : ''}${o.into ? (o.op === 'subtract' ? ' · engraved ' : ' · embossed ') + fmt(p.depth) + ' on ' + name(o.into) : ''}`;
     default: return TYPES[o.type] ? TYPES[o.type].label : o.type;
   }
 }
@@ -305,12 +307,12 @@ function leaderMenu(ob, prm, anchor) {
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
-const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] } };
+const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES) }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
 function paramField(o, k, v) {
-  const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = optionsFor(o.type, k);
+  const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = o.type === 'shell' && k === 'open' ? shellOpens(o.into) : optionsFor(o.type, k);
   if (opts) { const sl = el('select', null, ...opts.map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => set(sl.value); return field(label(k), sl); }
   if (typeof v === 'number') return field(label(k), paramInput(o, k));
   if (typeof v === 'boolean') { const c = el('input', { type: 'checkbox' }); c.checked = v; c.onchange = () => set(c.checked); return field(label(k), c); }
@@ -450,6 +452,11 @@ function renderProps() {
   }
   infoSection(o, sec);
   if (['extrude', 'revolve', 'loft'].includes(o.type) && Array.isArray(o.params.constraints) && (!o.params.shape || o.params.shape === 'points')) sketchSection(o, sec);
+  if (o.type === 'text' && o.into && o.mate) {
+    const eng = o.op === 'subtract', m = o.mate;
+    s1.append(el('div', { class: 'note' }, eng ? 'Engraved: a boolean remove, cut in flush with the face' : 'Embossed: a boolean add, standing on the face'),
+      el('button', { class: 'btn', style: 'width:100%;margin-top:4px', title: 'Switch between a boolean add (standing on the face) and a boolean remove (cut into it)', onclick: () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: eng ? 'union' : 'subtract' }, { op: 'mate', id: o.id, to: m.to, a: m.a, b: eng ? 'bottom' : 'top', flip: eng, slide: m.slide, angle: m.angle, offset: 0 }], eng ? 'Emboss text' : 'Engrave text') }, eng ? 'Emboss instead' : 'Engrave instead'));
+  }
   if (o.type === 'hole') { try { s1.append(el('div', { class: 'note' }, holeSpec(o.params).label + (o.params.through ? ', through (follows the part’s thickness)' : ''))); } catch (e) { s1.append(el('div', { class: 'warnline' }, e.message)); } }
   /* placement */
   if (!['edge', 'pattern', 'weld'].includes(o.type)) {
@@ -506,7 +513,7 @@ function renderProps() {
   if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
   s4.append(el('div', { class: 'btns' },
     !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
-    ['box', 'cylinder', 'cone', 'sphere', 'extrude'].includes(o.type) && !o.into ? el('button', { class: 'btn', onclick: () => shellHint(o) }, 'Shell…') : null,
+    !o.into && !META.has(o.type) && model.result.bodies.some(b => b.id === o.id) ? el('button', { class: 'btn', title: 'Hollow this part to an even wall thickness (any shape)', onclick: () => shellHint(o) }, 'Shell…') : null,
     el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
     el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
 }
@@ -615,8 +622,8 @@ $('#fileBtn').onclick = (e) => {
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
   item('Export 4-view PNG', () => views.snapshot().toBlob(b => download(b, slug() + '-views.png')));
   item('Export parts list (CSV)', () => download(new Blob([bomCSV()], { type: 'text/csv' }), slug() + '-parts.csv'));
-  item('Export drawing (SVG, A3)', () => { try { download(new Blob([drawingSVG(model, { sheet: 'A3' })], { type: 'image/svg+xml' }), slug() + '-drawing.svg'); } catch (e) { toast(e.message, 3000); } });
-  item('Export drawing (DXF)', () => { try { download(new Blob([drawingDXF(model, { sheet: 'A3' })], { type: 'application/dxf' }), slug() + '-drawing.dxf'); } catch (e) { toast(e.message, 3000); } });
+  item('Export drawing (SVG, A3)', () => { try { download(new Blob([drawingSVG(model, { sheet: 'A3', exploded: prefs.exploded !== false })], { type: 'image/svg+xml' }), slug() + '-drawing.svg'); } catch (e) { toast(e.message, 3000); } });
+  item('Export drawing (DXF)', () => { try { download(new Blob([drawingDXF(model, { sheet: 'A3', exploded: prefs.exploded !== false })], { type: 'application/dxf' }), slug() + '-drawing.dxf'); } catch (e) { toast(e.message, 3000); } });
   item('Preview drawing', previewDrawing);
   item('Import STL / OBJ…', () => $('#meshIn').click());
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
@@ -626,11 +633,15 @@ $('#fileBtn').onclick = (e) => {
 };
 /* the drawing sheet in an overlay (works in the artifact viewer too, where downloads are blocked) */
 function previewDrawing() {
-  let svg; try { svg = drawingSVG(model, { sheet: prefs.sheet || 'A3' }); } catch (e) { toast(e.message, 3000); return; }
+  const dopts = () => ({ sheet: prefs.sheet || 'A3', exploded: prefs.exploded !== false });
+  let svg; try { svg = drawingSVG(model, dopts()); } catch (e) { toast(e.message, 3000); return; }
+  const parts = model.result.bodies.filter(b => !b.hidden && !b.solid.isEmpty()).length;
   const ov = el('div', { class: 'sheetov', onclick: (e) => { if (e.target === ov) ov.remove(); } });
-  const bar = el('div', { class: 'sheetbar' }, el('b', null, 'Drawing'), el('span', { class: 'note' }, 'Third-angle views, hidden lines dashed, dimensions from the model'),
-    el('span', { style: 'flex:1' }), ...['A4', 'A3', 'A2'].map(sz => el('button', { class: 'btn' + ((prefs.sheet || 'A3') === sz ? ' pri' : ''), onclick: () => { prefs.sheet = sz; savePrefs(); ov.remove(); previewDrawing(); } }, sz)),
-    el('button', { class: 'btn', onclick: () => download(new Blob([svg], { type: 'image/svg+xml' }), slug() + '-drawing.svg') }, 'SVG'), el('button', { class: 'btn', onclick: () => download(new Blob([drawingDXF(model, { sheet: prefs.sheet || 'A3' })], { type: 'application/dxf' }), slug() + '-drawing.dxf') }, 'DXF'), el('button', { class: 'btn', onclick: () => ov.remove() }, 'Close'));
+  const bar = el('div', { class: 'sheetbar' }, el('b', null, 'Drawing'), el('span', { class: 'note' }, parts > 1 && prefs.exploded !== false ? 'Third-angle views, hidden lines dashed, exploded isometric with balloons numbered as the parts list' : 'Third-angle views, hidden lines dashed, dimensions from the model'),
+    el('span', { style: 'flex:1' }),
+    parts > 1 ? el('button', { class: 'btn' + (prefs.exploded !== false ? ' pri' : ''), title: 'Exploded isometric with numbered balloons tied to the parts list', onclick: () => { prefs.exploded = prefs.exploded === false; savePrefs(); ov.remove(); previewDrawing(); } }, 'Exploded') : null,
+    ...['A4', 'A3', 'A2'].map(sz => el('button', { class: 'btn' + ((prefs.sheet || 'A3') === sz ? ' pri' : ''), onclick: () => { prefs.sheet = sz; savePrefs(); ov.remove(); previewDrawing(); } }, sz)),
+    el('button', { class: 'btn', onclick: () => download(new Blob([svg], { type: 'image/svg+xml' }), slug() + '-drawing.svg') }, 'SVG'), el('button', { class: 'btn', onclick: () => download(new Blob([drawingDXF(model, dopts())], { type: 'application/dxf' }), slug() + '-drawing.dxf') }, 'DXF'), el('button', { class: 'btn', onclick: () => ov.remove() }, 'Close'));
   const img = el('img', { src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), alt: 'Drawing sheet' });
   ov.append(el('div', { class: 'sheetbox' }, bar, el('div', { class: 'sheetimg' }, img))); document.body.append(ov);
 }
@@ -694,10 +705,10 @@ let tool = null;
 const hint = (t, actions, fields) => {
   const h = $('#hint'); if (!t) { h.hidden = true; return; } h.hidden = false; h.innerHTML = '';
   const inputs = (fields || []).map(([k, label, v, options]) => {
-    const i = options ? el('select', { 'data-k': k, 'aria-label': label }, ...options.map(x => el('option', { value: x, selected: x === v }, x))) : el('input', { type: 'number', step: 'any', value: v, 'data-k': k, 'aria-label': label });
+    const i = options ? el('select', { 'data-k': k, 'aria-label': label }, ...options.map(x => el('option', { value: x, selected: x === v }, x))) : typeof v === 'string' ? el('input', { type: 'text', value: v, 'data-k': k, 'data-str': '1', 'aria-label': label, class: 'htext' }) : el('input', { type: 'number', step: 'any', value: v, 'data-k': k, 'aria-label': label });
     i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && actions && actions[0]) actions[0][1](vals()); if (e.key === 'Escape') setTool(null); }); return [k, label, i, options];
   });
-  const vals = () => Object.fromEntries(inputs.map(([k, , i, options]) => [k, options ? i.value : parseFloat(String(i.value).replace(',', '.'))]));
+  const vals = () => Object.fromEntries(inputs.map(([k, , i, options]) => [k, options || i.dataset.str ? i.value : parseFloat(String(i.value).replace(',', '.'))]));
   h.append(el('span', null, t), ...inputs.map(([, label, i]) => el('label', { class: 'hf' }, label, i)), ...(actions || []).map(([l, f]) => el('button', { onclick: () => f(vals()) }, l)), el('button', { onclick: () => setTool(null) }, 'Esc'));
   if (inputs[0] && !inputs[0][3]) setTimeout(() => { inputs[0][2].focus(); if (inputs[0][2].select) inputs[0][2].select(); }, 0);
 };
@@ -719,6 +730,10 @@ function setTool(name, arg) {
   else if (name === 'hole') {
     hint('Hole: click a face to place it — it is dimensioned from the two nearest edges (click a dimension to change it). Esc when done', [], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
     document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
+  }
+  else if (name === 'text') {
+    hint('Text: set the words, then click a flat face — emboss stands it on the face, engrave cuts it in (change anything later in Properties)', [], [['text', 'text', prefs.textText || 'TEXT'], ['height', 'height mm', prefs.textH || 8], ['depth', 'depth mm', prefs.textD || 1], ['mode', 'mode', prefs.textMode || 'emboss', ['emboss', 'engrave']], ['path', 'path', prefs.textPath || 'line', ['line', 'arc', 'arc-inside']], ['radius', 'arc radius', prefs.textR || 30]]);
+    document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = { text: 'textText', height: 'textH', depth: 'textD', mode: 'textMode', path: 'textPath', radius: 'textR' }[i.dataset.k]; prefs[k] = i.dataset.str || i.tagName === 'SELECT' ? i.value : +i.value; savePrefs(); }));
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
   else if (name === 'sketch') { tool.data.points = []; tool.data.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); if (!arg) pendingLoft = null; sketchHint(); }
@@ -904,6 +919,17 @@ function clickTool(pane, x, y, hit, e) {
     } catch (err) { /* toast shown */ }
     return;
   }
+  if (t.name === 'text') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a flat face of a part'); return; }
+    const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the text on the original'); return; }
+    const f = Object.fromEntries([...document.querySelectorAll('#hint [data-k]')].map(i => [i.dataset.k, i.dataset.str || i.tagName === 'SELECT' ? i.value : parseFloat(i.value)]));
+    const snap = (v) => Math.round(v * 2) / 2, at = V.sub(pk.point, R.originPoint).map(snap);
+    try {
+      const r = apply([{ op: 'text', target: id, at, normal: pk.normal, text: f.text || 'TEXT', height: f.height || 8, depth: f.depth || 1, weight: +((f.height || 8) * 0.12).toFixed(2), mode: f.mode, path: f.path, radius: f.radius }])[0];
+      setTool(null); select(r.id); toast(`${f.mode === 'engrave' ? 'Engraved' : 'Embossed'} — edit the words, size, path or radius in Properties`, 2400);
+    } catch (e) { /* toast shown */ }
+    return;
+  }
   if (t.name === 'hole') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a face of a part'); return; }
     const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the hole on the original'); return; }
@@ -941,9 +967,15 @@ function seamNear(pk) {
   }
   return best;
 }
+/* faces a shell can leave open: the part's own face connectors (top, end, …), or none */
+function shellOpens(id) {
+  const names = worldConnectors(model.result, id).filter(c => c.kind === 'face').map(c => c.name), pref = ['top', 'end', 'bottom', 'start'];
+  names.sort((a, b) => (pref.indexOf(a) < 0 ? 9 : pref.indexOf(a)) - (pref.indexOf(b) < 0 ? 9 : pref.indexOf(b)));
+  return [...new Set(names), 'none'];
+}
 function shellHint(o) {
   setTool(null);
-  const opens = o.type === 'box' ? ['top', 'bottom', 'front', 'back', 'left', 'right', 'none'] : o.type === 'extrude' ? ['end', 'start', 'none'] : o.type === 'sphere' ? ['none'] : ['top', 'bottom', 'none'];
+  const opens = shellOpens(o.id);
   hint(`Shell ${o.name}: hollow it to a wall thickness`, [['Shell', (v) => { try { const r = apply([{ op: 'shell', target: o.id, thickness: v.thickness, open: v.open }])[0]; hint(null); select(r.id); toast('Shelled — change the wall thickness in Properties any time', 2000); } catch (e) { /* toast shown */ } }]],
     [['thickness', 'wall mm', prefs.shellT || 2], ['open', 'open face', opens[0], opens]]);
 }
@@ -1007,7 +1039,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 'p' && selected) patternHint(selected);
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 't') setTool('text'); if (k === 'p' && selected) patternHint(selected);
   if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
 });
 
@@ -1081,7 +1113,7 @@ async function runCmd(cmd, a) {
       return out;
     }
     case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
-    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3' }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3' }) : JSON.stringify(model.doc, null, 1) }; }
+    case 'model.export': { const f = a.format || 'stl'; return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : JSON.stringify(model.doc, null, 1) }; }
     case 'model.select': select(a.id || null); return { selected };
     case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }

@@ -5,8 +5,9 @@
    One API — apply(ops) — serves the UI and the MCP bridge, so an LLM builds with the same JSON a click produces. */
 import * as K from './kernel.js';
 import { solveSketch, KINDS as SKETCH_KINDS, measure as measureConstraint } from './sketch.js';
+import { textSolid, layoutText, TEXT_PATHS, TEXT_ALIGN } from './text.js';
 const { V, M4 } = K;
-export { SKETCH_KINDS };
+export { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText };
 
 export const TYPES = {
   box: { label: 'Box', params: { width: 40, depth: 30, height: 20 } },
@@ -26,6 +27,8 @@ export const TYPES = {
   mesh: { label: 'Mesh', params: { scale: 1 } },
   /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
   hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0 } },
+  /* text (single-stroke engraving font) along a line, an arc or a polyline; emboss = union it onto a face, engrave = subtract it */
+  text: { label: 'Text', params: { text: 'TEXT', height: 10, depth: 1, weight: 1.2, spacing: 1, path: 'line', radius: 40, angle: 0, align: 'center', points: [[-40, 0], [40, 0]] } },
   /* hollow a part to a wall thickness, optionally open on one face */
   shell: { label: 'Shell', params: { thickness: 2, open: 'top' } },
   /* array of other features: linear (1 or 2 directions), circular (about an axis), mirror (across a plane) */
@@ -91,6 +94,8 @@ function connectorsOf(o, solid) {
     case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
     case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
+    /* text: its anchor (the line's middle / start / end, an arc's centre) on the bottom and top faces, so editing the words never moves it */
+    case 'text': return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, +p.depth || 1], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, (+p.depth || 1) / 2], [0, 0, 1], [1, 0, 0], 'center')];
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
       conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
     default: {
@@ -185,47 +190,42 @@ function buildHole(p) {
   if (h.kind === 'countersink' && h.cs) { const rc = h.cs / 2, dz = rc - r; s = s.union(tr(K.cylinder(r, rc, dz, seg), -dz)).union(tr(K.cylinder(rc, rc, up, seg), 0)); }
   return s;
 }
-/* shell cavity in the part's own frame: the same shape, thinner by t, opened through one face */
-function shellCavity(root, p) {
-  const t = +p.thickness, q = root.params, open = p.open || 'none', E = 1;
-  if (!(t > 0)) throw new Error('thickness must be above 0');
-  const box = (w, d, h, x, y, z) => K.box(w, d, h).transform(M4.translate([x, y, z]));
-  switch (root.type) {
-    case 'box': {
-      const W = q.width - 2 * t, D = q.depth - 2 * t; if (W <= 0 || D <= 0 || q.height - 2 * t <= 0) throw new Error(`walls of ${t} leave nothing inside`);
-      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? q.height + E : q.height - t;
-      let x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2;
-      if (open === 'front') y0 = -q.depth / 2 - E; if (open === 'back') y1 = q.depth / 2 + E; if (open === 'left') x0 = -q.width / 2 - E; if (open === 'right') x1 = q.width / 2 + E;
-      return box(x1 - x0, y1 - y0, z1 - z0, (x0 + x1) / 2, (y0 + y1) / 2, z0);
-    }
-    case 'cylinder': case 'cone': {
-      const R1 = q.diameter / 2, R2 = root.type === 'cone' ? (q.top || 0) / 2 : R1, H = q.height, slope = (R1 - R2) / H, k = Math.sqrt(1 + slope * slope);
-      const z0 = open === 'bottom' ? -E : t, z1 = open === 'top' ? H + E : H - t, rAt = (z) => R1 - slope * z - t * k;
-      if (rAt(Math.max(0, z0)) <= 0) throw new Error(`walls of ${t} leave nothing inside`);
-      return K.cylinder(Math.max(0.01, rAt(z0)), Math.max(0.01, rAt(z1)), z1 - z0, SEG).transform(M4.translate([0, 0, z0]));
-    }
-    case 'sphere': { const R = q.diameter / 2 - t; if (R <= 0) throw new Error('walls too thick'); return K.sphere(R, 32).transform(M4.translate([0, 0, t])); }
-    case 'extrude': {
-      if ((q.twist || 0) !== 0 || (q.scale != null && q.scale !== 1)) throw new Error('shell works on straight extrudes (no twist or taper)');
-      const inner = insetPolygon(q.shape && q.shape !== 'points' ? shapeProfile(q) : q.profile, t); if (!inner) throw new Error(`walls of ${t} leave nothing inside the profile`);
-      const z0 = open === 'start' || open === 'bottom' ? -E : t, z1 = open === 'end' || open === 'top' ? q.length + E : q.length - t;
-      return K.extrude(inner, { length: z1 - z0, dir: q.direction }).transform(M4.translate(V.mul(V.norm(q.direction || [0, 0, 1]), z0 / (V.norm(q.direction || [0, 0, 1])[2] || 1))));
-    }
+/* shell: any closed part becomes walls of thickness t. Every face moves inward by t (an offset, not a scale, so walls
+   are even on any shape: each vertex goes to where its faces' moved planes meet) and that inner solid is subtracted.
+   The open face (one of the part's face connectors) gets no wall, so the cavity breaks through it.
+   Where the inner offset would fold over — a rounding tighter than the wall, a boss or rib thinner than two walls —
+   the cavity is taken from the part rebuilt without those features (replay), so a small rounding gets a sharp inner
+   corner (the exact result) and a thin boss or rib stays solid, as in other CAD shells. A cut that leaves a section
+   thinner than two walls is reported instead. */
+const SHELL_CACHE = new Map();
+const shapeKey = (s) => { const b = s.bbox(); return s.polys.length + '|' + s.volume().toFixed(6) + '|' + [...b.min, ...b.max].map(v => v.toFixed(5)).join(','); };
+function shellBody(solid, root, p, R, tagId, replay) {
+  const t = +p.thickness; if (!(t > 0)) throw new Error('thickness must be above 0');
+  let open = null;
+  if (p.open && p.open !== 'none') {
+    const c = worldConnectors(R, root.id).find(x => x.name === p.open && x.kind === 'face');
+    if (!c) throw new Error(`no face “${p.open}” on ${root.name} to leave open`);
+    open = { n: c.n, d: V.dot(c.n, c.o) };
   }
-  throw new Error('shell works on boxes, cylinders, cones, spheres and straight extrudes');
-}
-/* inward offset of a simple polygon (mitred corners) */
-function insetPolygon(pts, t) {
-  let P = pts.slice(); if (K.area2(P) < 0) P = P.reverse();
-  const n = P.length, lines = [];
-  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L; lines.push([[a[0] + nx * t, a[1] + ny * t], [dx / L, dy / L]]); }
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const [p1, d1] = lines[(i + n - 1) % n], [p2, d2] = lines[i], den = d1[0] * d2[1] - d1[1] * d2[0];
-    if (Math.abs(den) < 1e-9) { out.push(p2); continue; }
-    const u = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den; out.push([p1[0] + d1[0] * u, p1[1] + d1[1] * u]);
+  const key = shapeKey(solid) + '|' + t + '|' + (open ? open.n.map(x => x.toFixed(6)) + ',' + open.d.toFixed(6) : '-'), MARK = '\u0001';
+  const named = (r) => { const c = r.solid.clone(); for (const q of c.polys) if (q.sid.startsWith(MARK + ':')) q.sid = tagId + q.sid.slice(1); return { solid: c, solidKept: r.solidKept }; };
+  const hit = SHELL_CACHE.get(key); if (hit) return named(hit);
+  const bb = solid.bbox(), size = V.len(V.sub(bb.max, bb.min)), tolD = size * 1e-6 + 1e-6, eps = Math.max(0.01, size * 1e-4);
+  const isOpen = (poly) => !!open && V.dot(poly.plane.n, open.n) > 1 - 1e-6 && Math.abs(poly.plane.w - open.d) < tolD;
+  /* the inward offset, or null where it folds over */
+  const inward = (x) => { const { solid: inner, flipped } = K.offsetSolid(x, (poly) => (isOpen(poly) ? eps : -t)); if (flipped) return null; const v = inner.volume(); return v > 0 && v < x.volume() ? inner : null; };
+  let inner = inward(solid), solidKept = [];
+  if (!inner) {
+    if (!replay) throw new Error(`walls of ${t} are thicker than parts of ${root.name} allow`);
+    const r = replay((x) => inward(x) != null);
+    if (r.blocked) throw new Error(r.blocked === root.name ? `walls of ${t} are thicker than ${root.name}'s own shape allows (it has a section thinner than two walls)` : `walls of ${t}: ${r.blocked} leaves a section thinner than two walls`);
+    inner = inward(r.base); solidKept = r.skipped;
+    if (!inner) throw new Error(`walls of ${t} are thicker than parts of ${root.name} allow`);
   }
-  return K.area2(out) > 1e-6 ? out : null;
+  const out = { solid: solid.subtract(inner.tag(MARK)), solidKept };
+  if (!(out.solid.volume() > 0)) throw new Error(`the shell of ${root.name} came out empty`);
+  if (SHELL_CACHE.size > 64) SHELL_CACHE.clear();
+  SHELL_CACHE.set(key, out); return named(out);
 }
 /* ---------- imported meshes ---------- */
 let MESH_STORE = {};   /* set per evaluation from doc.meshes: id → { b64 (Float32 xyz per vertex, 3 per triangle), tris } */
@@ -279,6 +279,21 @@ export function shapeProfile(p) {
   }
   return p.profile;
 }
+/* rebuild a part step by step, leaving out each union or edge step after which ok(solid) fails (a boss thinner than
+   two walls, a rounding tighter than the wall). Cuts cannot be left out: the first one that fails is reported. */
+function replayFor(start, steps, root, R, ok) {
+  if (!ok(start)) return { base: start, skipped: [], blocked: root.name };
+  const quiet = Object.assign({}, R, { warnings: [] }), skipped = []; let b = start;
+  for (const st of steps) {
+    const saved = st.t._resolved; let nb;
+    try { nb = st.run(b, quiet); } catch (e) { nb = null; } finally { st.t._resolved = saved; }
+    if (!nb) continue;
+    if (ok(nb)) { b = nb; continue; }
+    if (st.kind === 'union' || st.kind === 'edge') { skipped.push({ name: st.t.name, kind: st.kind }); continue; }
+    return { base: b, skipped, blocked: st.t.name };
+  }
+  return { base: b, skipped, blocked: null };
+}
 /* ---------- local geometry ---------- */
 const SEG = 48;
 function buildLocal(o) {
@@ -295,6 +310,7 @@ function buildLocal(o) {
     case 'revolve': return K.revolve(p.profile, { degrees: p.degrees });
     case 'sweep': return K.sweep(p.profile, p.path);
     case 'hole': return buildHole(p);
+    case 'text': return textSolid(p);
     case 'mesh': return meshSolid(o);
     case 'instance': return K.Solid.empty();   /* geometry comes from its source part, after the bodies are built */
   }
@@ -317,6 +333,12 @@ export function dimsOf(o) {
     case 'cone': { const o2 = [D('diameter', [-p.diameter / 2, 0, 0], [p.diameter / 2, 0, 0], 'front', 'diameter'), D('height', [p.diameter / 2, 0, 0], [p.diameter / 2, 0, p.height], 'front')]; if (p.top > 0) o2.push(D('top', [-p.top / 2, 0, p.height], [p.top / 2, 0, p.height], 'front', 'diameter')); return o2; }
     case 'sphere': return [D('diameter', [-p.diameter / 2, 0, p.diameter / 2], [p.diameter / 2, 0, p.diameter / 2], 'front', 'diameter')];
     case 'fillet': return [D('size', [0, 0, 0], [p.size, 0, 0], 'front'), D('length', [0, -p.length / 2, 0], [0, p.length / 2, 0], 'top')];
+    case 'text': {
+      const z = +p.depth || 0, out = [D('depth', [0, 0, 0], [0, 0, z], 'front')];
+      if (p.path === 'arc' || p.path === 'arc-inside') out.push(D('radius', [0, 0, z], [0, p.path === 'arc' ? +p.radius : -p.radius, z], 'top'));
+      else if (!p.path || p.path === 'line') { const a = (+p.angle || 0) * Math.PI / 180, y0 = p.align === 'center' || !p.align ? -p.height / 2 : -(+p.weight || 0) / 2, n = [-Math.sin(a), Math.cos(a), 0]; out.push(D('height', V.mul(n, y0), V.mul(n, y0 + +p.height), 'top')); }
+      return out;
+    }
     case 'extrude': {
       const prof = p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile, c = centroid2(prof), dir = V.norm(p.direction || [0, 0, 1]);
       const out = [D('length', [c[0], c[1], 0], V.add([c[0], c[1], 0], V.mul(dir, p.length / (dir[2] || 1))), 'auto')], x = +p.x || 0, y = +p.y || 0;
@@ -629,15 +651,23 @@ export function evaluate(doc, opts) {
     const o = byId.get(id); if (!o || chain.has(id)) return K.Solid.empty();
     chain.add(id);
     let s = R.local.has(id) ? R.local.get(id).transform(R.world.get(id)).tag(id) : K.Solid.empty();
+    const start = s, steps = [];   /* what was applied, so a shell can rebuild the part without features that fold */
     for (const t of intoOf.get(id) || []) {
       R.consumed.add(t.id);
       try {
-        if (t.type === 'edge') { s = applyEdge(s, t, o, R); continue; }
-        if (t.type === 'shell') { s = s.subtract(shellCavity(o, t.params).transform(R.world.get(o.id)).tag(t.id)); continue; }
+        if (t.type === 'edge') { s = applyEdge(s, t, o, R); steps.push({ kind: 'edge', t, run: (x, RR) => applyEdge(x, t, o, RR) }); continue; }
+        if (t.type === 'shell') {
+          const replay = (ok) => replayFor(start, steps, o, R, ok);
+          const r = shellBody(s, o, t.params, R, t.id, replay); s = r.solid;
+          const kept = r.solidKept.filter(k => k.kind === 'union').map(k => k.name);   /* a skipped rounding just gets a sharp inner corner (exact) */
+          if (kept.length) R.warnings.push({ kind: 'shell', id: t.id, text: `${t.name}: ${kept.join(', ')} ${kept.length > 1 ? 'stay' : 'stays'} solid (thinner than two walls)` });
+          steps.push({ kind: 'shell', t, run: (x, RR) => shellBody(x, o, t.params, RR, t.id).solid });
+          continue;
+        }
         if (META.has(t.type)) continue;
         const tool = bodyOf(t.id, chain);
-        const op = t.op || 'subtract';
-        s = op === 'add' || op === 'union' ? s.union(tool) : op === 'intersect' ? s.intersect(tool) : s.subtract(tool);
+        const op = t.op || 'subtract', run = (x) => (op === 'add' || op === 'union' ? x.union(tool) : op === 'intersect' ? x.intersect(tool) : x.subtract(tool));
+        s = run(s); steps.push({ kind: op === 'add' || op === 'union' ? 'union' : op, t, run });
       } catch (e) { R.errors.set(t.id, e.message); }
     }
     chain.delete(id);
@@ -1284,12 +1314,37 @@ export class Model {
         }
         return out;
       }
+      case 'text': {
+        /* text on a face: emboss (a boolean add, standing on the face) or engrave (a boolean remove, sunk into it) */
+        const keys = ['text', 'height', 'depth', 'weight', 'spacing', 'path', 'radius', 'angle', 'align', 'points'], params = {};
+        for (const k of keys) if (o[k] !== undefined) params[k] = o[k];
+        if (o.params) Object.assign(params, o.params);
+        if (params.text == null) throw new Error('text needs some text');
+        const mode = /^(engrave|subtract|cut|remove)$/.test(o.mode || '') ? 'subtract' : 'union';
+        const name = o.name || `${mode === 'subtract' ? 'Engrave' : o.target ? 'Emboss' : 'Text'} “${String(params.text).slice(0, 18)}”`;
+        if (!o.target) return Object.assign(this.op({ op: 'add', type: 'text', id: o.id, name, params, at: o.at, rot: o.rot, fixed: o.fixed }), { label: 'Add ' + name });
+        const t = need(o.target), root = (this.bodyContaining(t.id) || {}).id || t.id, faces = worldConnectors(this.result, t.id).filter(c => c.kind === 'face');
+        let face = o.face || 'top', slide = o.slide || [0, 0];
+        if (o.at) {
+          /* a clicked point (and the face's normal there): the matching face connector, and the point as a slide on it */
+          const at = W(o.at), n = o.normal ? V.norm(o.normal) : null;
+          const c = faces.filter(f => !n || V.dot(f.n, n) > 0.999).sort((x, y) => Math.abs(V.dot(V.sub(at, x.o), x.n)) - Math.abs(V.dot(V.sub(at, y.o), y.n)))[0];
+          if (!c) throw new Error(`no flat face of ${t.name} there for text`);
+          const d = V.sub(at, c.o); face = c.name; slide = [+V.dot(d, c.u).toFixed(3), +V.dot(d, V.cross(c.n, c.u)).toFixed(3)];
+        }
+        if (!faces.some(c => c.name === face)) throw new Error(`${t.name} has no face “${face}”. Faces: ${faces.map(c => c.name).join(', ')}`);
+        const mate = mode === 'subtract' ? { to: t.id, a: face, b: 'top', flip: false, slide, angle: o.rotate || 0 } : { to: t.id, a: face, b: 'bottom', slide, angle: o.rotate || 0 };
+        const r = this.op({ op: 'add', type: 'text', id: o.id, name, params, mate, into: root, mode });
+        return { label: (mode === 'subtract' ? 'Engrave ' : 'Emboss ') + `“${String(params.text).slice(0, 24)}” on ${t.name}`, id: r.id, name };
+      }
       case 'shell': {
-        const t = need(o.target), root = this.get((this.bodyContaining(t.id) || {}).id || t.id);
-        shellCavity(root, { thickness: o.thickness, open: o.open });
+        const t = need(o.target), body = this.bodyContaining(t.id), root = this.get((body || {}).id || t.id);
+        if (!body) throw new Error(`${t.name} has no geometry to shell`);
+        if (!(+o.thickness > 0)) throw new Error('thickness must be above 0');
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('shl');
         this.insert({ id, name: o.name || `Shell ${o.thickness}`, type: 'shell', params: { thickness: +o.thickness, open: o.open || 'none' }, into: root.id, op: 'shell', pose: null, mate: null });
-        this.recompute(); return { label: `Shell ${root.name} (${o.thickness} mm walls${o.open && o.open !== 'none' ? ', open ' + o.open : ''})`, id };
+        this.recompute(); if (this.result.errors.has(id)) throw new Error(this.result.errors.get(id));   /* apply() rolls back */
+        return { label: `Shell ${root.name} (${o.thickness} mm walls${o.open && o.open !== 'none' ? ', open ' + o.open : ''})`, id };
       }
       case 'config': {
         /* configurations: named tables of variable values (and features to switch off): {action: add|set|activate|delete|rename, name, vars, suppress, to} */

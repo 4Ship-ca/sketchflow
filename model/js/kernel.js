@@ -417,6 +417,173 @@ export function sweep(profile, path, o) {
 /* make sure polygons face outward (positive volume) */
 function fixOrientation(s) { if (s.volume() < 0) for (const p of s.polys) p.flip(); }
 
+/* ---------- offset (for shells): every face moves along its normal by offsetFor(face); each vertex goes to where its
+   faces' moved planes meet (least squares where more than three meet, e.g. on curved facets). Exact for flat-faced
+   parts (mitred corners) as long as the offset is smaller than the thinnest section and the tightest convex rounding. */
+function offsetFrame(solid) {
+  const m = solid.toMesh(), P = m.positions, tris = m.polysOfTri, nT = m.count / 3;
+  const key = (i) => Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5);
+  const vIndex = new Map(), verts = [], vTris = [], triV = [];
+  for (let t = 0; t < nT; t++) {
+    const ids = [];
+    for (let k = 0; k < 3; k++) {
+      const i = t * 3 + k, kk = key(i); let vi = vIndex.get(kk);
+      if (vi == null) { vi = verts.length; vIndex.set(kk, vi); verts.push([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]); vTris.push([]); }
+      vTris[vi].push(t); ids.push(vi);
+    }
+    triV.push(ids);
+  }
+  return { tris, nT, verts, vTris, triV };
+}
+const det3 = (M) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+/* where each vertex goes when its faces move by offs[triangle] */
+function movedVertices(F, offs) {
+  return F.verts.map((v, i) => {
+    const L = [];
+    for (const t of F.vTris[i]) { const n = F.tris[t].plane.n, o = offs[t]; if (!L.some(q => Math.abs(q.n[0] - n[0]) < 1e-5 && Math.abs(q.n[1] - n[1]) < 1e-5 && Math.abs(q.n[2] - n[2]) < 1e-5 && Math.abs(q.o - o) < 1e-9)) L.push({ n, o }); }
+    const A = [[1e-9, 0, 0], [0, 1e-9, 0], [0, 0, 1e-9]], b = [0, 0, 0];
+    for (const { n, o } of L) for (let r = 0; r < 3; r++) { b[r] += n[r] * o; for (let c = 0; c < 3; c++) A[r][c] += n[r] * n[c]; }
+    const D = det3(A), col = (k) => A.map((row, r) => row.map((x, c) => (c === k ? b[r] : x)));
+    const d = Math.abs(D) < 1e-30 ? [0, 0, 0] : [det3(col(0)) / D, det3(col(1)) / D, det3(col(2)) / D];
+    return V.add(v, d);
+  });
+}
+export function offsetSolid(solid, offsetFor) {
+  const F = offsetFrame(solid), offs = F.tris.map(p => offsetFor(p)), moved = movedVertices(F, offs);
+  const groups = new Map();
+  for (let t = 0; t < F.nT; t++) { const pl = F.tris[t].plane, k = pl.n.map(x => Math.round(x * 1e5)).join(',') + '|' + Math.round(pl.w * 1e4); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+  const polys = []; let flipped = 0;
+  const tri = (t) => F.triV[t].map(i => moved[i]);
+  for (const ts of groups.values()) {
+    const n0 = F.tris[ts[0]].plane.n; let net = 0, bad = 0, scale = 0;
+    const sa = ts.map(t => { const [a, b, c] = tri(t), s = V.dot(V.cross(V.sub(b, a), V.sub(c, a)), n0) / 2; scale = Math.max(scale, Math.abs(s)); return s; });
+    for (const s of sa) { net += s; if (s < -1e-9 * (1 + scale)) bad++; }
+    if (!bad) { ts.forEach(t => { const q = poly(tri(t), F.tris[t].sid); if (q) polys.push(q); }); continue; }
+    /* a flat face whose triangulation folds inside its own plane (a fan across a seam between coplanar pieces): the
+       face itself is fine, so rebuild it from its moved outline */
+    const rebuilt = net > 1e-9 * (1 + scale) ? rebuildFace(F, ts, moved, n0) : null;
+    if (rebuilt) { for (const r of rebuilt) { const q = poly(r, F.tris[ts[0]].sid); if (q) polys.push(q); } continue; }
+    flipped += bad; ts.forEach(t => { const q = poly(tri(t), F.tris[t].sid); if (q) polys.push(q); });
+  }
+  /* a real fold (a section thinner than two offsets, a rounding tighter than the offset) brings moved vertices closer
+     to the original surface than they were sent: count those too */
+  if (!flipped) flipped = tooClose(F, offs, moved);
+  return { solid: new Solid(polys), flipped };
+}
+/* the outline loops of a set of coplanar triangles, moved, re-triangulated (null if the moved outline is not simple) */
+function rebuildFace(F, ts, moved, n) {
+  const has = new Set(); for (const t of ts) { const [a, b, c] = F.triV[t]; has.add(a + ',' + b); has.add(b + ',' + c); has.add(c + ',' + a); }
+  const out = new Map();
+  for (const t of ts) { const [a, b, c] = F.triV[t]; for (const [i, j] of [[a, b], [b, c], [c, a]]) if (!has.has(j + ',' + i)) { if (!out.has(i)) out.set(i, []); out.get(i).push(j); } }
+  const loops = [], used = new Set();
+  for (const [i0, js] of out) for (const j0 of js) {
+    if (used.has(i0 + ',' + j0)) continue;
+    const loop = [i0]; let i = i0, j = j0, guard = 0;
+    while (guard++ < 100000) { used.add(i + ',' + j); if (j === i0) break; loop.push(j); const nx = (out.get(j) || []).find(k => !used.has(j + ',' + k)); if (nx == null) return null; i = j; j = nx; }
+    loops.push(loop);
+  }
+  const u = V.norm(Math.abs(n[0]) < 0.9 ? V.cross(n, [1, 0, 0]) : V.cross(n, [0, 1, 0])), v = V.cross(n, u);
+  const to2 = (i) => [V.dot(moved[i], u), V.dot(moved[i], v)];
+  const L = loops.map(lp => ({ ids: lp, p: lp.map(to2) })).map(l => Object.assign(l, { a: area2(l.p) }));
+  /* the moved outline must stay simple: no two edges cross */
+  const segs = []; for (const l of L) for (let k = 0; k < l.p.length; k++) segs.push([l.p[k], l.p[(k + 1) % l.p.length], l.ids[k], l.ids[(k + 1) % l.ids.length]]);
+  if (segs.length <= 3000) for (let x = 0; x < segs.length; x++) for (let y = x + 1; y < segs.length; y++) {
+    const [a, b, ia, ib] = segs[x], [c, d, ic, id] = segs[y]; if (ia === ic || ia === id || ib === ic || ib === id) continue;
+    const o = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+    if (Math.max(a[0], b[0]) < Math.min(c[0], d[0]) || Math.max(c[0], d[0]) < Math.min(a[0], b[0]) || Math.max(a[1], b[1]) < Math.min(c[1], d[1]) || Math.max(c[1], d[1]) < Math.min(a[1], b[1])) continue;
+    const d1 = o(a, b, c), d2 = o(a, b, d), d3 = o(c, d, a), d4 = o(c, d, b);
+    if (((d1 > 1e-12 && d2 < -1e-12) || (d1 < -1e-12 && d2 > 1e-12)) && ((d3 > 1e-12 && d4 < -1e-12) || (d3 < -1e-12 && d4 > 1e-12))) return null;
+  }
+  const outers = L.filter(l => l.a > 0), holes = L.filter(l => l.a < 0), res = [];
+  for (const o of outers) {
+    const mine = holes.filter(h => pointInPoly2(h.p[0], o.p) && !outers.some(o2 => o2 !== o && o2.a < o.a && pointInPoly2(h.p[0], o2.p) && pointInPoly2(o2.p[0], o.p)));
+    const ring = bridgeHoles(o.ids.map((id, k) => ({ id, p: o.p[k] })), mine.map(h => h.ids.map((id, k) => ({ id, p: h.p[k] }))));
+    const tris = earClip(ring.map(r => r.p)); if (!tris) return null;
+    let sum = 0; for (const [a, b, c] of tris) { const s = area2([ring[a].p, ring[b].p, ring[c].p]); if (s < -1e-9) return null; sum += s; }
+    if (Math.abs(sum - (o.a + mine.reduce((x, h) => x + h.a, 0))) > 1e-6 * (1 + Math.abs(o.a))) return null;
+    for (const [a, b, c] of tris) res.push([moved[ring[a].id], moved[ring[b].id], moved[ring[c].id]]);
+  }
+  return res.length ? res : null;
+}
+function pointInPoly2(p, poly) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+/* splice holes (clockwise) into an outer ring (counter-clockwise) with zero-width bridges, rightmost hole first */
+function bridgeHoles(outer, holes) {
+  let ring = outer.slice();
+  const hs = holes.map(h => { let m = 0; h.forEach((q, k) => { if (q.p[0] > h[m].p[0]) m = k; }); return { h, m }; }).sort((a, b) => b.h[b.m].p[0] - a.h[a.m].p[0]);
+  for (const { h, m } of hs) {
+    const M = h[m].p; let best = -1, bx = Infinity;
+    for (let k = 0; k < ring.length; k++) {
+      const a = ring[k].p, b = ring[(k + 1) % ring.length].p;
+      if ((a[1] > M[1]) === (b[1] > M[1]) && a[1] !== M[1]) continue;
+      if (a[1] === b[1]) { if (a[1] === M[1]) { for (const [q, kk] of [[a, k], [b, (k + 1) % ring.length]]) if (q[0] >= M[0] && q[0] - M[0] < bx) { bx = q[0] - M[0]; best = kk; } } continue; }
+      const x = a[0] + (M[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1]); if (x < M[0] - 1e-12 || x - M[0] >= bx) continue;
+      bx = x - M[0]; best = a[0] > b[0] ? k : (k + 1) % ring.length;
+    }
+    if (best < 0) continue;
+    /* prefer a vertex inside the triangle (M, hit, candidate) closest in angle, so the bridge stays inside */
+    const P = ring[best].p, I = [M[0] + bx, M[1]], cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const inTri = (q) => { const d1 = cr(M, I, q), d2 = cr(I, P, q), d3 = cr(P, M, q); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); };
+    let pick = best, bestAng = Infinity;
+    for (let k = 0; k < ring.length; k++) { const q = ring[k].p; if (k === best || q[0] < M[0] || !inTri(q)) continue; const ang = Math.abs(Math.atan2(q[1] - M[1], q[0] - M[0])); if (ang < bestAng || (ang === bestAng && Math.hypot(q[0] - M[0], q[1] - M[1]) < Math.hypot(ring[pick].p[0] - M[0], ring[pick].p[1] - M[1]))) { bestAng = ang; pick = k; } }
+    const hole = [...h.slice(m), ...h.slice(0, m), h[m]];
+    ring = [...ring.slice(0, pick + 1), ...hole, ring[pick], ...ring.slice(pick + 1)];
+  }
+  return ring;
+}
+/* ear clipping that tolerates the duplicate points of bridges; null when it gets stuck */
+function earClip(pts) {
+  let idx = [...pts.keys()]; const out = [], cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-12 && Math.abs(p[1] - q[1]) < 1e-12;
+  let guard = 0;
+  while (idx.length > 3 && guard++ < pts.length * 4) {
+    let clipped = false;
+    for (let i = 0; i < idx.length && !clipped; i++) {
+      const ia = idx[(i + idx.length - 1) % idx.length], ib = idx[i], ic = idx[(i + 1) % idx.length], a = pts[ia], b = pts[ib], c = pts[ic];
+      const c0 = cr(a, b, c);
+      if (Math.abs(c0) < 1e-14 && (same(a, c) || V.dot([b[0] - a[0], b[1] - a[1], 0], [c[0] - b[0], c[1] - b[1], 0]) >= 0)) { idx.splice(i, 1); clipped = true; break; }   /* drop a straight-through or doubled-back point */
+      if (c0 <= 0) continue;
+      let ear = true;
+      for (const j of idx) { if (j === ia || j === ib || j === ic) continue; const p = pts[j]; if (same(p, a) || same(p, b) || same(p, c)) continue; if (cr(a, b, p) >= 0 && cr(b, c, p) >= 0 && cr(c, a, p) >= 0) { ear = false; break; } }
+      if (!ear) continue;
+      out.push([ia, ib, ic]); idx.splice(i, 1); clipped = true;
+    }
+    if (!clipped) return null;
+  }
+  if (idx.length === 3 && cr(pts[idx[0]], pts[idx[1]], pts[idx[2]]) > 0) out.push([idx[0], idx[1], idx[2]]);
+  return out;
+}
+/* closest distance from p to triangle abc (Ericson) */
+function pointTriDist(p, a, b, c) {
+  const ab = V.sub(b, a), ac = V.sub(c, a), ap = V.sub(p, a), d1 = V.dot(ab, ap), d2 = V.dot(ac, ap);
+  if (d1 <= 0 && d2 <= 0) return V.len(ap);
+  const bp = V.sub(p, b), d3 = V.dot(ab, bp), d4 = V.dot(ac, bp); if (d3 >= 0 && d4 <= d3) return V.len(bp);
+  const vc = d1 * d4 - d3 * d2; if (vc <= 0 && d1 >= 0 && d3 <= 0) return V.len(V.sub(p, V.add(a, V.mul(ab, d1 / (d1 - d3)))));
+  const cp = V.sub(p, c), d5 = V.dot(ab, cp), d6 = V.dot(ac, cp); if (d6 >= 0 && d5 <= d6) return V.len(cp);
+  const vb = d5 * d2 - d1 * d6; if (vb <= 0 && d2 >= 0 && d6 <= 0) return V.len(V.sub(p, V.add(a, V.mul(ac, d2 / (d2 - d6)))));
+  const va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return V.len(V.sub(p, V.add(b, V.mul(V.sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6))))));
+  const den = 1 / (va + vb + vc); return V.len(V.sub(p, V.add(a, V.add(V.mul(ab, vb * den), V.mul(ac, vc * den)))));
+}
+/* how many moved vertices sit closer to the original surface (faces moved inward only) than they were sent */
+function tooClose(F, offs, moved) {
+  let need = 0; for (const o of offs) if (o < 0) need = Math.max(need, -o); if (!need) return 0;
+  const P = (t) => F.triV[t].map(i => F.verts[i]), mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (const v of F.verts) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], v[k]); mx[k] = Math.max(mx[k], v[k]); }
+  const h = Math.max(need, Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 48), cell = (x, k) => Math.floor((x - mn[k] + need) / h), grid = new Map();
+  for (let t = 0; t < F.nT; t++) {
+    if (!(offs[t] < 0)) continue;
+    const q = P(t), lo = [0, 1, 2].map(k => cell(Math.min(q[0][k], q[1][k], q[2][k]) - need, k)), hi = [0, 1, 2].map(k => cell(Math.max(q[0][k], q[1][k], q[2][k]) + need, k));
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const key = x + ',' + y + ',' + z; let L = grid.get(key); if (!L) grid.set(key, (L = [])); L.push(t); }
+  }
+  let n = 0;
+  moved.forEach((p, i) => {
+    const want = Math.max(0, ...F.vTris[i].map(t => -offs[t])); if (!want) return;
+    const planes = new Set(F.vTris[i].map(t => F.tris[t].plane.n.map(x => Math.round(x * 1e4)).join(','))).size, tol = planes > 3 ? 0.1 : 0.02;
+    const L = grid.get(cell(p[0], 0) + ',' + cell(p[1], 1) + ',' + cell(p[2], 2)) || [];
+    for (const t of L) { const [a, b, c] = P(t); if (pointTriDist(p, a, b, c) < want * (1 - tol) - 1e-9) { n++; return; } }
+  });
+  return n;
+}
+
 /* ---------- star-shaped prisms (gears, splines, knobs) ----------
    outer: closed 2D profile, star-shaped around the origin, any start, counter-clockwise (polar angle never decreasing);
    inner: optional hole profile of the same kind (a bore, or the teeth of a ring gear), or null;

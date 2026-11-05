@@ -92,11 +92,13 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
 | `model_import` | an STL / OBJ file from disk as a mesh part |
-| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF |
+| `model_check` | interference (which parts overlap, by how much, exact for moderate parts) and a motion sweep that reports the first contact of a joint |
+| `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
 
 **In the browser:**
 - Add a shape with the toolbar (B box, W wedge, C cylinder, K cone, O sphere).
 - *Profile* (S): click points in FRONT, TOP or RIGHT, close the shape, then type a length, twist or end scale and choose Extrude, Revolve or Loft. Loft asks you to sketch the end profile.
+- **Sketch constraints**: a drawn polyline gets horizontal / vertical relations and its first point fixed automatically, so a sloppy sketch comes out square. In Properties → Sketch, give any segment a driving dimension, or relate two segments (parallel, perpendicular, equal, angle). The status line says how many degrees of freedom are left and names any conflicting constraint.
 - *Mate* (M): click the part, then its connector, then the target connector.
 - *Union / Subtract / Intersect*: click the target, then the tool.
 - *Fillet / Chamfer*: set the size and click near an edge. Outer edges are trimmed and inner corners are filled; round edges get the treatment all the way round. On the seam between two parts, a fillet merges them into one piece.
@@ -110,12 +112,14 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - The feature list shows **By part** (each part with its holes, edges, welds and arrays) or **History** (the order you made things). In History, drag rows to reorder and drag the blue **rollback bar** to see the model as it was (new features go in at the bar). The ⋯ / right-click menu: suppress, duplicate (Ctrl D), linked instance, pattern, move, delete.
 - *Profile* sketches: Polyline, **Rectangle** (rounded corners), **Circle**, **Slot**, **Polygon** (two clicks). Then Extrude, **Cut through** the part underneath, or Revolve. The shape's sizes stay editable dimensions.
 - *Hole*: pick a size (M2–M16) and type (simple, counterbore, countersink, tapped, heat-set insert) and fit (close / normal / loose / print), then click faces. Each hole is dimensioned from its nearest edges; click a dimension to move it.
-- *Shell…* (Properties) hollows a box, cylinder, cone, sphere or extrude to a wall thickness, open on the face you pick.
-- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar, with limits), then drag its slider or press play. Meshed gears turn with it. *Keep this pose* makes it the model's position.
+- *Shell…* (Properties) hollows **any** part to an even wall thickness, open on one of its faces or closed. This includes booleans, filleted parts and imported meshes. Every face moves inward by the wall (an offset, not a scale), so walls stay even on any shape, with mitred corners. A rounding smaller than the wall gets a sharp inner corner. A boss or rib thinner than two walls stays solid, and a note names it. A cut that would leave a section thinner than two walls is refused, by name.
+- **Text** (T): type the words, the height and depth, then pick emboss (a boolean add standing on the face) or engrave (a boolean remove cut into it), and a path: straight, round an arc (reading over the top), or the inside of an arc (reading along the bottom, as on a badge). Click a flat face to place it. The words, sizes, radius, angle, alignment, or a polyline path are all editable later. The built-in font is a single-stroke engraving font, the kind CNC engravers and laser markers use. It covers capitals, digits and the usual symbols, including Ø ± ° ×; lower case prints as capitals.
+- **Interference check** (I): one click lists every pair of parts that overlap, with the overlap volume, and shows the overlap in red. Parts that only touch, and welds on the parts they join, don't count.
+- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar, with limits), then drag its slider or press play. Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
 - **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
 - **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
-- File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block.
-- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart, J opens Motion, X sections, P patterns the selection, Ctrl D duplicates.
+- File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
+- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart, J opens Motion, X sections, I checks interference, T places text, P patterns the selection, Ctrl D duplicates.
 
 ## 2 · Or just draw
 
@@ -267,13 +271,13 @@ These build on the same joint model:
 - an animation timeline (keyframes of joint positions, onion skin)
 - smart connectors that stay attached to shapes
 - slider and prismatic joints, gears and springs in the motion solver
-- geometric constraints (parallel, perpendicular, equal length) alongside dimensions, shared with the 3D profile sketcher
+- the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): variables, patterns, shell / holes, moving mates for the motion simulator, assemblies, configurations, STEP
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP exchange, text wrapped onto curved faces, sketch constraints between arcs
 
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model, gears, add-ons
+npm test                                                            # 3D kernel, model, gears, add-ons, collisions
 node build.mjs                                                      # rebuild dist/
 ```
