@@ -47,7 +47,7 @@ aside h3{margin:0;padding:12px 14px 8px;font:700 13px/1 var(--f-brand);display:f
 #stage{position:relative;overflow:hidden;min-width:0;touch-action:none}
 #gl,#ov{position:absolute;inset:0;display:block}
 #ov{pointer-events:none}
-#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font:600 12.5px/1.3 var(--f-ui);box-shadow:0 6px 20px #0000003a;display:flex;gap:10px;align-items:center;max-width:90%;z-index:5;flex-wrap:wrap;justify-content:center}
+#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);width:max-content;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font:600 12.5px/1.3 var(--f-ui);box-shadow:0 6px 20px #0000003a;display:flex;gap:10px;align-items:center;max-width:90%;z-index:5;flex-wrap:wrap;justify-content:center}
 #hint .hf{display:flex;align-items:center;gap:4px;font:600 11px var(--f-ui);color:var(--ink-2);white-space:nowrap}
 #hint .hf input{width:56px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-mono);-webkit-user-select:text;user-select:text}
 #hint .hf input.htext{width:150px;font:600 12px var(--f-ui)}
@@ -96,16 +96,30 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
 .row.off{opacity:.45} .row.sup .nm{text-decoration:line-through} .row .more{border:0;background:transparent;color:var(--ink-3);font:700 14px/1 var(--f-ui);padding:2px 5px;border-radius:6px;cursor:pointer;opacity:.0} .row:hover .more,.row.on .more{opacity:1} .row .more:hover{background:var(--hover);color:var(--ink)}
 @media (hover:none){ .row .more{opacity:1} }
 .row.dropbefore{box-shadow:inset 0 2px 0 var(--accent)} .row.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
-.rollbar{margin:2px 10px;padding:3px 8px;border-top:3px solid var(--cool);font:700 10px/1.2 var(--f-ui);letter-spacing:.04em;color:var(--cool);cursor:grab;user-select:none}
+.rollbar{display:flex;align-items:center;gap:6px;margin:2px 10px;padding:3px 8px;border-top:3px solid var(--cool);font:700 10px/1.2 var(--f-ui);letter-spacing:.04em;color:var(--cool);cursor:grab;user-select:none}
 #banner{position:absolute;bottom:12px;left:12px;background:var(--panel);border:1px solid var(--cool);color:var(--ink);border-radius:10px;padding:6px 8px 6px 12px;font:600 12.5px var(--f-ui);display:flex;gap:10px;align-items:center;z-index:6;box-shadow:0 6px 20px #0000002a}
 #banner button{border:0;border-radius:7px;padding:5px 9px;background:var(--cool);color:#fff;font:700 12px var(--f-ui);cursor:pointer}
 .menu button[disabled]{opacity:.4;pointer-events:none}
 .seg{display:flex;gap:2px;margin:0 10px 6px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)} .seg button{flex:1;border:0;background:transparent;border-radius:6px;padding:5px;font:600 11.5px var(--f-ui);color:var(--ink-2);cursor:pointer} .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px #0000002a}
+#hint .skrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+#hint .skgrp{display:flex;gap:3px;align-items:center;padding:2px 3px 2px 7px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)}
+#hint .skgrp button{border-color:transparent;background:transparent} #hint .skgrp button.on{background:var(--accent);color:var(--accent-ink)}
+#hint .sklbl{font:700 9.5px/1 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+#hint .sknote{flex-basis:100%;text-align:center;font:600 12px var(--f-ui);color:var(--ink-2)}
+#hint button.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} #hint button[disabled]{opacity:.4;cursor:default}
+.menu .mchk{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)} .menu .mchk:hover{background:var(--hover)} .menu .mchk input{accent-color:var(--accent);width:15px;height:15px}
+.menu .mstep{display:flex;align-items:center;gap:3px;padding:2px 10px 6px 33px} .menu .mstep button{padding:4px 7px;border:1px solid var(--line);border-radius:6px;font:600 11.5px var(--f-mono)} .menu .mstep button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.menu .mstep .note{font:600 11px var(--f-ui);color:var(--ink-3);padding:0 3px}
+.menu .mi{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:6px} .menu .mi .ck{color:var(--accent);font-weight:800} .menu .mi .key{font:600 10.5px var(--f-mono);color:var(--ink-3)}
+.agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:2px 0 6px}
+.abtn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 7px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2);cursor:pointer;font:600 11.5px/1.15 var(--f-ui);color:var(--ink);text-align:center}
+.abtn:hover{border-color:var(--accent)} .abtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.rollbar .rbtns{display:inline-flex;gap:3px;margin-left:auto} .rollbar .rbtns button{white-space:nowrap;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:1px 6px;font:700 10.5px var(--f-ui);color:var(--ink);cursor:pointer} .rollbar .rbtns button[disabled]{opacity:.35;cursor:default}
 .menu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px #0000004a;padding:5px;display:flex;flex-direction:column;min-width:170px}
 .menu button{text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px;cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink)}
 .menu button:hover{background:var(--hover)}
 @media (max-width: 1640px){ .grp .lbl{display:none} #name{width:110px} }
-@media (max-width: 1380px){ .tb[data-icon]{font-size:0;gap:0;padding:7px} .brand{font-size:0;gap:0} }
+@media (max-width: 1380px){ .tb[data-icon]{flex-direction:column;gap:3px;font:600 10px/1.1 var(--f-ui);padding:5px 6px;min-width:42px} .tb[data-icon] svg{width:18px;height:18px} .brand{font-size:0;gap:0} #bar{row-gap:4px;padding-top:5px;padding-bottom:5px} }
 @media (max-width: 900px){ #bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none} #bar::-webkit-scrollbar{display:none} #name{width:90px} #app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto} #tree{display:none} #props{max-height:34vh;border-left:0;border-top:1px solid var(--line)} }
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
@@ -115,6 +129,7 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
     <div class="brand"><i></i>SketchFlow 3D</div>
     <input id="name" value="Model" aria-label="Model name" spellcheck="false">
     <select id="cfgSel" hidden title="Configuration (size variant)" aria-label="Configuration"></select>
+    <div class="grp"><button class="tb" id="fileBtn" title="New, open, save, export, drawings, versions, import" data-icon="file">File ▾</button></div>
     <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
     <div class="grp"><span class="lbl">Add</span>
       <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
@@ -122,45 +137,45 @@ table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mi
       <button class="tb" data-add="cylinder" title="Cylinder (C)" data-icon="cylinder">Cyl</button>
       <button class="tb" data-add="cone" title="Cone (K)" data-icon="cone">Cone</button>
       <button class="tb" data-add="sphere" title="Sphere (O)" data-icon="sphere">Sphere</button>
-      <button class="tb" data-add="fillet" title="Fillet strip (a triangle with an arc hypotenuse)" data-icon="fillet">Fillet</button>
+      <button class="tb" data-add="fillet" title="Fillet strip: a separate triangular piece with an arc face, to place by hand (to round an edge, use Fillet under Features)" data-icon="fillet">Strip</button>
     </div>
     <div class="grp"><span class="lbl">Sketch</span>
-      <button class="tb" data-tool="sketch" title="Sketch a profile in a FRONT / TOP / RIGHT view (S)" data-icon="sketch">Profile</button>
+      <button class="tb" data-tool="sketch" title="Sketch an outline — lines, arcs, rectangles, circles, slots, polygons — in FRONT, TOP or RIGHT, with snapping; then extrude, revolve or loft it (S)" data-icon="sketch">Sketch</button>
+      <button class="tb" data-tool="sketch-face" title="Sketch on a flat face of a part: the outline starts on that face, then joins it or cuts into it, and follows it" data-icon="face">On face</button>
     </div>
     <div class="grp"><span class="lbl">Relate</span>
       <button class="tb" data-tool="mate" title="Mate: connector to connector (M)" data-icon="mate">Mate</button>
-      <button class="tb" data-tool="bool-add" title="Union: target, then tool" data-icon="union">Union</button>
-      <button class="tb" data-tool="bool-subtract" title="Subtract: target, then tool" data-icon="subtract">Subtract</button>
-      <button class="tb" data-tool="bool-intersect" title="Intersect: target, then tool" data-icon="intersect">Intersect</button>
+      <button class="tb" data-tool="bool-add" title="Union: click the target, then the tool" data-icon="union">Union</button>
+      <button class="tb" data-tool="bool-subtract" title="Subtract: click the target, then the tool" data-icon="subtract">Subtract</button>
+      <button class="tb" data-tool="bool-intersect" title="Intersect: click the target, then the tool" data-icon="intersect">Intersect</button>
     </div>
     <div class="grp"><span class="lbl">Features</span>
+      <button class="tb" data-tool="boss" title="Boss: join a cylinder or box onto a face — set its size, click the face" data-icon="boss">Boss</button>
+      <button class="tb" data-tool="cut" title="Cut: a round or square pocket into a face — set its size, click the face" data-icon="cut">Cut</button>
       <button class="tb" data-tool="hole" title="Hole wizard: ISO clearance, counterbore, countersink, tapped, heat-set insert — click a face" data-icon="hole">Hole</button>
       <button class="tb" data-tool="text" title="Text: emboss (add) or engrave (cut) words on a face — straight or around an arc (T)" data-icon="text">Text</button>
       <button class="tb" data-tool="edge-fillet" title="Fillet an edge: rounds outer edges, fills inner corners; on the seam between two parts it merges them into one" data-icon="fillet">Fillet</button>
-      <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
       <button class="tb" data-tool="edge-chamfer" title="Chamfer an edge" data-icon="chamfer">Chamfer</button>
-    </div>
-    <div class="grp"><button class="tb" id="addonBtn" title="Add-ons: gears and anything side-built" data-icon="addon">Add-ons</button></div>
-    <div class="grp"><button class="tb" data-tool="measure" title="Measure / add a dimension between connectors (G)" data-icon="dim">Measure</button></div>
-    <div class="grp">
-      <button class="tb" id="undo" title="Undo (Ctrl Z)" data-icon="undo"></button>
-      <button class="tb" id="redo" title="Redo (Ctrl Shift Z)" data-icon="redo"></button>
+      <button class="tb" data-tool="edge-weld" title="Weld two separate parts together (they stay separate parts)" data-icon="weld">Weld</button>
+      <button class="tb" id="shellBtn" title="Shell: hollow a part to an even wall thickness, open on a face or closed" data-icon="shell">Shell</button>
+      <button class="tb" id="patternBtn" title="Pattern / mirror: rows, grids, circles or mirror copies of a part or feature (P)" data-icon="pattern">Pattern</button>
     </div>
     <div class="grp">
-      <button class="tb" id="layout" title="1 view / 4 views (0–4)" data-icon="grid"></button>
-      <button class="tb" id="fit" title="Fit (F)" data-icon="fit"></button>
-      <button class="tb on" id="hiddenBtn" title="Hidden lines (H)" data-icon="hidden"></button>
-      <button class="tb on" id="dimsBtn" title="Dimensions (D)" data-icon="dim"></button>
-      <button class="tb" id="checkBtn" title="Interference check: do any parts overlap? (I)" data-icon="clash"></button>
-      <button class="tb" id="sectionBtn" title="Section view: cut the model with a plane (X)" data-icon="section"></button>
-      <button class="tb" id="motionBtn" title="Motion: move joints, play, see gears turn (J)" data-icon="motion"></button>
-      <button class="tb" id="explodeBtn" title="Pull apart: exploded view of the parts (E)" data-icon="explode"></button>
-      <button class="tb" id="cogBtn" title="Show the centre of gravity (mass and balance are in Properties)" data-icon="cog"></button>
-      <button class="tb" id="theme" title="Light / dark" data-icon="sun"></button>
+      <button class="tb" id="addonBtn" title="Add-ons: gears and anything side-built" data-icon="addon">Add-ons</button>
+      <button class="tb" data-tool="measure" title="Measure / add a dimension between connectors (G)" data-icon="dim">Measure</button>
     </div>
     <div class="grp">
-      <button class="tb" id="fileBtn" title="Open, save, export" data-icon="file">File</button>
-      <a class="tb" href="/" title="2D sketch board (v1)" data-icon="board" style="text-decoration:none">2D</a>
+      <button class="tb" id="undo" title="Undo (Ctrl Z)" data-icon="undo">Undo</button>
+      <button class="tb" id="redo" title="Redo (Ctrl Shift Z)" data-icon="redo">Redo</button>
+    </div>
+    <div class="grp"><span class="lbl">Check</span>
+      <button class="tb" id="checkBtn" title="Interference check: do any parts overlap? (I)" data-icon="clash">Clashes</button>
+      <button class="tb" id="sectionBtn" title="Section view: cut the model with a plane (X)" data-icon="section">Section</button>
+      <button class="tb" id="motionBtn" title="Motion: move joints, play, see gears turn, catch collisions (J)" data-icon="motion">Motion</button>
+    </div>
+    <div class="grp">
+      <button class="tb" id="viewBtn" title="Layouts, zoom, hidden lines, dimensions, exploded view, centre of gravity, theme" data-icon="view">View ▾</button>
+      <button class="tb" id="fit" title="Fit everything in the views (F)" data-icon="fit">Fit</button>
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>

@@ -96,8 +96,24 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_export` | STL (watertight, for printing), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF (an assembly gets an exploded isometric with balloons numbered as the parts list) |
 
 **In the browser:**
-- Add a shape with the toolbar (B box, W wedge, C cylinder, K cone, O sphere).
-- *Profile* (S): click points in FRONT, TOP or RIGHT, close the shape, then type a length, twist or end scale and choose Extrude, Revolve or Loft. Loft asks you to sketch the end profile.
+- Add a shape with the toolbar: Box, Wedge, Cylinder, Cone, Sphere, Strip (a fillet strip). If a part is selected, the new shape lands on top of it, and Properties → **Combine** joins it, cuts it or keeps the overlap.
+- **Putting features on a part:** select the part, then use **Add to *part*** at the top of Properties. Each one asks you to click the face (or edge) it goes on:
+  - Boss: a cylinder or box joined onto a face
+  - Cut: a round or square pocket
+  - Hole, Text
+  - Sketch on face
+  - Fillet, Chamfer
+  - Shell, Pattern
+
+  The Features group in the toolbar has the same tools. Bosses, cuts, holes, text and face sketches are mated to their face, so they follow it when the part changes.
+- **Sketch**: draw in FRONT, TOP or RIGHT with the sketch bar.
+  - **Lines:** Line and Arc. An arc is its end point, then a point it passes through, and arcs mix freely with lines.
+  - **Shapes:** Rectangle, Circle, Slot, Polygon.
+  - **Snap ▾:** grid on or off, with a step of 0.5–25 mm; points, corners and centres; edge midpoints; horizontal / vertical only; 15° angles. A green marker shows what you snapped to, with the length so far.
+  - **Undo point**, **Close shape**, **Cancel**.
+
+  Then choose Extrude, Revolve or Loft (Loft asks for the end profile).
+- **Sketch on a face** (*On face* in the toolbar, or *On a face…* in the sketch bar): click a flat face, and the view square to it opens for drawing. Then choose *Extrude · join*, *Cut into*, *Cut through* or *New part*. The result is mated to that face.
 - **Sketch constraints**: a drawn polyline gets horizontal / vertical relations and its first point fixed automatically, so a sloppy sketch comes out square. In Properties → Sketch, give any segment a driving dimension, or relate two segments (parallel, perpendicular, equal, angle). The status line says how many degrees of freedom are left and names any conflicting constraint.
 - *Mate* (M): click the part, then its connector, then the target connector.
 - *Union / Subtract / Intersect*: click the target, then the tool.
@@ -119,7 +135,19 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
 - **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
 - File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
-- View cube: click a face, edge or corner. Double-click a view to maximise it. 0–4 switch layouts, F fits, H toggles hidden lines, D toggles dimensions, G measures between connectors, E pulls the assembly apart, J opens Motion, X sections, I checks interference, T places text, P patterns the selection, Ctrl D duplicates.
+- **View ▾** holds:
+  - layouts: all four views, or one view;
+  - fit, zoom in and out;
+  - hidden lines, dimensions, pulled apart, centre of gravity;
+  - whether dragging in 3D orbits or pans;
+  - the theme.
+
+  The view cube: click a face, edge or corner. **Check** has Clashes (interference), Section and Motion.
+- Everything has a button or menu item; keys are only shortcuts:
+  - 0–4 layouts, F fit, H hidden lines, D dimensions, E pull apart
+  - S sketch, M mate, G measure, T text, P pattern
+  - J motion, X section, I clashes
+  - Ctrl D duplicate (also in Properties), Delete (also in Properties)
 
 ## 2 · Or just draw
 

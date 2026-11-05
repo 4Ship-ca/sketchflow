@@ -1033,6 +1033,15 @@ export class Model {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
   recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  /* the face connector of a part at a point (the face's normal there narrows it down), and that point as a slide on the
+     face: what a click on a face turns into, so a feature placed there is mated to that face and follows it */
+  faceAt(id, at, normal) {
+    const faces = worldConnectors(this.result, id).filter(f => f.kind === 'face'), n = normal ? V.norm(normal) : null;
+    const c = faces.filter(f => !n || V.dot(f.n, n) > 0.999).sort((x, y) => Math.abs(V.dot(V.sub(at, x.o), x.n)) - Math.abs(V.dot(V.sub(at, y.o), y.n)))[0];
+    if (!c) return null;
+    const d = V.sub(at, c.o);
+    return { face: c.name, slide: [+V.dot(d, c.u).toFixed(3), +V.dot(d, V.cross(c.n, c.u)).toFixed(3)], off: Math.abs(V.dot(d, c.n)), conn: c };
+  }
   /* new features go at the rollback bar when it is up (and the bar moves down past them) */
   insert(ob) {
     const d = this.doc, rb = Number.isInteger(d.rollback) ? Math.min(d.rollback, d.objects.length) : null;
@@ -1314,6 +1323,20 @@ export class Model {
         }
         return out;
       }
+      case 'feature': {
+        /* a boss (a boolean add standing on a face) or a cut (a boolean remove sunk flush into it): a simple shape mated
+           to a face of a part, at a point on it, so it follows the face when the part changes */
+        const t = need(o.target), root = (this.bodyContaining(t.id) || {}).id || t.id, type = o.shape || o.type || 'cylinder';
+        if (!['box', 'cylinder', 'cone', 'wedge', 'sphere'].includes(type)) throw new Error(`a boss or cut is a box, cylinder, cone, wedge or sphere (for any other outline, sketch on the face)`);
+        const mode = /^(cut|subtract|pocket|remove)$/.test(o.mode || '') ? 'subtract' : 'union', faces = worldConnectors(this.result, t.id).filter(c => c.kind === 'face');
+        let face = o.face || 'top', slide = o.slide || [0, 0];
+        if (o.at) { const f = this.faceAt(t.id, W(o.at), o.normal); if (!f) throw new Error(`no flat face of ${t.name} there`); face = f.face; slide = f.slide; }
+        if (!faces.some(c => c.name === face)) throw new Error(`${t.name} has no face “${face}”. Faces: ${faces.map(c => c.name).join(', ')}`);
+        const kind = mode === 'subtract' ? 'Cut' : 'Boss', n = d.objects.filter(x => new RegExp('^' + kind + ' \\d+$').test(x.name || '')).length + 1;
+        const mate = mode === 'subtract' ? { to: t.id, a: face, b: 'top', flip: false, slide, angle: o.angle || 0 } : { to: t.id, a: face, b: 'bottom', slide, angle: o.angle || 0 };
+        const r = this.op({ op: 'add', type, id: o.id, name: o.name || `${kind} ${n}`, params: o.params, mate, into: root, mode, color: o.color });
+        return { label: `${kind} on ${t.name} (${face})`, id: r.id, name: o.name || `${kind} ${n}` };
+      }
       case 'text': {
         /* text on a face: emboss (a boolean add, standing on the face) or engrave (a boolean remove, sunk into it) */
         const keys = ['text', 'height', 'depth', 'weight', 'spacing', 'path', 'radius', 'angle', 'align', 'points'], params = {};
@@ -1327,10 +1350,8 @@ export class Model {
         let face = o.face || 'top', slide = o.slide || [0, 0];
         if (o.at) {
           /* a clicked point (and the face's normal there): the matching face connector, and the point as a slide on it */
-          const at = W(o.at), n = o.normal ? V.norm(o.normal) : null;
-          const c = faces.filter(f => !n || V.dot(f.n, n) > 0.999).sort((x, y) => Math.abs(V.dot(V.sub(at, x.o), x.n)) - Math.abs(V.dot(V.sub(at, y.o), y.n)))[0];
-          if (!c) throw new Error(`no flat face of ${t.name} there for text`);
-          const d = V.sub(at, c.o); face = c.name; slide = [+V.dot(d, c.u).toFixed(3), +V.dot(d, V.cross(c.n, c.u)).toFixed(3)];
+          const f = this.faceAt(t.id, W(o.at), o.normal); if (!f) throw new Error(`no flat face of ${t.name} there for text`);
+          face = f.face; slide = f.slide;
         }
         if (!faces.some(c => c.name === face)) throw new Error(`${t.name} has no face “${face}”. Faces: ${faces.map(c => c.name).join(', ')}`);
         const mate = mode === 'subtract' ? { to: t.id, a: face, b: 'top', flip: false, slide, angle: o.rotate || 0 } : { to: t.id, a: face, b: 'bottom', slide, angle: o.rotate || 0 };

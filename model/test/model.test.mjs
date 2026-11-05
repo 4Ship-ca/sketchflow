@@ -323,6 +323,19 @@ let longErr = null; try { tx({ text: 'A VERY LONG TEXT THAT GOES ALL THE WAY ROU
 ok('text longer than its arc is refused with the numbers', /longer than the arc/.test(longErr || ''));
 const [clk] = Tx.apply([{ op: 'text', target: 'plate', at: [30, 15, 7.5], normal: [0, 0, 1], text: 'X', height: 6, depth: 1 }]);
 ok('a click on a face places the text there (face found from the normal)', Tx.get(clk.id).mate.a === 'top' && near(Tx.result.world.get(clk.id)[12], 30, 1e-6) && near(Tx.result.world.get(clk.id)[13], 15, 1e-6));
+/* features placed on a face: boss (boolean add) and cut (boolean remove), mated to the face at the clicked point */
+const Fe = new Model(); Fe.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 80, depth: 50, height: 20 } }]);
+const fv = () => Fe.result.bodies[0].solid.volume(), fv0 = fv(), cylV = 0.5 * 48 * 25 * Math.sin(2 * Math.PI / 48) * 8;
+const [boss] = Fe.apply([{ op: 'feature', target: 'b', at: [20, 10, 20], normal: [0, 0, 1], shape: 'cylinder', params: { diameter: 10, height: 8 } }]);
+ok('a boss stands on the face it was placed on (one body, its volume more)', Fe.result.bodies.length === 1 && near(fv() - fv0, cylV, 1e-6) && Fe.get(boss.id).mate.a === 'top' && Fe.get(boss.id).mate.slide.join() === '20,10' && boss.name === 'Boss 1');
+const fv1 = fv(), [cut] = Fe.apply([{ op: 'feature', target: 'b', at: [-40, 0, 10], normal: [-1, 0, 0], shape: 'box', params: { width: 10, depth: 6, height: 5 }, mode: 'cut' }]);
+ok('a cut goes into the face it was placed on, flush', near(fv1 - fv(), 300, 1e-6) && Fe.get(cut.id).mate.a === 'left' && Fe.get(cut.id).op === 'subtract');
+Fe.apply([{ op: 'set', id: 'b', params: { width: 100, height: 30 } }]);
+ok('both follow their faces when the part changes size', near(Fe.result.world.get(cut.id)[12], -45, 1e-6) && near(Fe.result.world.get(boss.id)[14], 30, 1e-6));
+let featErr = null; try { Fe.apply([{ op: 'feature', target: 'b', face: 'nowhere', shape: 'box' }]); } catch (e) { featErr = e.message; }
+ok('an unknown face is refused with the list of faces', /no face “nowhere”[\s\S]*top/.test(featErr || ''), featErr);
+const fa = Fe.faceAt('b', [10, 25, 15], [0, 1, 0]);
+ok('faceAt turns a point on a face into that face and a slide on it', fa && fa.face === 'back' && fa.off < 1e-9 && fa.slide.length === 2);
 /* sketch constraints on a polyline profile */
 const Sc = new Model();
 Sc.apply([{ op: 'extrude', id: 'L', profile: [[0, 0], [61, 1.5], [60, 9], [11, 10.5], [9, 41], [1, 40]], length: 10, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'h', i: 2 }, { type: 'v', i: 3 }, { type: 'h', i: 4 }, { type: 'v', i: 5 }] }]);

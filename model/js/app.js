@@ -23,6 +23,10 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  view: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
+  boss: 'M3 16l9 4 9-4-9-4zM8 14V8.5l4-2 4 2V14M8 8.5l4 2 4-2M12 10.5V16',
+  cut: 'M3 12l9 4 9-4-9-4zM3 12v4l9 4 9-4v-4M8 12.2l4-1.8 4 1.8-4 1.8z',
+  face: 'M3 15l9 4 9-4-9-4zM8.5 15l3.5-1.6 3.5 1.6-3.5 1.6zM16 4l4 4-6 6h-4v-4z',
   text: 'M5 7V5h14v2M12 5v14M9 19h6',
   box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5', wedge: 'M4 18h16L4 6zM4 6l4-2 12 12', cylinder: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6',
   cone: 'M12 3L5 18M12 3l7 15M5 18c0 1.7 3.1 3 7 3s7-1.3 7-3-3.1-3-7-3-7 1.3-7 3z', sphere: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12c0 1.9 4 3.5 9 3.5s9-1.6 9-3.5',
@@ -215,7 +219,10 @@ function renderTree() {
   if (!objs.length) list.append(el('div', { class: 'empty' }, 'Add a shape from the toolbar, or sketch a profile in a FRONT / TOP / RIGHT view. New shapes stack on the first one; Mate connects any connector to any other.'));
   const off = model.result.off || new Set(), rb = Number.isInteger(model.doc.rollback) ? model.doc.rollback : objs.length;
   const bar = () => {
-    const b = el('div', { class: 'rollbar', draggable: 'true', title: 'Rollback bar: drag it up to see the model as it was; new features go here. Double-click: roll to the end' }, el('span', null, rb < objs.length ? 'Rolled back — drag down or double-click to roll to the end' : 'Rollback bar'));
+    const step = (to) => (e) => { e.stopPropagation(); apply([{ op: 'rollback', to }]); };
+    const b = el('div', { class: 'rollbar', draggable: 'true', title: 'Rollback bar: drag it, or use the arrows, to see the model as it was; new features go in at the bar' },
+      el('span', null, rb < objs.length ? `Rolled back (${objs.length - rb} after the bar)` : 'Rollback bar'),
+      el('span', { class: 'rbtns' }, el('button', { title: 'Roll back one feature', disabled: rb > 0 ? null : true, onclick: step(Math.max(0, rb - 1)) }, '▲'), el('button', { title: 'Roll forward one feature', disabled: rb < objs.length ? null : true, onclick: step(rb + 1 >= objs.length ? null : rb + 1) }, '▼'), rb < objs.length ? el('button', { title: 'Roll to the end (every feature on)', onclick: step(null) }, 'To end') : ''));
     b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/sf-roll', '1'); e.dataTransfer.effectAllowed = 'move'; });
     b.addEventListener('dblclick', () => apply([{ op: 'rollback', to: null }]));
     return b;
@@ -382,6 +389,24 @@ function infoSection(o, sec) {
   const s = sec(T.label + ' data');
   for (const [k, v] of Object.entries(info || {})) s.append(k === 'warning' ? el('div', { class: 'warnline' }, '⚠ ' + v) : el('div', { class: 'f' }, label(k), el('span', { class: 'mono' }, typeof v === 'number' ? fmt(v) : String(v))));
 }
+/* the obvious way to put features on a part: select it, then pick what to add */
+function addToPartSection(o, sec) {
+  if (META.has(o.type) || (model.result.virtual && model.result.virtual.has(o.id))) return;
+  const body = model.bodyContaining(o.id); if (!body) return;
+  const root = model.get(body.id); if (!root) return;
+  const s = sec('Add to ' + root.name), b = (label, ic, tip, fn) => el('button', { class: 'abtn', title: tip, onclick: fn }, icon(ic), el('span', null, label));
+  s.append(el('div', { class: 'agrid' },
+    b('Boss', 'boss', 'Join a cylinder or box onto a face: set its size, click the face', () => setTool('boss', root.id)),
+    b('Cut', 'cut', 'Cut a round or square pocket into a face', () => setTool('cut', root.id)),
+    b('Hole', 'hole', 'ISO hole: clearance, counterbore, countersink, tapped, heat-set insert', () => setTool('hole', root.id)),
+    b('Text', 'text', 'Emboss or engrave words on a face', () => setTool('text', root.id)),
+    b('Sketch on face', 'face', 'Draw any outline on a face (lines, arcs, shapes), then join it or cut it', () => setTool('sketch-face', { only: root.id })),
+    b('Fillet', 'fillet', 'Round an edge: click near it', () => setTool('edge-fillet')),
+    b('Chamfer', 'chamfer', 'Bevel an edge: click near it', () => setTool('edge-chamfer')),
+    b('Shell', 'shell', 'Hollow it to an even wall thickness', () => shellHint(root)),
+    b('Pattern', 'pattern', 'Rows, grids, circles or mirror copies of this', () => patternHint(o.id))));
+  s.append(el('div', { class: 'note' }, 'Each asks you to click the face (or edge) it goes on; a new shape from the Add bar lands on the selected part too.'));
+}
 function renderProps() {
   const body = $('#pbody'); body.innerHTML = '';
   if (addonForm) { renderAddonForm(body); return; }
@@ -431,6 +456,7 @@ function renderProps() {
     if (!ADDONS.size) sa.append(el('div', { class: 'empty' }, 'No add-ons loaded.'));
     return;
   }
+  addToPartSection(o, sec);
   const s1 = sec(TYPES[o.type] ? TYPES[o.type].label : o.type);
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
@@ -458,6 +484,14 @@ function renderProps() {
       el('button', { class: 'btn', style: 'width:100%;margin-top:4px', title: 'Switch between a boolean add (standing on the face) and a boolean remove (cut into it)', onclick: () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: eng ? 'union' : 'subtract' }, { op: 'mate', id: o.id, to: m.to, a: m.a, b: eng ? 'bottom' : 'top', flip: eng, slide: m.slide, angle: m.angle, offset: 0 }], eng ? 'Emboss text' : 'Engrave text') }, eng ? 'Emboss instead' : 'Engrave instead'));
   }
   if (o.type === 'hole') { try { s1.append(el('div', { class: 'note' }, holeSpec(o.params).label + (o.params.through ? ', through (follows the part’s thickness)' : ''))); } catch (e) { s1.append(el('div', { class: 'warnline' }, e.message)); } }
+  /* a separate part sitting on another: one click joins it, cuts it, or intersects it */
+  if (!o.into && o.mate && o.mate.to && o.mate.to !== 'origin' && !META.has(o.type) && model.result.bodies.some(b => b.id === o.id)) {
+    const tb = model.bodyContaining(o.mate.to);
+    if (tb && tb.id !== o.id) {
+      const tg = model.get(tb.id), s5 = sec('Combine with ' + tg.name), bo = (mode, label) => el('button', { class: 'btn', onclick: () => { apply([{ op: 'boolean', target: tg.id, tool: o.id, mode }], `${label} ${o.name}`); select(o.id); } }, label);
+      s5.append(el('div', { class: 'btns' }, bo('union', 'Join to it'), bo('subtract', 'Cut from it'), bo('intersect', 'Keep the overlap')), el('div', { class: 'note' }, `Join merges ${o.name} into ${tg.name} (one part); Cut removes its shape from ${tg.name}. It stays editable, and Separate undoes it.`));
+    }
+  }
   /* placement */
   if (!['edge', 'pattern', 'weld'].includes(o.type)) {
     const s2 = sec('Placement');
@@ -513,6 +547,7 @@ function renderProps() {
   if (o.type !== 'edge' && o.type !== 'pattern') { const col = el('input', { type: 'color', value: o.color || (MATERIALS[(o.meta || {}).material] || {}).color || '#c7cbd8' }); col.onchange = () => apply([{ op: 'set', id: o.id, color: col.value }]); s4.append(field('colour', col)); }
   s4.append(el('div', { class: 'btns' },
     !['edge', 'pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', onclick: () => patternHint(o.id) }, 'Pattern…') : null,
+    !['pattern', 'weld'].includes(o.type) ? el('button', { class: 'btn', title: 'A copy beside it, with its holes and edges', onclick: () => { try { const r = apply([{ op: 'duplicate', id: o.id }])[0]; select(r.id); } catch (e) { /* toast shown */ } } }, 'Duplicate') : null,
     !o.into && !META.has(o.type) && model.result.bodies.some(b => b.id === o.id) ? el('button', { class: 'btn', title: 'Hollow this part to an even wall thickness (any shape)', onclick: () => shellHint(o) }, 'Shell…') : null,
     el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show' : 'Hide'),
     el('button', { class: 'btn danger', onclick: () => { apply([{ op: 'delete', id: o.id }]); select(null); } }, 'Delete')));
@@ -573,29 +608,53 @@ function refreshGhost() {
 function syncBar() {
   $('#undo').disabled = !model.undoStack.length; $('#redo').disabled = !model.redoStack.length;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', tool && b.dataset.tool === tool.name));
-  $('#hiddenBtn').classList.toggle('on', views.showHidden); $('#dimsBtn').classList.toggle('on', views.showDims);
+
   const cs = $('#cfgSel'), cfgs = model.doc.configs || [];
   cs.hidden = !cfgs.length; if (cfgs.length) { cs.innerHTML = ''; cs.append(el('option', { value: '' }, 'Default'), ...cfgs.map(c => el('option', { value: c.name, selected: model.doc.config === c.name ? true : null }, c.name))); }
-  $('#explodeBtn').classList.toggle('on', views.explode > 0.5); $('#cogBtn').classList.toggle('on', !!views.showCoG); $('#sectionBtn').classList.toggle('on', !!views.section);
+  $('#sectionBtn').classList.toggle('on', !!views.section); $('#motionBtn').classList.toggle('on', !$('#motion').hidden); $('#checkBtn').classList.toggle('on', !$('#check').hidden);
   if (document.activeElement !== $('#name')) $('#name').value = model.doc.name;
 }
 document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addShape(b.dataset.add)));
+/* a new shape lands on the selected part (on its top face), or on the ground part, or on the origin when it is the first */
+function placeOn(id) { const o = id && model.get(id); if (!o || META.has(o.type)) return null; const root = rootOf(id); return worldConnectors(model.result, root).some(c => c.name === 'top' && c.kind === 'face') ? root : null; }
 function addShape(type) {
-  const g = model.result.ground, first = !g;
-  const r = apply([{ op: 'add', type, mate: first ? { to: 'origin', a: 'xy', b: 'bottom' } : undefined }])[0];
+  const g = model.result.ground, first = !g, on = !first ? placeOn(selected) : null;
+  const r = apply([{ op: 'add', type, mate: first ? { to: 'origin', a: 'xy', b: 'bottom' } : on ? { to: on, a: 'top', b: 'bottom' } : undefined }])[0];
   select(r.id); if (first) setTimeout(() => views.fitAll(), 0);
-  toast(first ? `${r.name} placed on the origin — it’s the ground` : `${r.name} sits on ${model.get(g).name} — Mate to move it`, 1800);
+  toast(first ? `${r.name} placed on the origin — it’s the ground` : on ? `${r.name} sits on ${model.get(on).name} — Join it or Cut it under “Combine” in Properties, or move it with slide x / y` : `${r.name} sits on ${model.get(g).name} — Mate to move it`, 2600);
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(tool && tool.name === b.dataset.tool ? null : b.dataset.tool)));
 $('#undo').onclick = () => { const l = model.undo(); if (l) toast('Undo · ' + l, 900); };
 $('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l, 900); };
-$('#layout').onclick = () => { views.layout = views.layout === '4' ? '3d' : '4'; views.draw(); };
+/* view settings: the View menu and the keys share these */
+const VIEW = {
+  layout: (l) => { views.layout = l; views.draw(); },
+  hidden: () => { views.showHidden = !views.showHidden; syncBar(); views.draw(); },
+  dims: () => { views.showDims = !views.showDims; syncBar(); views.draw(); },
+  explode: () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); },
+  cog: () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); },
+  theme: () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); },
+  zoom: (k) => { const ps = views.panes(), o = ps.find(q => q.id !== '3d'); if (o) views.zoomOrtho(o, o.x + o.w / 2, o.y + o.h / 2, k); if (ps.some(q => q.id === '3d')) views.zoom3d(k); views.draw(); }
+};
 $('#fit').onclick = () => views.fitAll();
-$('#explodeBtn').onclick = () => { views.setExplode(views.explode > 0.5 ? 0 : 1); setTimeout(syncBar, 420); toast(views.explode > 0.5 ? 'Back together' : 'Pulled apart — welded and mated parts are separate components', 1600); };
+$('#viewBtn').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu viewmenu', style: `left:${Math.max(8, Math.min(r.left, innerWidth - 260))}px;top:${r.bottom + 4}px` });
+  const item = (label, on, fn, key) => m.append(el('button', { class: 'mi', onclick: () => { m.remove(); fn(); } }, el('span', { class: 'ck' }, on == null ? '' : on ? '✓' : ''), el('span', { class: 'mt' }, label), el('span', { class: 'key' }, key || '')));
+  m.append(el('div', { class: 'mh' }, 'Layout'));
+  for (const [l, label, key] of [['4', 'All four views', '0'], ['front', 'FRONT only', '1'], ['top', 'TOP only', '2'], ['right', 'RIGHT only', '3'], ['3d', '3D only', '4']]) item(label, views.layout === l, () => VIEW.layout(l), key);
+  item('Fit everything', null, () => views.fitAll(), 'F'); item('Zoom in', null, () => VIEW.zoom(1.25), 'wheel'); item('Zoom out', null, () => VIEW.zoom(0.8), 'wheel');
+  m.append(el('div', { class: 'mh' }, 'Show'));
+  item('Hidden lines (dashed)', views.showHidden, VIEW.hidden, 'H'); item('Dimensions', views.showDims, VIEW.dims, 'D'); item('Pulled apart (exploded)', views.explode > 0.5, VIEW.explode, 'E'); item('Centre of gravity', !!views.showCoG, VIEW.cog);
+  m.append(el('div', { class: 'mh' }, 'Dragging in the 3D view'));
+  item('Orbits (right-drag pans)', prefs.drag3d !== 'pan', () => { prefs.drag3d = 'orbit'; savePrefs(); }); item('Pans (right-drag orbits)', prefs.drag3d === 'pan', () => { prefs.drag3d = 'pan'; savePrefs(); });
+  m.append(el('div', { class: 'mh' }, 'Theme')); item(isDark() ? 'Light theme' : 'Dark theme', null, VIEW.theme);
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+};
+$('#shellBtn').onclick = () => { const id = placeOn(selected) || (selected && model.bodyContaining(selected) ? rootOf(selected) : null); if (id) shellHint(model.get(id)); else setTool('pick', { prompt: 'Shell: click the part to hollow', then: (pid) => { const rid = rootOf(pid); if (model.bodyContaining(rid)) shellHint(model.get(rid)); } }); };
+$('#patternBtn').onclick = () => { if (selected) patternHint(selected); else setTool('pick', { prompt: 'Pattern / mirror: click the part or feature to repeat', then: (pid) => patternHint(pid) }); };
 $('#checkBtn').onclick = () => { if (!$('#check').hidden) closeCheck(); else runInterference(); };
 $('#sectionBtn').onclick = () => { if (views.section) { views.section = null; hint(null); views.draw(); syncBar(); } else sectionHint(); };
 $('#motionBtn').onclick = () => { if ($('#motion').hidden) openMotion(); else closeMotion(); };
-$('#cogBtn').onclick = () => { views.showCoG = !views.showCoG; syncBar(); renderProps(); views.draw(); };
 $('#addonBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
   for (const a of listAddons()) {
@@ -606,9 +665,7 @@ $('#addonBtn').onclick = (e) => {
   if (!ADDONS.size) m.append(el('div', { class: 'mh' }, 'No add-ons loaded'));
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
-$('#hiddenBtn').onclick = () => { views.showHidden = !views.showHidden; syncBar(); views.draw(); };
-$('#dimsBtn').onclick = () => { views.showDims = !views.showDims; syncBar(); views.draw(); };
-$('#theme').onclick = () => { prefs.theme = isDark() ? 'light' : 'dark'; savePrefs(); document.documentElement.setAttribute('data-theme', prefs.theme); views.setTheme(isDark()); };
+
 $('#name').addEventListener('change', () => apply([{ op: 'rename', name: $('#name').value }]));
 $('#cfgSel').addEventListener('change', () => apply([{ op: 'config', name: $('#cfgSel').value || null }]));
 $('#name').addEventListener('keydown', e => e.stopPropagation());
@@ -629,6 +686,7 @@ $('#fileBtn').onclick = (e) => {
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
   item('Versions…', showVersions);
   item('Load the demo model', demo);
+  if (/^\/3d\b/.test(location.pathname)) item('2D sketch board ↗', () => { location.href = '/'; });
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
 /* the drawing sheet in an overlay (works in the artifact viewer too, where downloads are blocked) */
@@ -709,46 +767,203 @@ const hint = (t, actions, fields) => {
     i.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && actions && actions[0]) actions[0][1](vals()); if (e.key === 'Escape') setTool(null); }); return [k, label, i, options];
   });
   const vals = () => Object.fromEntries(inputs.map(([k, , i, options]) => [k, options || i.dataset.str ? i.value : parseFloat(String(i.value).replace(',', '.'))]));
-  h.append(el('span', null, t), ...inputs.map(([, label, i]) => el('label', { class: 'hf' }, label, i)), ...(actions || []).map(([l, f]) => el('button', { onclick: () => f(vals()) }, l)), el('button', { onclick: () => setTool(null) }, 'Esc'));
+  const own = (actions || []).some(([l]) => l === 'Done' || l === 'Cancel');
+  h.append(el('span', null, t), ...inputs.map(([, label, i]) => el('label', { class: 'hf' }, label, i)), ...(actions || []).map(([l, f]) => el('button', { class: l === 'Done' ? 'pri' : '', onclick: () => f(vals()) }, l)), own ? '' : el('button', { onclick: () => setTool(null) }, 'Cancel'));
   if (inputs[0] && !inputs[0][3]) setTimeout(() => { inputs[0][2].focus(); if (inputs[0][2].select) inputs[0][2].select(); }, 0);
 };
 let pendingLoft = null;
+/* Boss / Cut: a cylinder or box joined onto (or cut into) the face you click, centred where you click */
+function featureHint(kind) {
+  const sh = prefs.featShape || 'cylinder', only = tool.data.only, dep = kind === 'cut' ? 'depth mm' : 'height mm';
+  const fields = [['shape', 'shape', sh, ['cylinder', 'box']], ...(sh === 'box' ? [['width', 'width mm', prefs.featW || 10], ['depth', 'length mm', prefs.featL || 10]] : [['diameter', 'Ø mm', prefs.featDia || 10]]), ['height', dep, prefs.featH || 5]];
+  hint(`${kind === 'boss' ? 'Boss — joined onto' : 'Cut — a pocket in'} ${only ? model.get(only).name : 'a part'}: set the size, then click the face where its centre goes`, [['Done', () => setTool(null)]], fields);
+  document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; if (k === 'shape') { prefs.featShape = i.value; savePrefs(); featureHint(kind); return; } prefs[{ width: 'featW', depth: 'featL', diameter: 'featDia', height: 'featH' }[k]] = +i.value; savePrefs(); }));
+}
+function hintValues() { return Object.fromEntries([...document.querySelectorAll('#hint [data-k]')].map(i => [i.dataset.k, i.dataset.str || i.tagName === 'SELECT' ? i.value : parseFloat(String(i.value).replace(',', '.'))])); }
+const rootOf = (id) => (model.bodyContaining(id) || {}).id || id;
 function setTool(name, arg) {
+  if (tool && tool.data && tool.data.prevLayout) views.layout = tool.data.prevLayout;   /* a face sketch maximised its view: put the layout back */
+  views.sketchGrid = 0; views.sketchPane = null; snapCache = null; document.querySelectorAll('.menu.snapmenu').forEach(m => m.remove());
   tool = name ? { name, step: 0, data: {} } : null; views.connectorsFor = null; views.preview = null;
+  if (tool && typeof arg === 'string' && ['hole', 'text', 'boss', 'cut'].includes(name)) tool.data.only = arg;   /* from a part's Add to… buttons */
   if (!name) hint(null);
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
   else if (name === 'edge-weld') {
-    hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
+    hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [['Done', () => setTool(null)]], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
     const [sz, pf] = document.querySelectorAll('#hint [data-k]');
     sz.addEventListener('input', () => { const v = parseFloat(sz.value); if (v > 0) { prefs.weldSize = v; savePrefs(); } }); pf.addEventListener('change', () => { prefs.weldProfile = pf.value; savePrefs(); }); setTimeout(() => sz.blur(), 0);
   }
   else if (name.startsWith('edge-')) {
-    hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [], [['size', 'size mm', prefs.edgeSize || 4]]);
+    hint(`${name.slice(5)[0].toUpperCase() + name.slice(6)}: click near an edge — outer edges are trimmed, inner corners filled; where two parts meet it merges them into one`, [['Done', () => setTool(null)]], [['size', 'size mm', prefs.edgeSize || 4]]);
     const inp = $('#hint input'); if (inp) { inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (v > 0) { prefs.edgeSize = v; savePrefs(); } }); setTimeout(() => inp.blur(), 0); }
   }
   else if (name === 'hole') {
-    hint('Hole: click a face to place it — it is dimensioned from the two nearest edges (click a dimension to change it). Esc when done', [], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
+    hint(`Hole: click a face${tool.data.only ? ' of ' + model.get(tool.data.only).name : ''} to place it — it is dimensioned from the two nearest edges (click a dimension to change it)`, [['Done', () => setTool(null)]], [['size', 'size', prefs.holeSize || 'M6', Object.keys(HOLES)], ['kind', 'type', prefs.holeKind || 'simple', ['simple', 'counterbore', 'countersink', 'tapped', 'insert']], ['fit', 'fit', prefs.holeFit || 'normal', ['close', 'normal', 'loose', 'print']], ['depth', 'depth (0 = through)', prefs.holeDepth || 0]]);
     document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = i.dataset.k; prefs['hole' + k[0].toUpperCase() + k.slice(1)] = k === 'depth' ? +i.value : i.value; savePrefs(); }));
   }
   else if (name === 'text') {
-    hint('Text: set the words, then click a flat face — emboss stands it on the face, engrave cuts it in (change anything later in Properties)', [], [['text', 'text', prefs.textText || 'TEXT'], ['height', 'height mm', prefs.textH || 8], ['depth', 'depth mm', prefs.textD || 1], ['mode', 'mode', prefs.textMode || 'emboss', ['emboss', 'engrave']], ['path', 'path', prefs.textPath || 'line', ['line', 'arc', 'arc-inside']], ['radius', 'arc radius', prefs.textR || 30]]);
+    hint(`Text: set the words, then click a flat face${tool.data.only ? ' of ' + model.get(tool.data.only).name : ''} — emboss stands it on the face, engrave cuts it in (change anything later in Properties)`, [], [['text', 'text', prefs.textText || 'TEXT'], ['height', 'height mm', prefs.textH || 8], ['depth', 'depth mm', prefs.textD || 1], ['mode', 'mode', prefs.textMode || 'emboss', ['emboss', 'engrave']], ['path', 'path', prefs.textPath || 'line', ['line', 'arc', 'arc-inside']], ['radius', 'arc radius', prefs.textR || 30]]);
     document.querySelectorAll('#hint [data-k]').forEach(i => i.addEventListener('change', () => { const k = { text: 'textText', height: 'textH', depth: 'textD', mode: 'textMode', path: 'textPath', radius: 'textR' }[i.dataset.k]; prefs[k] = i.dataset.str || i.tagName === 'SELECT' ? i.value : +i.value; savePrefs(); }));
   }
   else if (name === 'measure') { views.connectorsFor = 'all'; hint('Dimension: click two dots in FRONT / TOP / RIGHT — a hole centre, then a face dot (middle of an edge in this view) gives the off-edge distance'); }
-  else if (name === 'sketch') { tool.data.points = []; tool.data.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); if (!arg) pendingLoft = null; sketchHint(); }
+  else if (name === 'sketch') {
+    const d = tool.data; d.points = []; d.hist = []; d.arcSegs = new Set(); d.mode = pendingLoft ? 'polyline' : (prefs.sketchMode || 'polyline'); d.seg = pendingLoft ? 'line' : (prefs.sketchSeg || 'line');
+    if (arg && arg.on) { d.on = arg.on; d.prevLayout = arg.prevLayout; d.pane = arg.on.pane; d.basis = BASISof(arg.on.pane); }
+    if (arg !== true) pendingLoft = null;
+    sketchHint();
+  }
+  else if (name === 'sketch-face') { tool.data.only = arg && arg.only; hint(`Sketch on a face: click a flat face${tool.data.only ? ' of ' + model.get(tool.data.only).name : ' of a part'} — one facing front / back, up / down or left / right (any view, 3D too)`); }
+  else if (name === 'boss' || name === 'cut') featureHint(name);
+  else if (name === 'pick') { tool.data.then = arg.then; hint(arg.prompt); }
   syncBar(); views.draw();
 }
-const SKETCH_HELP = { polyline: 'click points; first point or Enter closes', rect: 'corner, then opposite corner', circle: 'centre, then a point on it', slot: 'one end, then the other', polygon: 'centre, then a corner' };
-function sketchHint() {
-  const h = $('#hint'), d = tool.data; h.hidden = false; h.innerHTML = '';
-  if (pendingLoft) { h.append(el('span', null, 'Loft: now sketch the END profile in the ' + pendingLoft.pane.toUpperCase() + ' view (any number of points)'), el('button', { onclick: () => setTool(null) }, 'Esc')); return; }
-  h.append(el('span', null, 'Profile:'));
-  for (const [k, t] of [['polyline', 'Polyline'], ['rect', 'Rectangle'], ['circle', 'Circle'], ['slot', 'Slot'], ['polygon', 'Polygon']]) h.append(el('button', { class: d.mode === k ? 'on' : '', onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; d.points = []; d.pane = null; views.preview = null; sketchHint(); views.draw(); } }, t));
-  if (d.mode === 'polygon') { const i = el('input', { type: 'number', min: 3, step: 1, value: prefs.sides || 6, 'aria-label': 'sides', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.sides = Math.max(3, Math.round(+i.value)); savePrefs(); }); h.append(el('label', { class: 'hf' }, 'sides', i)); }
-  if (d.mode === 'slot') { const i = el('input', { type: 'number', min: 1, step: 'any', value: prefs.slotW || 10, 'aria-label': 'slot width', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.slotW = +i.value; savePrefs(); }); h.append(el('label', { class: 'hf' }, 'width', i)); }
-  h.append(el('span', { class: 'note' }, SKETCH_HELP[d.mode]), el('button', { onclick: () => setTool(null) }, 'Esc'));
+/* ---------- sketch: lines (line, arc), shapes, snapping, and sketching on a face ---------- */
+const SNAP_DEFAULT = { grid: true, step: 5, points: true, mids: true, hv: false, angle: false, show: true };
+const snapOpts = () => Object.assign({}, SNAP_DEFAULT, prefs.snap || {});
+const setSnap = (patch) => { prefs.snap = Object.assign(snapOpts(), patch); savePrefs(); if (tool && tool.name === 'sketch' && tool.step < 9) sketchHint(); views.draw(); };
+const snapLabel = (o) => { const p = []; if (o.grid) p.push(fmt(o.step) + ' mm grid'); if (o.points) p.push('points'); if (o.mids) p.push('midpoints'); if (o.hv) p.push('H/V'); if (o.angle) p.push('15°'); return p.length ? p.join(' · ') : 'off'; };
+const SKETCH_STEP = { rect: 'Click one corner, then the opposite corner', circle: 'Click the centre, then a point on the circle', slot: 'Click one end, then the other', polygon: 'Click the centre, then a corner' };
+function sketchStepText(d) {
+  if (d.mode !== 'polyline') return SKETCH_STEP[d.mode];
+  if (d.seg === 'arc') return !d.points.length ? 'Arc: click where it starts' : d.arcEnd ? 'Arc: click a point it passes through' : 'Arc: click where it ends';
+  return !d.points.length ? 'Line: click the first point' : d.points.length < 3 ? 'Line: click the next point' : 'Click the next point — or the first point (or Close shape) to finish';
 }
+/* the snapping options, as a menu under the Snap button */
+function snapMenu(anchor) {
+  document.querySelectorAll('.menu.snapmenu').forEach(m => m.remove());
+  const r = anchor.getBoundingClientRect(), o = snapOpts(), m = el('div', { class: 'menu snapmenu', style: `left:${Math.max(8, Math.min(innerWidth - 270, r.left))}px;top:${r.bottom + 6}px` });
+  const reopen = () => { m.remove(); const b = document.querySelector('#hint .snapbtn'); if (b) snapMenu(b); };
+  const check = (k, label, tip) => { const c = el('input', { type: 'checkbox' }); c.checked = !!o[k]; c.onchange = () => { setSnap({ [k]: c.checked }); reopen(); }; return el('label', { class: 'mchk', title: tip || '' }, c, el('span', null, label)); };
+  m.append(el('div', { class: 'mh' }, 'Snap to'), check('grid', 'Grid', 'Points land on the grid'),
+    el('div', { class: 'mstep' }, el('span', { class: 'note' }, 'step'), ...[0.5, 1, 2, 5, 10, 25].map(v => el('button', { class: o.step === v ? 'on' : '', onclick: () => { setSnap({ step: v, grid: true }); reopen(); } }, fmt(v))), el('span', { class: 'note' }, 'mm')),
+    check('show', 'Show the grid'),
+    check('points', 'Points, corners and centres', 'Your sketch points, part corners, face and hole centres, the origin'), check('mids', 'Edge midpoints'),
+    el('div', { class: 'mh' }, 'Lock'), check('hv', 'Horizontal / vertical only', 'Each line goes straight across or straight up (holding Shift does the same)'), check('angle', '15° angles', 'Lines turn in 15° steps, lengths on the grid'));
+  document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target) && !ev.target.closest('.snapbtn')) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
+}
+function sketchHint() {
+  const h = $('#hint'), d = tool.data, o = snapOpts(); h.hidden = false; h.innerHTML = '';
+  views.sketchGrid = o.grid && o.show ? o.step : 0; views.sketchPane = d.on ? d.on.pane : d.pane || null;
+  const grp = (label, ...kids) => el('span', { class: 'skgrp' }, el('span', { class: 'sklbl' }, label), ...kids);
+  const reset = () => { d.points = []; d.arcSegs = new Set(); d.hist = []; d.arcEnd = null; if (!d.on) d.pane = null; views.preview = null; };
+  const lineBtn = (seg, label, tip) => el('button', { class: d.mode === 'polyline' && (d.seg || 'line') === seg ? 'on' : '', title: tip, onclick: () => { prefs.sketchMode = 'polyline'; prefs.sketchSeg = seg; savePrefs(); if (d.mode !== 'polyline') reset(); d.mode = 'polyline'; d.seg = seg; d.arcEnd = null; sketchHint(); views.draw(); } }, label);
+  const shapeBtn = (k, label) => el('button', { class: d.mode === k ? 'on' : '', disabled: pendingLoft ? true : null, onclick: () => { prefs.sketchMode = k; savePrefs(); d.mode = k; reset(); sketchHint(); views.draw(); } }, label);
+  const where = d.on ? `on ${d.on.name} · ${d.on.faceName} — draw in the ${d.on.pane.toUpperCase()} view` : pendingLoft ? `the END profile, in the ${pendingLoft.pane.toUpperCase()} view` : d.pane ? `in the ${d.pane.toUpperCase()} view` : 'in FRONT, TOP or RIGHT';
+  const row = el('div', { class: 'skrow' }, el('b', null, pendingLoft ? 'Loft' : 'Sketch'), el('span', { class: 'note' }, where));
+  if (!d.on && !pendingLoft) row.append(el('button', { title: 'Sketch on a flat face of a part: the profile starts on that face, joins or cuts that part, and follows it', onclick: () => setTool('sketch-face') }, 'On a face…'));
+  row.append(grp('Lines', lineBtn('line', 'Line', 'Straight segments, point after point'), lineBtn('arc', 'Arc', 'An arc: its end, then a point it passes through (mix with lines)')),
+    grp('Shapes', shapeBtn('rect', 'Rectangle'), shapeBtn('circle', 'Circle'), shapeBtn('slot', 'Slot'), shapeBtn('polygon', 'Polygon')));
+  if (d.mode === 'polygon') { const i = el('input', { type: 'number', min: 3, step: 1, value: prefs.sides || 6, 'aria-label': 'sides', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.sides = Math.max(3, Math.round(+i.value)); savePrefs(); }); row.append(el('label', { class: 'hf' }, 'sides', i)); }
+  if (d.mode === 'slot') { const i = el('input', { type: 'number', min: 1, step: 'any', value: prefs.slotW || 10, 'aria-label': 'slot width', style: 'width:52px' }); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => { prefs.slotW = +i.value; savePrefs(); }); row.append(el('label', { class: 'hf' }, 'width', i)); }
+  row.append(el('button', { class: 'snapbtn', title: 'Snapping: grid, points, midpoints, horizontal / vertical, angles', onclick: (e) => snapMenu(e.currentTarget) }, 'Snap: ' + snapLabel(o) + ' ▾'));
+  row.append(el('button', { disabled: d.points.length || d.arcEnd ? null : true, title: 'Take back the last point (or arc)', onclick: () => undoSketchPoint() }, 'Undo point'));
+  if (d.mode === 'polyline') row.append(el('button', { class: d.points.length >= 3 ? 'pri' : '', disabled: d.points.length >= 3 ? null : true, title: 'Close the profile and make it 3D', onclick: () => finishSketch() }, 'Close shape'));
+  row.append(el('button', { onclick: () => setTool(null) }, 'Cancel'));
+  h.append(row, el('div', { class: 'sknote' }, sketchStepText(d)));
+}
+function undoSketchPoint() {
+  const d = tool.data;
+  if (d.arcEnd) d.arcEnd = null;
+  else if (d.hist && d.hist.length) { const n = d.hist.pop(); d.points.length = n; for (const i of [...d.arcSegs]) if (i >= n - 1) d.arcSegs.delete(i); }
+  else d.points.pop();
+  if (!d.points.length && !d.on) d.pane = null;
+  views.preview = d.points.length ? { pane: d.pane, points: d.points.slice() } : null; sketchHint(); views.draw();
+}
+/* a circular arc from a through c to b (2D): its points after a, ending exactly on b */
+function arc2(a, b, c) {
+  const [ax, ay] = a, [bx, by] = b, [cx, cy] = c, D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(D) < 1e-9 * (1 + Math.hypot(bx - ax, by - ay) ** 2)) return [[bx, by]];
+  const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy, ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / D, uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / D;
+  const r = Math.hypot(ax - ux, ay - uy), A = Math.atan2(ay - uy, ax - ux), tw = 2 * Math.PI, norm = (t) => ((t % tw) + tw) % tw;
+  let sweep = norm(Math.atan2(by - uy, bx - ux) - A); if (!(norm(Math.atan2(cy - uy, cx - ux) - A) < sweep)) sweep -= tw;
+  const n = Math.max(4, Math.min(64, Math.ceil(Math.abs(sweep) / (Math.PI / 18)))), out = [];
+  for (let k = 1; k <= n; k++) { const t = A + sweep * k / n; out.push([ux + r * Math.cos(t), uy + r * Math.sin(t)]); }
+  out[out.length - 1] = [bx, by]; return out;
+}
+/* what the cursor can snap to in a view: part corners, edge midpoints, face and hole centres, the origin (2D, cached per evaluation) */
+let snapCache = null;
+function snapTargets(paneId) {
+  const R = model.result; if (snapCache && snapCache.R === R && snapCache.pane === paneId) return snapCache.list;
+  const B = BASISof(paneId), O = R.originPoint, list = [], seen = new Set();
+  const put = (w, kind, label) => { const q = V.sub(w, O), x = V.dot(q, B.r), y = V.dot(q, B.u), k = Math.round(x * 1e3) + ',' + Math.round(y * 1e3) + kind; if (seen.has(k) || list.length > 40000) return; seen.add(k); list.push({ x, y, kind, label }); };
+  put(O, 'point', 'origin');
+  for (const o of model.doc.objects) if (R.world.has(o.id) && !META.has(o.type)) for (const c of worldConnectors(R, o.id)) if (c.kind === 'center' || c.kind === 'face') put(c.o, 'point', c.kind === 'center' ? 'centre' : c.name + ' centre');
+  for (const b of R.bodies) { if (b.hidden || b.solid.isEmpty()) continue; for (const [a, c] of K.creaseEdges(b.solid)) { put(a, 'point', 'corner'); put(c, 'point', 'corner'); put(V.lerp(a, c, 0.5), 'mid', 'midpoint'); } }
+  snapCache = { R, pane: paneId, list }; return list;
+}
+/* snap a sketch point: points first (sketch points, corners, centres, midpoints), then the H / V or angle lock from the
+   last point, then the grid. Returns the point and what it snapped to (for the marker and the length readout) */
+function snapSketch(pane, pp, straight) {
+  const d = tool.data, B = BASISof(pane.id), o = snapOpts(), pts = d.points;
+  const ppm = Math.abs(views.project(pane, B.r).x - views.project(pane, [0, 0, 0]).x) || 1, tol = 10 / ppm;
+  let x = pp.x, y = pp.y, snap = null;
+  const lastP = d.arcEnd || (pts.length ? pts[pts.length - 1] : null), last = lastP ? [V.dot(lastP, B.r), V.dot(lastP, B.u)] : null;
+  if (o.points || o.mids) {
+    let best = null, bd = tol;
+    const cand = o.points ? pts.map((p, i) => ({ x: V.dot(p, B.r), y: V.dot(p, B.u), kind: 'point', label: i === 0 ? 'start' : 'point' })) : [];
+    for (const t of snapTargets(pane.id)) if (t.kind === 'mid' ? o.mids : o.points) cand.push(t);
+    for (const t of cand) { const dd = Math.hypot(t.x - x, t.y - y); if (dd < bd) { bd = dd; best = t; } }
+    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label }; }
+  }
+  if (!snap && last && !d.arcEnd && (straight || o.hv || o.angle)) {
+    const dx = x - last[0], dy = y - last[1], g = (v) => (o.grid ? Math.round(v / o.step) * o.step : v);
+    if (straight || o.hv) { if (Math.abs(dx) >= Math.abs(dy)) { x = last[0] + g(dx); y = last[1]; } else { x = last[0]; y = last[1] + g(dy); } snap = { kind: 'grid', label: (Math.abs(dx) >= Math.abs(dy) ? 'horizontal ' : 'vertical ') + fmt(Math.hypot(x - last[0], y - last[1])), guide: true }; }
+    else { const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12), L = Math.max(o.grid ? o.step : 0, g(Math.hypot(dx, dy))); x = last[0] + L * Math.cos(a); y = last[1] + L * Math.sin(a); snap = { kind: 'grid', label: `${Math.round(a * 180 / Math.PI)}° · ${fmt(L)}`, guide: true }; }
+  } else if (!snap && o.grid) { x = Math.round(x / o.step) * o.step; y = Math.round(y / o.step) * o.step; snap = { kind: 'grid', label: last ? fmt(Math.hypot(x - last[0], y - last[1])) : null }; }
+  const p = V.add(V.mul(B.r, x), V.mul(B.u, y));
+  if (snap) { snap.p = p; if (snap.guide) snap.guide = lastP; else delete snap.guide; if (snap.kind !== 'grid' && last) snap.label += ' · ' + fmt(Math.hypot(x - last[0], y - last[1])); }
+  return { p, snap };
+}
+/* a profile drawn on a face: its points in the face's own frame, and the mate that puts them back where they were drawn,
+   standing out of the face (boss, new part) or going into it (cut). Without a face connector there: a fixed pose. */
+function onFace(d, pts3, cut, centre3) {
+  const R = model.result, O = R.originPoint, on = d.on, B = BASISof(on.pane), depth = V.dot(V.sub(on.point, O), B.f);
+  const W = pts3.map(p => V.add(V.add(O, p), V.mul(B.f, depth)));
+  let c = [0, 0, 0]; if (centre3) c = V.add(V.add(O, centre3), V.mul(B.f, depth)); else { for (const w of W) c = V.add(c, w); c = V.mul(c, 1 / W.length); }
+  const n = on.n, yAx = V.cross(n, B.r), prof = W.map(w => [+V.dot(V.sub(w, c), B.r).toFixed(6), +V.dot(V.sub(w, c), yAx).toFixed(6)]);
+  if (on.conn) {
+    const f = on.conn, v = V.cross(f.n, f.u), d0 = V.sub(c, f.o), slide = [+V.dot(d0, f.u).toFixed(4), +V.dot(d0, v).toFixed(4)];
+    const ru = V.dot(B.r, f.u), rv = V.dot(B.r, v), angle = +(Math.atan2(cut ? rv : -rv, ru) * 180 / Math.PI).toFixed(6);
+    return { prof, centre: c, mate: cut ? { to: on.id, a: f.name, b: 'end', flip: false, slide, angle, offset: 0 } : { to: on.id, a: f.name, b: 'start', flip: true, slide, angle, offset: 0 } };
+  }
+  const frame = M4.frame(c, B.r, cut ? V.neg(n) : n), pose = poseFromMatrix(frame);
+  return { prof: cut ? prof.map(([x, y]) => [x, -y]) : prof, centre: c, pose };
+}
+/* start a sketch on a part's face: {id, point (world), normal}. The view square to that face is maximised for drawing */
+function startFaceSketch(pk, only) {
+  const id = pk.id; if (!id || !model.get(id)) { toast('Click on a flat face of a part'); return false; }
+  const root = rootOf(id);
+  if (only && root !== only) { toast(`Click a face of ${model.get(only).name}`); return false; }
+  const n = V.norm(pk.normal), paneId = ['front', 'top', 'right'].find(k => Math.abs(V.dot(n, BASISof(k).f)) > 0.999);
+  if (!paneId) { toast('Pick a face that faces front / back, up / down or left / right (inclined faces can’t be sketched on yet)', 3000); return false; }
+  let f = model.faceAt(id, pk.point, n), owner = id;
+  if (!(f && f.off < 1e-3)) { const g = root !== id ? model.faceAt(root, pk.point, n) : null; if (g && g.off < 1e-3) { f = g; owner = root; } else f = null; }
+  const on = { id: owner, root, n, point: pk.point, pane: paneId, conn: f ? f.conn : null, faceName: f ? f.face + ' face' : 'face', name: model.get(owner).name };
+  const prevLayout = views.layout; setTool('sketch', { on, prevLayout }); views.layout = paneId; views.draw();
+  toast(`Sketching on ${on.name} — draw in the ${paneId.toUpperCase()} view (View menu → 4 views to see the rest)`, 2600);
+  return true;
+}
+/* how deep a cut must go to come out the far side of a part, from a point on its face */
+function throughDepth(rootId, c, n) {
+  const body = model.bodyContaining(rootId); if (!body) return 10;
+  const bb = body.solid.bbox(); let m = 0;
+  for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) m = Math.max(m, V.dot(V.sub([x, y, z], c), V.neg(n)));
+  return +(m + 0.5).toFixed(3);
+}
+/* the choices for a profile on a face: join it to the part, cut it in, cut through, or make a new part there */
+function faceActions(d, label, build) {
+  const on = d.on, ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt);
+  const go = (kind, v) => {
+    const cut = kind === 'cut' || kind === 'through', P = build(cut);
+    const L = kind === 'through' ? throughDepth(on.root, P.place.centre, on.n) : ok(v.length, 10);
+    const op = Object.assign(P.op, { length: L, name: `${label} ${kind === 'boss' ? 'boss' : kind === 'part' ? '' : 'cut'}`.trim() }, P.place.mate ? { mate: P.place.mate } : { at: P.place.pose.at, rot: P.place.pose.rot, fixed: true }, kind === 'part' ? {} : { into: on.root, mode: cut ? 'subtract' : 'union' });
+    try { const r = apply([op], `${label} ${kind === 'boss' ? 'joined to' : kind === 'part' ? 'on' : 'cut into'} ${(model.get(on.root) || {}).name}`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ }
+  };
+  const rootName = (model.get(on.root) || {}).name;
+  return [['Extrude · join to ' + rootName, (v) => go('boss', v)], ['Cut into ' + rootName, (v) => go('cut', v)], ['Cut through', (v) => go('through', v)], ['New part', (v) => go('part', v)]];
+}
+const arcFree = (cons, arcSegs) => cons.filter(c => !((c.type === 'h' || c.type === 'v') && arcSegs && arcSegs.has(c.i)));
 /* a shape from two sketch clicks (in the view's 2D coordinates) */
 function shapeFrom(mode, a, b) {
   if (mode === 'rect') return { shape: 'rect', x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), radius: 0 };
@@ -763,6 +978,13 @@ function finishShape(spec) {
   views.preview = { pane: d.pane, points: shapePoints3(spec, B), closed: true }; views.draw();
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]), pose = poseFromMatrix(frame);
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt), name = { rect: 'Rectangle', circle: 'Circle', slot: 'Slot', polygon: 'Polygon' }[spec.shape];
+  const sizeText = `${name} ${spec.shape === 'rect' || spec.shape === 'slot' ? fmt(spec.width) + ' × ' + fmt(spec.height) : 'Ø' + fmt(spec.diameter)}`;
+  if (d.on) {
+    /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
+    const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
+    hint(`${sizeText} on ${d.on.name} (${d.on.faceName}) — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local) })), [['length', 'height / depth mm', 10]]);
+    tool.step = 9; return;
+  }
   /* the part under the shape (for Cut): pick through the shape's centre in that view */
   const pane = views.panes().find(q => q.id === d.pane), cs = views.project(pane, V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y))), under = views.pick(pane, cs.x, cs.y), target = under && model.resolveId(under.id);
   const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, profile: pts2 }, spec)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
@@ -772,7 +994,8 @@ function finishShape(spec) {
     const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
   }]);
   actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
-  hint(`${name} ${spec.shape === 'rect' || spec.shape === 'slot' ? fmt(spec.width) + ' × ' + fmt(spec.height) : 'Ø' + fmt(spec.diameter)} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['degrees', 'revolve °', 360]]);
+  actions.push(['Back', () => { tool.step = 0; d.points = []; views.preview = null; sketchHint(); views.draw(); }]);
+  hint(`${sizeText} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['degrees', 'revolve °', 360]]);
   tool.step = 9;
 }
 function finishSketch() {
@@ -781,21 +1004,27 @@ function finishSketch() {
   views.preview = { pane: d.pane, points: d.points.slice(), closed: true }; views.draw();
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
-  /* a fresh polyline gets horizontal / vertical constraints where it nearly is, and its first point fixed (edit them in Properties → Sketch) */
-  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, constraints: autoConstraints(prof), at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  /* a fresh polyline gets horizontal / vertical constraints where it nearly is (not on its arcs), and its first point fixed (edit them in Properties → Sketch) */
+  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, constraints: arcFree(autoConstraints(prof), d.arcSegs), at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
   if (pendingLoft) {
     if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');
     const first = pendingLoft;
     hint('Loft between the two profiles (' + first.pts2.length + ' → ' + pts2.length + ' points):', [
-      ['Loft', (v) => { const L = ok(v.length, 30); if (L) { const r = apply([{ op: 'loft', profile: first.pts2, profile2: pts2, length: L, twist: ok(v.twist, 0), at: first.pose.at, rot: first.pose.rot, fixed: true }])[0]; pendingLoft = null; select(r.id); setTool(null); } }]
+      ['Loft', (v) => { const L = ok(v.length, 30); if (L) { const r = apply([{ op: 'loft', profile: first.pts2, profile2: pts2, length: L, twist: ok(v.twist, 0), at: first.pose.at, rot: first.pose.rot, fixed: true }])[0]; pendingLoft = null; select(r.id); setTool(null); } }],
+      ['Cancel', () => { pendingLoft = null; setTool(null); }]
     ], [['length', 'length', 30], ['twist', 'twist °', 0]]);
+    tool.step = 9; return;
+  }
+  if (d.on) {
+    hint(`Profile on ${d.on.name} (${d.on.faceName}), ${pts2.length} points:`, faceActions(d, 'Extrude', (cut) => { const place = onFace(d, d.points, cut); return { place, op: { op: 'extrude', profile: place.prof, constraints: arcFree(autoConstraints(place.prof), d.arcSegs) } }; }), [['length', 'height / depth mm', 10]]);
     tool.step = 9; return;
   }
   hint('Profile closed (' + pts2.length + ' points) — make it 3D:', [
     ['Extrude', (v) => { const L = ok(v.length, 20); if (L) make('extrude', { length: L, twist: ok(v.twist, 0), scale: ok(v.scale, 1) || 1 }); }],
     ['Revolve', (v) => { const dg = ok(v.degrees, 360); if (dg) make('revolve', { profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: dg }); }],
-    ['Loft → end profile', (v) => { pendingLoft = { pts2, pose, pane: d.pane }; const keep = pendingLoft; setTool('sketch', true); pendingLoft = keep; hint('Loft: now sketch the END profile in the ' + keep.pane.toUpperCase() + ' view (any number of points)'); }]
+    ['Loft → end profile', (v) => { pendingLoft = { pts2, pose, pane: d.pane }; const keep = pendingLoft; setTool('sketch', true); pendingLoft = keep; tool.data.pane = keep.pane; sketchHint(); }],
+    ['Cancel', () => setTool(null)]
   ], [['length', 'length', 20], ['twist', 'twist °', 0], ['scale', 'end scale', 1], ['degrees', 'revolve °', 360]]);
   tool.step = 9;
 }
@@ -817,7 +1046,7 @@ stage.addEventListener('pointermove', (e) => {
   if (drag) {
     const dx = x - drag.x, dy = y - drag.y; drag.x = x; drag.y = y; if (Math.hypot(x - drag.x0, y - drag.y0) > 4) drag.moved = true;
     if (!drag.moved) return;
-    if (drag.pane.id === '3d') { if (drag.button === 2 || drag.button === 1 || e.shiftKey) views.pan3d(drag.pane, dx, dy); else views.orbit(dx, dy); }
+    if (drag.pane.id === '3d') { const alt = drag.button === 2 || drag.button === 1 || e.shiftKey; if (alt !== (prefs.drag3d === 'pan')) views.pan3d(drag.pane, dx, dy); else views.orbit(dx, dy); }
     else views.panOrtho(drag.pane, dx, dy);
     return;
   }
@@ -825,11 +1054,13 @@ stage.addEventListener('pointermove', (e) => {
   const h = views.hitOverlay(x, y);
   views.hover = h ? { conn: h.kind === 'conn' ? h.conn : null, cube: h.kind === 'cube' && h.name ? h.name : null, cubeDir: h.kind === 'cube' && !h.name ? h.dir : null } : null;
   if (tool && tool.name === 'sketch' && pane.id !== '3d' && tool.step < 9) {
-    let pp = views.planePoint(pane, x, y); if (!pp) return;
-    if (tool.data.pane && tool.data.pane !== pane.id) { views.draw(); return; }
-    let p = snapSketch(pane, pp, e.shiftKey);
-    if (tool.data.mode && tool.data.mode !== 'polyline' && tool.data.points.length === 1) { const B = BASISof(pane.id), a = tool.data.points[0], spec = shapeFrom(tool.data.mode, [V.dot(a, B.r), V.dot(a, B.u)], [V.dot(p, B.r), V.dot(p, B.u)]); views.preview = { pane: pane.id, points: shapePoints3(spec, B), closed: true }; }
-    else views.preview = { pane: pane.id, points: tool.data.points, cursor: p };
+    const d = tool.data, want = d.on ? d.on.pane : d.pane;
+    const pp = views.planePoint(pane, x, y); if (!pp) return;
+    if (want && want !== pane.id) { if (views.preview) views.preview.snap = null; views.draw(); return; }
+    const { p, snap } = snapSketch(pane, pp, e.shiftKey), B = BASISof(pane.id), P2 = (q) => [V.dot(q, B.r), V.dot(q, B.u)], P3 = (q) => V.add(V.mul(B.r, q[0]), V.mul(B.u, q[1]));
+    if (d.mode && d.mode !== 'polyline' && d.points.length === 1) { const spec = shapeFrom(d.mode, P2(d.points[0]), P2(p)); views.preview = { pane: pane.id, points: shapePoints3(spec, B), closed: true, snap }; }
+    else if (d.seg === 'arc' && d.arcEnd && d.points.length) views.preview = { pane: pane.id, points: d.points.concat(arc2(P2(d.points[d.points.length - 1]), P2(d.arcEnd), P2(p)).map(P3)), snap };
+    else views.preview = { pane: pane.id, points: d.points, cursor: d.seg === 'arc' && d.points.length ? null : p, snap };
   }
   stage.style.cursor = h && (h.kind === 'dim' || h.kind === 'conn' || h.kind === 'cube') ? 'pointer' : tool ? 'crosshair' : 'default';
   views.draw();
@@ -860,29 +1091,51 @@ function dimOptions(hit, x, y) {
     ['Delete', () => { confirmRemove(hit); hint(null); }]
   ].filter(Boolean), [['value', 'mm', +fmt(hit.value)]]);
 }
-function snapSketch(pane, pp, straight) {
-  const B = BASISof(pane.id), pts = tool.data.points; let x = pp.x, y = pp.y;
-  const grid = prefs.grid || 5; x = Math.round(x / grid) * grid; y = Math.round(y / grid) * grid;
-  if (straight && pts.length) { const l = pts[pts.length - 1], lx = V.dot(l, B.r), ly = V.dot(l, B.u); if (Math.abs(x - lx) > Math.abs(y - ly)) y = ly; else x = lx; }
-  return V.add(V.mul(B.r, x), V.mul(B.u, y));
-}
 function BASISof(id) { return { front: { r: [1, 0, 0], u: [0, 0, 1], f: [0, -1, 0] }, top: { r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, 1] }, right: { r: [0, 1, 0], u: [0, 0, 1], f: [1, 0, 0] } }[id]; }
 function clickTool(pane, x, y, hit, e) {
   const t = tool, R = model.result;
   if (t.name === 'sketch') {
-    if (pane.id === '3d' || t.step >= 9) return;
-    if (t.data.pane && t.data.pane !== pane.id) { toast('Keep the whole profile in one view'); return; }
-    const pp = views.planePoint(pane, x, y), p = snapSketch(pane, pp, e.shiftKey);
-    t.data.pane = pane.id; t.data.basis = BASISof(pane.id);
-    if (t.data.mode && t.data.mode !== 'polyline') {
-      if (!t.data.points.length) { t.data.points.push(p); views.preview = { pane: pane.id, points: [p] }; views.draw(); return; }
-      const B = t.data.basis, a = t.data.points[0], spec = shapeFrom(t.data.mode, [V.dot(a, B.r), V.dot(a, B.u)], [V.dot(p, B.r), V.dot(p, B.u)]);
+    if (t.step >= 9) return;
+    if (pane.id === '3d') { toast(t.data.on ? `Draw this sketch in the ${t.data.on.pane.toUpperCase()} view` : 'Sketch in FRONT, TOP or RIGHT — or use On a face… to sketch on a part'); return; }
+    const d = t.data, want = d.on ? d.on.pane : d.pane;
+    if (want && want !== pane.id) { toast(d.on ? `This sketch is on ${d.on.name}: draw it in the ${want.toUpperCase()} view` : 'Keep the whole profile in one view'); return; }
+    const pp = views.planePoint(pane, x, y), { p } = snapSketch(pane, pp, e.shiftKey);
+    d.pane = pane.id; d.basis = BASISof(pane.id); d.hist = d.hist || []; d.arcSegs = d.arcSegs || new Set();
+    const B = d.basis, P2 = (q) => [V.dot(q, B.r), V.dot(q, B.u)], P3 = (q) => V.add(V.mul(B.r, q[0]), V.mul(B.u, q[1]));
+    if (d.mode && d.mode !== 'polyline') {
+      if (!d.points.length) { d.points.push(p); views.preview = { pane: pane.id, points: [p] }; sketchHint(); views.draw(); return; }
+      const spec = shapeFrom(d.mode, P2(d.points[0]), P2(p));
       if (!spec || (spec.width === 0 || spec.height === 0 || spec.diameter === 0)) { toast('Drag it out a little bigger'); return; }
       try { shapeProfile(spec); } catch (err) { toast(err.message); return; }
       finishShape(spec); return;
     }
-    if (t.data.points.length >= 3) { const f = views.project(pane, t.data.points[0]); if (Math.hypot(f.x - x, f.y - y) < 10) { finishSketch(); return; } }
-    t.data.points.push(p); views.preview = { pane: pane.id, points: t.data.points }; views.draw(); return;
+    if (d.seg === 'arc' && d.points.length) {
+      if (!d.arcEnd) { d.arcEnd = p; sketchHint(); views.draw(); return; }
+      const s0 = d.points.length - 1, more = arc2(P2(d.points[s0]), P2(d.arcEnd), P2(p)).map(P3);
+      d.hist.push(d.points.length); d.points.push(...more); for (let i = s0; i < s0 + more.length; i++) d.arcSegs.add(i); d.arcEnd = null;
+      if (d.points.length >= 4 && V.len(V.sub(d.points[0], d.points[d.points.length - 1])) < 1e-6) { d.points.pop(); finishSketch(); return; }
+      views.preview = { pane: pane.id, points: d.points.slice() }; sketchHint(); views.draw(); return;
+    }
+    if (d.points.length >= 3) { const f = views.project(pane, d.points[0]); if (Math.hypot(f.x - x, f.y - y) < 10) { finishSketch(); return; } }
+    d.hist.push(d.points.length); d.points.push(p); views.preview = { pane: pane.id, points: d.points.slice() }; sketchHint(); views.draw(); return;
+  }
+  if (t.name === 'sketch-face') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a flat face of a part'); return; }
+    if (R.virtual && R.virtual.has(pk.id)) { toast('That is a pattern copy: sketch on the original'); return; }
+    startFaceSketch({ id: model.resolveId(pk.id), point: pk.point, normal: pk.normal }, t.data.only); return;
+  }
+  if (t.name === 'pick') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part'); return; }
+    const id = model.resolveId(pk.id), then = t.data.then; setTool(null); if (id) then(id); return;
+  }
+  if (t.name === 'boss' || t.name === 'cut') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a flat face of a part'); return; }
+    const id = model.resolveId(pk.id); if (!id || (R.virtual && R.virtual.has(pk.id))) { toast('That is a pattern copy: put it on the original'); return; }
+    if (t.data.only && ((model.bodyContaining(id) || {}).id || id) !== t.data.only) { toast(`Click a face of ${model.get(t.data.only).name}`); return; }
+    const f = hintValues(), shape = f.shape || 'cylinder', params = shape === 'box' ? { width: f.width || 10, depth: f.depth || 10, height: f.height || 5 } : { diameter: f.diameter || 10, height: f.height || 5 };
+    const snap = (v) => Math.round(v * 2) / 2, O = R.originPoint, at = V.add(V.sub(pk.point, O).map(snap), O);
+    try { const r = apply([{ op: 'feature', target: id, at, normal: pk.normal, shape, params, mode: t.name }])[0]; views.sel = r.id; renderTree(); views.draw(); toast(`${r.name} placed — click another face for one more, or Done. Its size and slide x / y are in Properties`, 2600); } catch (e) { /* toast shown */ }
+    return;
   }
   if (t.name === 'mate') {
     if (t.step === 0) { const pk = views.pick(pane, x, y); if (!pk) return; const id = rootOrSelf(pk.id); t.data.moving = id; t.step = 1; views.connectorsFor = id; hint('Mate: click the connector on ' + model.get(id).name + ' to attach'); views.draw(); return; }
@@ -922,8 +1175,9 @@ function clickTool(pane, x, y, hit, e) {
   if (t.name === 'text') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a flat face of a part'); return; }
     const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the text on the original'); return; }
+    if (t.data.only && rootOf(id) !== t.data.only) { toast(`Click a face of ${model.get(t.data.only).name}`); return; }
     const f = Object.fromEntries([...document.querySelectorAll('#hint [data-k]')].map(i => [i.dataset.k, i.dataset.str || i.tagName === 'SELECT' ? i.value : parseFloat(i.value)]));
-    const snap = (v) => Math.round(v * 2) / 2, at = V.sub(pk.point, R.originPoint).map(snap);
+    const snap = (v) => Math.round(v * 2) / 2, at = V.add(V.sub(pk.point, R.originPoint).map(snap), R.originPoint);
     try {
       const r = apply([{ op: 'text', target: id, at, normal: pk.normal, text: f.text || 'TEXT', height: f.height || 8, depth: f.depth || 1, weight: +((f.height || 8) * 0.12).toFixed(2), mode: f.mode, path: f.path, radius: f.radius }])[0];
       setTool(null); select(r.id); toast(`${f.mode === 'engrave' ? 'Engraved' : 'Embossed'} — edit the words, size, path or radius in Properties`, 2400);
@@ -933,7 +1187,8 @@ function clickTool(pane, x, y, hit, e) {
   if (t.name === 'hole') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a face of a part'); return; }
     const id = model.resolveId(pk.id); if (!id || (model.result.virtual && model.result.virtual.has(pk.id))) { toast('That is a pattern copy: put the hole on the original'); return; }
-    const snap = (v) => Math.round(v * 2) / 2, at = V.sub(pk.point, R.originPoint).map(snap), dep = +(prefs.holeDepth || 0);
+    if (t.data.only && rootOf(id) !== t.data.only) { toast(`Click a face of ${model.get(t.data.only).name}`); return; }
+    const snap = (v) => Math.round(v * 2) / 2, at = V.add(V.sub(pk.point, R.originPoint).map(snap), R.originPoint), dep = +(prefs.holeDepth || 0);
     try {
       const r = apply([{ op: 'hole', target: id, at, normal: pk.normal, size: prefs.holeSize || 'M6', kind: prefs.holeKind || 'simple', fit: prefs.holeFit || 'normal', through: !(dep > 0), depth: dep > 0 ? dep : undefined }], `Hole ${prefs.holeSize || 'M6'}`)[0];
       toast(`${r.spec}${r.dims && r.dims.length ? ` — ${r.dims.map(d => fmt(d.value) + ' from ' + d.from).join(', ')}` : ''}. Click a blue dimension to change it.`, 3200);
@@ -1039,8 +1294,8 @@ window.addEventListener('keydown', (e) => {
   if (k === 'enter' && tool && tool.name === 'sketch' && tool.step < 9) { finishSketch(); return; }
   if ((k === 'delete' || k === 'backspace') && selected) { apply([{ op: 'delete', id: selected }]); select(null); return; }
   const map = { b: 'box', w: 'wedge', c: 'cylinder', k: 'cone', o: 'sphere' }; if (map[k]) { addShape(map[k]); return; }
-  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') $('#hiddenBtn').click(); if (k === 'd') $('#dimsBtn').click(); if (k === 'g') setTool('measure'); if (k === 'e') $('#explodeBtn').click(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 't') setTool('text'); if (k === 'p' && selected) patternHint(selected);
-  if (k === '0') { views.layout = '4'; views.draw(); } if (k === '1') { views.layout = 'front'; views.draw(); } if (k === '2') { views.layout = 'top'; views.draw(); } if (k === '3') { views.layout = 'right'; views.draw(); } if (k === '4') { views.layout = '3d'; views.draw(); }
+  if (k === 's') setTool('sketch'); if (k === 'm') setTool('mate'); if (k === 'f') views.fitAll(); if (k === 'h') VIEW.hidden(); if (k === 'd') VIEW.dims(); if (k === 'g') setTool('measure'); if (k === 'e') VIEW.explode(); if (k === 'j') $('#motionBtn').click(); if (k === 'x') $('#sectionBtn').click(); if (k === 'i') $('#checkBtn').click(); if (k === 't') setTool('text'); if (k === 'p' && selected) patternHint(selected);
+  const lay = { 0: '4', 1: 'front', 2: 'top', 3: 'right', 4: '3d' }[k]; if (lay) VIEW.layout(lay);
 });
 
 /* ---------- demo ---------- */
@@ -1160,7 +1415,7 @@ async function runCmd(cmd, a) {
   }
   throw new Error('Unknown command ' + cmd);
 }
-window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear };
+window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, startFaceSketch, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear };
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 /* the 2D board link only makes sense when both are served by the SketchFlow server */
 if (!bridge.token || !/^https?:$/.test(location.protocol)) { const a = document.querySelector('a[href="/"]'); if (a) a.remove(); }

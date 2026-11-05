@@ -239,6 +239,7 @@ export class Views {
     for (const pane of this.panes()) {
       c.save(); c.beginPath(); c.rect(pane.x, pane.y, pane.w, pane.h); c.clip();
       const cam = this.vp(pane);
+      if (this.sketchGrid && pane.id !== '3d' && (!this.sketchPane || this.sketchPane === pane.id)) this.drawGrid(c, pane, cam, this.sketchGrid);
       c.font = '700 11px "Figtree", system-ui, sans-serif'; c.fillStyle = C.label; c.fillText(LABEL[pane.id], pane.x + 10, pane.y + 18);
       /* origin triad */
       const o = this.project(pane, [0, 0, 0], cam), ax = [[1, 0, 0, '#e5484d'], [0, 1, 0, '#2fa86b'], [0, 0, 1, '#3e7bfa']];
@@ -364,8 +365,28 @@ export class Views {
       }
     }
   }
+  /* the sketch grid (snap step), thinned out until lines are at least 8 px apart, every fifth line a little stronger */
+  drawGrid(c, pane, cam, step) {
+    const B = BASIS[pane.id], o = this.project(pane, [0, 0, 0], cam), px = this.project(pane, B.r, cam).x - o.x; if (!(Math.abs(px) > 1e-9)) return;
+    let st = step; while (Math.abs(px) * st < 8) st *= 5;
+    const s = Math.abs(px) * st, x0 = o.x + Math.ceil((pane.x - o.x) / s) * s, y0 = o.y + Math.ceil((pane.y - o.y) / s) * s;
+    c.save(); c.lineWidth = 1;
+    for (let x = x0, k = Math.round((x0 - o.x) / s); x < pane.x + pane.w; x += s, k++) { c.strokeStyle = k % 5 ? this.colors.grid : this.colors.grid.replace(/0\.06\)/, '0.13)'); c.beginPath(); c.moveTo(Math.round(x) + 0.5, pane.y); c.lineTo(Math.round(x) + 0.5, pane.y + pane.h); c.stroke(); }
+    for (let y = y0, k = Math.round((y0 - o.y) / s); y < pane.y + pane.h; y += s, k++) { c.strokeStyle = k % 5 ? this.colors.grid : this.colors.grid.replace(/0\.06\)/, '0.13)'); c.beginPath(); c.moveTo(pane.x, Math.round(y) + 0.5); c.lineTo(pane.x + pane.w, Math.round(y) + 0.5); c.stroke(); }
+    c.restore();
+  }
   drawPreview(c, pane, cam) {
     const pv = this.preview; c.save(); c.strokeStyle = '#ff7b3d'; c.fillStyle = 'rgba(255,123,61,0.15)'; c.lineWidth = 2;
+    /* what the cursor snapped to: a square on a point, a diamond on a midpoint, a cross on the grid; a guide line for H / V / angle */
+    if (pv.snap) {
+      const q = this.project(pane, pv.snap.p, cam), k = pv.snap.kind; c.save(); c.strokeStyle = '#2f9e6a'; c.lineWidth = 1.6;
+      if (pv.snap.guide) { const g = this.project(pane, pv.snap.guide, cam); c.setLineDash([4, 4]); c.beginPath(); c.moveTo(g.x, g.y); c.lineTo(q.x, q.y); c.stroke(); c.setLineDash([]); }
+      c.beginPath();
+      if (k === 'point') c.rect(q.x - 5, q.y - 5, 10, 10); else if (k === 'mid') { c.moveTo(q.x, q.y - 6); c.lineTo(q.x + 6, q.y); c.lineTo(q.x, q.y + 6); c.lineTo(q.x - 6, q.y); c.closePath(); } else { c.moveTo(q.x - 5, q.y); c.lineTo(q.x + 5, q.y); c.moveTo(q.x, q.y - 5); c.lineTo(q.x, q.y + 5); }
+      c.stroke();
+      if (pv.snap.label) { c.font = '600 10.5px "Figtree", system-ui, sans-serif'; c.fillStyle = '#2f9e6a'; c.fillText(pv.snap.label, q.x + 9, q.y - 8); }
+      c.restore();
+    }
     if (pv.points && pv.points.length) {
       c.beginPath(); pv.points.forEach((p, i) => { const q = this.project(pane, p, cam); i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y); });
       if (pv.cursor) { const q = this.project(pane, pv.cursor, cam); c.lineTo(q.x, q.y); }
