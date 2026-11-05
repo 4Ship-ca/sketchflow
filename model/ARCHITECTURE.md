@@ -5,13 +5,20 @@ SketchFlow v2 adds a parametric 3D model layer next to the 2D board (v1). It is 
 ```
 model/
 ├── index.html        workspace UI (toolbar · feature list · 4 linked views · properties)
-├── js/kernel.js      geometry kernel: BSP solids, primitives, extrude / loft / revolve / sweep, edge pieces, edge extraction
-├── js/model.js       parametric document, evaluation, connectors, mates, edge references, the ops API
+├── js/kernel.js      geometry kernel: BSP solids (culled lazy trees), primitives, extrude / loft / revolve / sweep, radial solids (threads), wrap, edge pieces
+├── js/sketch.js      sketch solver (constraints, arcs), arc and spline geometry, auto-constraints
+├── js/text.js        the single-stroke engraving font and text layout (straight, arc, path)
+├── js/model.js       parametric document, evaluation, connectors, mates, joints, links and formulas, edge references, the ops API
+├── js/collide.js     interference (exact, voxel fallback) and collision detection during motion
+├── js/drawing.js     drawing sheets: SVG / DXF, hidden lines, dimensions, exploded isometric with balloons
 ├── js/views.js       WebGL2 renderer: TOP | 3D / FRONT | RIGHT, hidden lines, carried dimensions, view cube
+├── js/examples.js    bundled example models (File → Example)
 ├── js/app.js         tools, panels, autosave, export, AI bridge, add-on loading
 ├── addons/           gears.js (built in) · examples/fasteners.js — see ADDONS.md
-└── test/             kernel · model · gears · addons  (npm test)
+└── test/             kernel · model · gears · addons · collide · reference  (npm test)
 ```
+
+The MCP server is `server.mjs`; its op reference (`model_reference`) is `mcp-reference.mjs`, and `test/reference.test.mjs` runs every worked example in it, so the reference can't drift from what the model accepts.
 
 Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also writes `dist/sketchflow-3d.html`, a single offline file.
 
@@ -33,7 +40,7 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 |---|---|---|
 | Part Studio feature list | `doc.objects`, in order | Each feature is a self-contained object, so an LLM can add, edit or delete one without replaying a script |
 | Parasolid kernel (exact B-rep) | Own BSP CSG over faceted polygons with surface ids | Zero dependencies and runs everywhere. Precision is that of the faceted surfaces (48 segments). Booleans use lazy, bounding-box-culled classification trees (below), so a bolt against its nut (30k polygons) takes about 0.3 s |
-| Sketch + constraint solver | *Profile* tool: click points on a view plane with grid and Shift-straight snapping | No solver yet (see gaps) |
+| Sketch | The sketch bar: Line, Arc, Tangent arc, Spline, Rectangle, Circle, Slot, Polygon, on a view plane, any flat face, a reference plane or an unrolled round face; the Snap menu | Constraints and their solver: see *Sketch constraints* below |
 | Extrude / Revolve / Loft / Sweep | `extrude {length, twist, scale, direction}`, `revolve {degrees}`, `loft {profile2, twist}`, `sweep {path}` | Loft is "extrude with a different end": scale, twist, or a second profile of any point count |
 | Mate connectors | Connectors on every object: faces, centre, corners, edge midpoints, round sides, feature start/end, bbox faces | Named, so the AI can say `a: 'top', b: 'bottom'`. Errors list the valid names |
 | Fastened mate | `mate {to, a, b, offset, slide:[u,v], angle, flip}` | Face-to-face mates flip automatically. With no mate, a new object stacks on the ground's top face |
@@ -51,7 +58,7 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Splines (sketch) | `splines: [{i, pts}]` on any profile (extrude, loft, revolve, wrap): segment i runs from point i through the fit points to point i+1 | Centripetal Catmull–Rom, so there are no cusps or overshoot on uneven spacing. The end tangents lean on the neighbouring segments, so a spline blends into lines and arcs. It is chorded only when the solid is built, under one smooth surface id (`spl<i>`), so it shades and selects as one face |
 | Threads (Onshape: cosmetic threads; here modelled) | `bolt`, `nut` types; `thread` op; cylinder `thread` / `bore`; `hole {kind: tapped, modelled: true}` | Built in one pass as a *radial solid*: star-shaped cross-sections stacked along z (the ISO 60° profile sampled at 16 stations per pitch, with a helical phase per angle). There are no booleans, so a thread costs about the same as a cylinder of the same facet count. Internal and external threads use the same table with 0.1 mm radial clearance, so they mesh without overlap |
 | Wrap (Onshape: wrap / sketch on a curved face) | `wrap {target, at + normal | angle + height, profile | shape | text, depth, mode}` | The flat sketch is extruded to the depth, cut into strips by x planes every 2° of arc, and each vertex is mapped (s, t, d) → (angle s/R, height t, radius R ± d). The cylinder is fitted from the facet normals (an axis from their covariance null vector, then a least-squares circle), so any round face works. On a cylinder part, R is the expression `=id.diameter / 2`, so the wrap follows the size |
-| Screw mate | `joint: 'screw'` with `pitch`; `drive {angle}` | Offset = base + pitch × angle / 360. The thread phase is kept, so a nut stays meshed at every angle (the motion sweep checks it) |
+| Screw mate | `joint: 'screw'` with `pitch`; `drive {angle}`; Properties → Joint → Screw | Offset = base + pitch × angle / 360. The pitch is read from the part's thread (or the thread it is mated to) when not given, negative for left-hand. The thread phase is kept, so a nut stays meshed at every angle (the motion sweep checks it) |
 | Helix / coil, split | `sweep` with `helix: {radius, pitch, turns, left}`, `helix` op; `split` op with `halfspace` tools | A split is a half-space block mated to the plane and subtracted, so it follows the plane. *Keep both* makes an in-place copy and cuts the other side |
 | Sketch constraints | `constraints` on a polyline profile; `constrain` / `unconstrain` ops | Levenberg–Marquardt from the drawn shape (the smallest change that satisfies everything), degrees of freedom by Jacobian rank, conflicts named. Values are ordinary parameters (d1, d2…) so they link, take formulas and switch per configuration |
 | Text (Onshape: sketch text + extrude) | `text {target, face \| at, text, height, depth, mode: emboss \| engrave, path: line \| arc \| arc-inside \| points}` | A single-stroke engraving font thickened to a stroke weight; characters placed rigidly along the path (each turned to its tangent). Emboss = boolean add, engrave = boolean remove. Anchored at its own origin, so editing the words never moves it |
@@ -61,9 +68,9 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Drawings | SVG/DXF sheet: third-angle views, hidden lines, dimensions, parts list, title block; an assembly gets an exploded isometric with balloons tied to the parts list | Generated from the live model in about 0.2 s. Balloons ring the view in the direction of their part and are spread so none overlap; item numbers are the parts list's own |
 | Custom features (FeatureScript) | Add-ons: plain JS objects with shapes, mate kinds and actions | No imports; the same add-on serves the UI form and the AI tool (`model_addon`). See ADDONS.md |
 | Topological naming | An edge is stored as **the two surface ids it lies between** (e.g. `plate:front | plate:right`) plus a point | It survives size changes. If the faces disappear it falls back to the nearest edge, then warns |
-| Variables / expressions | `#name` model variables; any numeric parameter can be `=formula` (`=plate.depth - 2*#wall`) | Editing a size offers to make same-size, same-direction sizes follow it (leader/follower), so links happen as a by-product of normal editing |
+| Variables / expressions | `#name` model variables; any numeric parameter, and a mate's offset / angle / tilt / slide, can be `=formula` (`=plate.depth - 2*#wall`) | Editing a size offers to make same-size, same-direction sizes follow it (leader/follower), so links happen as a by-product of normal editing |
 | Driving dimensions (sketch / mate dims) | Measured dimensions between connectors: off-edge (square to a face), horizontal, vertical, aligned. A value makes them driving, held after every change | The mover is chosen from the mate graph (the part that hangs off the other), so no solver setup is needed |
-| Drawings | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
+| Dimensions in the views | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
 
@@ -123,10 +130,14 @@ For a round edge, the same cross-section is swept along the actual faceted loop,
 | `model_build` | A batch of ops (atomic, one undo step). Returns per-op results; `look:true` adds a picture of the 4 views |
 | `model_describe` | Objects, parameters, origin-relative positions, mates, booleans, connector names, body volumes and bounding boxes, warnings. `connectors_of` adds connector positions, normals and u/v axes |
 | `model_view` | PNG of the views (4-up or one pane, any 3D direction). The user's view is restored afterwards |
-| `model_session` | undo / redo / new / demo / load / select / say |
+| `model_session` | undo / redo / new / demo / example (bundled models) / load / select / say / save_version / versions / restore_version |
 | `model_mass` | Per part and assembly: mass, centre of gravity, inertia, balance; the parts list; the material library |
 | `model_addon` | List add-ons, or run one of their actions (e.g. `gears/advise`, `gears/pair`) |
-| `model_export` | STL (watertight), OBJ, `.sf3d.json`, parts list CSV |
+| `model_import` | An STL / OBJ file from disk as a mesh part |
+| `model_check` | Interference (pairs, overlap volumes) and a motion sweep of a joint that reports the first contact |
+| `model_query` | Geometry questions: faces with their connector names, normals, centres and areas; edges; distances and angles; section areas; bounding boxes |
+| `model_reference` | The op reference: every op in one line, or one op / topic in full with a worked example. Works without the browser |
+| `model_export` | STL (watertight), OBJ, `.sf3d.json`, parts list CSV, drawing sheet SVG / DXF |
 
 Example: a flange with a bore and a 4-hole bolt circle in one call.
 
@@ -165,14 +176,18 @@ Built so far, on top of the first version:
 - splines in sketches; modelled threads (bolts, nuts, threaded cylinders and tubes, tapped holes) and a screw joint
 - sketches and text wrapped onto round faces
 - fast booleans (culled lazy trees); exact interference by default
+- left-hand threads; a screw joint that reads its pitch from the thread
+- formulas on mate offsets, angles, tilts and slides; re-mating keeps a part's joint
+- spline fit points that move with their segment when dimensions change, and edit in Properties
+- an op reference that covers every op, with examples checked by the tests
 
 Still to come, roughly in order of how much each unlocks:
 
 1. **More sketch relations**: point-on-curve, symmetric, midpoint, arc length; constraints on spline fit points (splines are free curves today, and h / v skip them).
-2. **Draft, rib and loft guide curves.** Taper an extrude with its scale for now.
+2. **Loft guide curves**, and sweeps that twist or scale along their path. (Extrude draft and ribs are done.)
 3. **Motion studies**: plots of position, speed and clearance over a sweep (first contact is reported today).
 4. **Doubly-curved wraps** (spheres, tori, freeform) and projection of a sketch onto any surface. Cylinders and cones-as-cylinders are done. Outline fonts from a file.
-5. **Formulas on mate offsets and slides.** Driving dimensions cover most placement needs today.
+5. **Constraints between parts' sketches** (a sketch point on another part's edge, projected geometry). Mate formulas and driving dimensions cover placement today.
 6. **More on drawings**: section views on the sheet, GD&T and notes.
 7. **STEP / exact geometry.** This needs a B-rep kernel. The `Solid` interface is small on purpose, so Manifold or OpenCascade.js could be swapped in; either would also be faster on very large booleans, though the culled trees close most of that gap for parts under about 50k polygons.
 8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
@@ -182,9 +197,10 @@ Still to come, roughly in order of how much each unlocks:
 
 ```bash
 node model/test/kernel.test.mjs   # volumes against closed forms: primitives, booleans, extrude/loft/revolve/sweep, edge pieces
-node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, splines, threads, wrap, screw joint, the pump housing example, undo
+node model/test/model.test.mjs    # stacking, mates, booleans, edges, patterns, welds, mass, sketch solver, general shell, text, exploded drawings, splines (and how they follow dimensions), threads (left- and right-hand), wrap, screw joint, mate formulas, path sweeps, the pump housing example, undo
 node model/test/gears.test.mjs    # gears mesh (no overlap; a half-tooth error overlaps), helical/herringbone/ring, trains, planetary, advisor
 node model/test/addons.test.mjs   # the add-on contract and the fasteners example
 node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact
+node model/test/reference.test.mjs # every op has a reference entry, and every worked example in mcp-reference.mjs runs
 node build.mjs                    # single-file builds in dist/
 ```

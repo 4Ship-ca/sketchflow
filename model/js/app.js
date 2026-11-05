@@ -320,6 +320,13 @@ function leaderMenu(ob, prm, anchor) {
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
 const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'], nut: ['hex', 'round', 'knurled'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { wrap: ['emboss', 'engrave'], '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES), bolt: Object.keys(THREADS), nut: [...Object.keys(THREADS), 'custom'] }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, thread: { cylinder: ['none', ...Object.keys(THREADS), 'custom'] }, thread_from: { cylinder: ['bottom', 'top'] }, head: { bolt: ['hex', 'socket'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
+/* the parameters a threaded part shows: the thread's own settings only when it has one */
+const THREAD_KEYS = {
+  cylinder: (p) => ['diameter', 'height', 'thread', ...(p.thread && p.thread !== 'none' ? [...(p.thread === 'custom' ? ['pitch'] : []), 'thread_length', 'thread_from', 'left_hand'] : []), 'bore'],
+  bolt: () => ['size', 'length', 'head', 'thread_length', 'left_hand'],
+  nut: (p) => ['size', ...(p.size === 'custom' ? ['diameter', 'pitch'] : []), 'shape', 'thickness', ...(p.shape === 'round' || p.shape === 'knurled' || p.size === 'custom' ? ['od'] : []), 'left_hand'],
+  hole: (p) => ['size', 'kind', ...(p.kind === 'tapped' ? ['modelled', ...(p.modelled ? ['left_hand'] : [])] : ['fit']), 'through', ...(p.through ? [] : ['depth']), 'diameter']
+};
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -372,13 +379,27 @@ function sketchSection(o, sec) {
     const m = [(a[0] + b[0]) / 2 + out[0] * L * 0.134, (a[1] + b[1]) / 2 + out[1] * L * 0.134], g = arcThrough(a, b, m); if (!g) return;
     apply([{ op: 'set', id: o.id, params: { arcs: arcs.concat([{ i, c: g.c, ccw: g.ccw }]), constraints: cons.filter(c => !((c.type === 'h' || c.type === 'v') && c.i === i)) } }], `Segment ${i + 1} → arc`);
   };
+  const makeSpline = (i) => {
+    const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, out = open || ccwPoly ? [dy / L, -dx / L] : [-dy / L, dx / L];
+    const r3 = (v) => Math.round(v * 1000) / 1000, mid = [r3((a[0] + b[0]) / 2 + out[0] * L * 0.15), r3((a[1] + b[1]) / 2 + out[1] * L * 0.15)];
+    /* constraints that treat the segment as a straight line go (its end points keep theirs) */
+    const keep = cons.filter(c => SKETCH_KINDS[c.type].point || (c.i !== i && c.j !== i));
+    apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i).concat([{ i, pts: [mid] }]), constraints: keep } }], `Segment ${i + 1} → spline`);
+  };
   const makeLine = (i) => apply([{ op: 'set', id: o.id, params: { arcs: arcs.filter(a => a.i !== i), constraints: cons.filter(c => !(['radius', 'concentric', 'tangent'].includes(c.type) && (c.i === i || c.j === i)) && !(c.type === 'equal' && arcOf(c.i) && (c.i === i || c.j === i))) } }], `Segment ${i + 1} → line`);
   const tbl = el('table', { class: 'cfg sk' });
   tbl.append(el('tr', null, el('th', null, '#'), el('th', null, 'size'), el('th', null, ''), el('th', null, 'dimension')));
   for (let i = 0; i < nseg; i++) {
     const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), spl = splOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
     if (spl) {
-      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono' }, `spline · ${spl.pts.length + 2} pts`), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))), el('td', null, el('span', { class: 'note' }, 'through its points'))));
+      const setPts = (pts, label) => apply([{ op: 'set', id: o.id, params: { splines: splines.map(z => z.i === i ? { i, pts } : z) } }], label);
+      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))),
+        el('td', null, el('button', { class: 'btn', title: 'Add a fit point halfway between the last one and the end of the segment', onclick: () => { const last = spl.pts[spl.pts.length - 1], e = b; setPts(spl.pts.concat([[Math.round((last[0] + e[0]) * 500) / 1000, Math.round((last[1] + e[1]) * 500) / 1000]]), `Spline ${i + 1}: add a point`); } }, '+ point'))));
+      spl.pts.forEach((pt, k) => {
+        const upd = (c, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][c] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`); };
+        tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, `point ${k + 1}`), el('span', { class: 'note' }, 'x'), numInput(pt[0], v => upd(0, v)), el('span', { class: 'note' }, 'y'), numInput(pt[1], v => upd(1, v)),
+          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: () => setPts(spl.pts.filter((_, kk) => kk !== k), `Spline ${i + 1}: remove a point`) }, '×') : null))));
+      });
       continue;
     }
     if (arc) {
@@ -390,11 +411,11 @@ function sketchSection(o, sec) {
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]), has = (t) => cons.findIndex(c => c.type === t && c.i === i), hi = has('h'), vi = has('v'), li = cons.findIndex(c => c.type === 'length' && c.i === i);
     const tog = (t, idx) => el('button', { class: 'chain' + (idx >= 0 ? ' on' : ''), title: SKETCH_KINDS[t].label, onclick: () => (idx >= 0 ? apply([{ op: 'unconstrain', id: o.id, index: idx }]) : add({ type: t, i })) }, t.toUpperCase());
     const dimCell = li >= 0 ? el('span', { class: 'pin' }, paramInput(o, cons[li].p), el('button', { class: 'chain', title: 'Remove the dimension', onclick: () => apply([{ op: 'unconstrain', id: o.id, index: li }]) }, '×')) : el('button', { class: 'btn', onclick: () => add({ type: 'length', i }) }, '+ dimension');
-    tbl.append(el('tr', { class: bad ? 'bad' : '' }, el('td', null, String(i + 1)), el('td', { class: 'mono' }, fmt(L)), el('td', null, el('span', { class: 'pin' }, tog('h', hi), tog('v', vi), el('button', { class: 'chain', title: 'Make this segment an arc (then give it a radius)', onclick: () => makeArc(i) }, '⌒'))), el('td', null, dimCell)));
+    tbl.append(el('tr', { class: bad ? 'bad' : '' }, el('td', null, String(i + 1)), el('td', { class: 'mono' }, fmt(L)), el('td', null, el('span', { class: 'pin' }, tog('h', hi), tog('v', vi), el('button', { class: 'chain', title: 'Make this segment an arc (then give it a radius)', onclick: () => makeArc(i) }, '⌒'), el('button', { class: 'chain', title: 'Make this segment a spline (a smooth curve through points you can move)', onclick: () => makeSpline(i) }, '∿'))), el('td', null, dimCell)));
   }
   s.append(el('div', { class: 'tblwrap' }, tbl));
   /* relations between two segments */
-  const segSel = () => el('select', null, ...Array.from({ length: nseg }, (_, i) => el('option', { value: i }, (arcOf(i) ? 'arc ' : 'segment ') + (i + 1))));
+  const segSel = () => el('select', null, ...Array.from({ length: nseg }, (_, i) => el('option', { value: i, disabled: splOf(i) ? true : null }, (arcOf(i) ? 'arc ' : splOf(i) ? 'spline ' : 'segment ') + (i + 1))));
   const sa = segSel(), sb = segSel(); sb.value = String(Math.min(1, nseg - 1));
   s.append(el('div', { class: 'relrow' }, sa, ...[['parallel', '∥'], ['perpendicular', '⊥'], ['equal', '='], ['angle', '∠'], ['tangent', 'tan'], ['concentric', '◎']].map(([t, g]) => el('button', { class: 'chain', title: SKETCH_KINDS[t].label + (t === 'equal' ? ' (lengths, or radii of two arcs)' : t === 'tangent' ? ' (two segments that meet; one or both arcs)' : t === 'concentric' ? ' (two arcs)' : ''), onclick: () => { if (sa.value === sb.value) { toast('Pick two different segments'); return; } add({ type: t, i: +sa.value, j: +sb.value }); } }, g)), sb));
   /* the constraint list */
@@ -487,7 +508,8 @@ function renderProps() {
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
     : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'end', 'draft', 'thin', 'twist', 'scale'] : ['length', 'end', 'draft', 'thin', 'open', 'twist', 'scale', 'direction'])
-      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs'].includes(k) && !/^d\d+$/.test(k))
+      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs', 'splines'].includes(k) && !/^d\d+$/.test(k))
+      : THREAD_KEYS[o.type] ? THREAD_KEYS[o.type](o.params)
         : o.type === 'sweep' && o.params.helix ? [] : o.type === 'wrap' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'radius', 'mode'] : ['depth', 'radius', 'mode']) : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
   if (o.type === 'sweep' && o.params.helix) {
@@ -514,7 +536,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
-  if (['extrude', 'revolve', 'loft'].includes(o.type) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
+  if ((['extrude', 'revolve', 'loft'].includes(o.type) || (o.type === 'wrap' && !o.params.text)) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
   if (o.type === 'text' && o.into && o.mate) {
     const eng = o.op === 'subtract', m = o.mate;
     s1.append(el('div', { class: 'note' }, eng ? 'Engraved: a boolean remove, cut in flush with the face' : 'Embossed: a boolean add, standing on the face'),
@@ -539,17 +561,29 @@ function renderProps() {
     } else if (o.mate) {
       const m = o.mate, targets = [['origin', 'World origin']].concat(model.doc.objects.filter(x => x.id !== o.id && !['edge', 'pattern', 'weld'].includes(x.type)).map(x => [x.id, x.name]));
       const to = el('select', null, ...targets.map(([id, n]) => el('option', { value: id, selected: m.to === id }, n))); to.onchange = () => apply([{ op: 'mate', id: o.id, to: to.value, a: m.a, b: m.b }]);
-      const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
-      const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
-      const mate = (patch) => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, tilt: m.tilt, slide: m.slide }, patch)]);
+      /* the mate's values as they are stored: a formula stays a formula when another field changes */
+      const mf = o.mexpr || {}, msl = m.slide || [0, 0], cur = { flip: m.flip, offset: mf.offset || m.offset, angle: mf.angle || m.angle, tilt: mf.tilt || m.tilt, slide: [mf['slide.0'] || msl[0], mf['slide.1'] || msl[1]] };
+      const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b }, cur)]);
+      const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value }, cur)]);
+      const mate = (patch) => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: m.b }, cur, patch)]);
+      /* a mate value: a number, or =formula (e.g. =plate.width / 2 - 10, =#gap) that follows sizes */
+      const mateIn = (key, v, put) => {
+        const linked = mf[key], wrap = el('span', { class: 'pin' });
+        const i = el('input', { value: linked || fmt(v || 0), inputmode: 'decimal', class: linked ? 'linked' : '', title: linked ? `follows ${linked.slice(1)} = ${fmt(v || 0)} · type a number to unlink` : 'a number, or =formula e.g. =plate.width / 2 - 10' });
+        i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); });
+        i.addEventListener('change', () => { const t = i.value.trim(); if (t.startsWith('=')) put(t); else if (t !== '' && isFinite(+t)) put(+t); else i.value = linked || fmt(v || 0); });
+        wrap.append(i); if (linked) wrap.append(el('button', { class: 'chain on', title: 'Unlink (keep the value)', onclick: (e) => { e.preventDefault(); apply([{ op: 'unlink', id: o.id, param: 'mate.' + key }]); } }, icon('link')), el('span', { class: 'val' }, '= ' + fmt(v || 0)));
+        return wrap;
+      };
       const fl = el('input', { type: 'checkbox' }); fl.checked = !!m.flip; fl.onchange = () => mate({ flip: fl.checked });
-      s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', numInput(m.offset || 0, v => mate({ offset: v }))), field('angle °', numInput(m.angle || 0, v => mate({ angle: v }))), field('tilt °', numInput(m.tilt || 0, v => mate({ tilt: v }))),
-        field('slide x', numInput((m.slide || [0, 0])[0], v => mate({ slide: [v, (m.slide || [0, 0])[1]] }))), field('slide y', numInput((m.slide || [0, 0])[1], v => mate({ slide: [(m.slide || [0, 0])[0], v] }))), field('face to face', fl));
+      s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', mateIn('offset', m.offset, v => mate({ offset: v }))), field('angle °', mateIn('angle', m.angle, v => mate({ angle: v }))), field('tilt °', mateIn('tilt', m.tilt, v => mate({ tilt: v }))),
+        field('slide x', mateIn('slide.0', msl[0], v => mate({ slide: [v, cur.slide[1]] }))), field('slide y', mateIn('slide.1', msl[1], v => mate({ slide: [cur.slide[0], v] }))), field('face to face', fl));
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
       /* joint: how this mate may move */
-      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
-      jt.onchange = () => apply([{ op: 'joint', id: o.id, joint: jt.value }]);
+      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face'], ['screw', 'Screw — turns along a thread (pitch per turn)']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
+      jt.onchange = () => { try { apply([{ op: 'joint', id: o.id, joint: jt.value }]); } catch (e) { jt.value = m.joint || 'fixed'; } };
       sj.append(field('type', jt));
+      if (m.joint === 'screw') sj.append(field('pitch mm', el('span', { class: 'pin' }, numInput(m.pitch, v => { if (v) apply([{ op: 'joint', id: o.id, joint: 'screw', pitch: v }]); }), el('span', { class: 'note' }, (m.pitch < 0 ? 'left-hand' : 'right-hand') + ' · per turn'))));
       if (m.joint === 'slider') { const ax = el('select', null, ...[['n', 'along the mate normal'], ['u', 'across the face (u)'], ['v', 'across the face (v)']].map(([v, n]) => el('option', { value: v, selected: (m.axis || 'n') === v }, n))); ax.onchange = () => apply([{ op: 'joint', id: o.id, joint: 'slider', axis: ax.value }]); sj.append(field('axis', ax)); }
       const jinfo = jointsOf(model.doc).find(q => q.id === o.id);
       if (jinfo) for (const dof of jinfo.dofs) {

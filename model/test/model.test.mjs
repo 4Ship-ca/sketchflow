@@ -1,5 +1,5 @@
 /* SketchFlow v2 model tests: node model/test/model.test.mjs */
-import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim, dimsOf } from '../js/model.js';
+import { Model, worldConnectors, massReport, bom, weldAdvice, measureDim, dimsOf, threadPitchOf, carrySplines } from '../js/model.js';
 import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
 import { textSolid, layoutText } from '../js/text.js';
 import * as K0 from '../js/kernel.js';
@@ -432,6 +432,44 @@ Sc.apply([{ op: 'var', name: 'leg', value: 25 }, { op: 'set', id: 'L', params: {
 ok('a sketch dimension can be a formula', near(LP()[1][0], 100, 1e-6));
 Sc.apply([{ op: 'constrain', id: 'L', type: 'length', i: 0, value: 10 }]);
 ok('conflicting constraints are reported, not forced', Sc.result.warnings.some(w => /can't satisfy/.test(w.text)));
+/* left-hand threads, and the screw joint's pitch read from the thread */
+const lhPair_t = (bl, nl) => { const L = new Model(); L.apply([{ op: 'add', type: 'bolt', id: 'b', params: { size: 'M8', length: 20, left_hand: bl }, fixed: true }, { op: 'add', type: 'nut', id: 'n', params: { size: 'M8', left_hand: nl }, mate: { to: 'b', a: 'bottom', b: 'bottom', flip: false, offset: 5 } }, { op: 'joint', id: 'n', joint: 'screw' }]); return L; };
+const Lh_t = lhPair_t(true, true), lhz0_t = Lh_t.result.bodies.find(x => x.id === 'n').solid.bbox().min[2];
+ok('a screw joint takes its pitch from the thread: negative for left-hand', Lh_t.get('n').mate.pitch === -1.25 && threadPitchOf(lhPair_t(false, false).get('n')) === 1.25);
+Lh_t.apply([{ op: 'drive', id: 'n', key: 'angle', value: 270 }]);
+ok('a left-hand nut on a left-hand bolt meshes and runs the other way, staying clear', !interference(Lh_t).length && near(Lh_t.result.bodies.find(x => x.id === 'n').solid.bbox().min[2] - lhz0_t, 0.9375, 1e-3));
+ok('a right-hand nut on a left-hand bolt clashes', interference(lhPair_t(true, false)).length === 1);
+let noPitch_t = ''; try { const Np = new Model(); Np.apply([{ op: 'add', type: 'box', id: 'a', params: { width: 20, depth: 20, height: 5 } }, { op: 'add', type: 'cylinder', id: 'c', params: { diameter: 8, height: 10 } }, { op: 'joint', id: 'c', joint: 'screw' }]); } catch (e) { noPitch_t = e.message; }
+ok('a screw joint with no thread to read asks for a pitch', /needs a pitch/.test(noPitch_t), noPitch_t);
+/* splines keep their shape when the sketch's dimensions move their ends */
+const Sp_t = new Model();
+Sp_t.apply([{ op: 'extrude', id: 'g', profile: [[0, 0], [40, 0], [40, 10], [0, 30]], splines: [{ i: 2, pts: [[25, 12], [12, 22]] }], length: 5, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'v', i: 3 }] }]);
+Sp_t.apply([{ op: 'constrain', id: 'g', type: 'length', i: 0, value: 80 }]);
+const spP_t = Sp_t.get('g').params, spF_t = spP_t.splines[0].pts;
+/* the chord (40,10)→(0,30) becomes (80,10)→(0,30): k = (-80+20i)/(-40+20i) = 1.8+0.4i, so (25,12) → (80,10) + k·(-15,2) = (52.2, 7.6) */
+ok('when a dimension moves the spline\'s ends, its fit points go with them (same shape on the new chord)', near(spP_t.profile[2][0], 80) && near(spF_t[0][0], 52.2) && near(spF_t[0][1], 7.6) && near(spF_t[1][0], 24.8) && near(spF_t[1][1], 20.4), spF_t);
+ok('…by the similarity of its chord (turn and scale too)', JSON.stringify(carrySplines([[0, 0], [10, 0]], [[0, 0], [0, 20]], [{ i: 0, pts: [[5, 2]] }], true)[0].pts) === JSON.stringify([[-4, 10]]));
+let splCon_t = ''; try { Sp_t.apply([{ op: 'constrain', id: 'g', type: 'h', i: 2 }]); } catch (e) { splCon_t = e.message; }
+ok('straight-line constraints are refused on a spline segment, with the reason', /is a spline/.test(splCon_t), splCon_t);
+/* a sweep along a path (not a helix) builds, with start / end connectors on the path's ends */
+const Sw_t = new Model(); Sw_t.apply([{ op: 'sweep', id: 'pipe', profile: [[-3, -3], [3, -3], [3, 3], [-3, 3]], path: [[0, 0, 0], [0, 0, 40], [40, 0, 40]], fixed: true }]);
+const swEnd_t = worldConnectors(Sw_t.result, 'pipe').find(c => c.name === 'end');
+ok('a sweep along a path builds and has an end connector square to its last leg', !Sw_t.result.errors.size && Sw_t.result.bodies.length === 1 && swEnd_t && near(swEnd_t.o[0], 40) && near(swEnd_t.n[0], 1), { errors: [...Sw_t.result.errors.values()] });
+/* placement formulas: a mate's offset / slide follow sizes and variables; re-mating keeps the joint */
+const Mf_t = new Model();
+Mf_t.apply([{ op: 'var', name: 'gap', value: 3 }, { op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 40, height: 5 } },
+  { op: 'add', type: 'box', id: 'lid', params: { width: 20, depth: 20, height: 4 }, mate: { to: 'plate', a: 'top', b: 'bottom', offset: '=#gap', slide: ['=plate.width / 2 - 10', 0], joint: 'revolute', limits: { angle: [0, 90] } } }]);
+const lidAt_t = () => worldConnectors(Mf_t.result, 'lid').find(c => c.name === 'bottom').o;
+ok('a mate offset and slide can be formulas', near(lidAt_t()[0], 50) && near(lidAt_t()[2], 8), lidAt_t());
+Mf_t.apply([{ op: 'set', id: 'plate', params: { width: 200 } }, { op: 'var', name: 'gap', value: 6 }]);
+ok('…and the part follows when the sizes change', near(lidAt_t()[0], 90) && near(lidAt_t()[2], 11), lidAt_t());
+ok('a joint can be given with the mate', Mf_t.get('lid').mate.joint === 'revolute' && Mf_t.get('lid').mate.limits.angle[1] === 90);
+Mf_t.apply([{ op: 'mate', id: 'lid', to: 'plate', a: 'top', b: 'bottom', offset: '=#gap', slide: ['=plate.width / 2 - 10', 5] }]);
+ok('re-mating (e.g. a new slide) keeps the joint and its limits', Mf_t.get('lid').mate.joint === 'revolute' && Mf_t.get('lid').mate.limits.angle[1] === 90 && near(lidAt_t()[1], 5));
+Mf_t.apply([{ op: 'unlink', id: 'lid', param: 'mate.offset' }, { op: 'var', name: 'gap', value: 1 }]);
+ok('unlinking a mate formula keeps its value', near(lidAt_t()[2], 11) && !('offset' in (Mf_t.get('lid').mexpr || {})) && Mf_t.describe().objects.find(o => o.id === 'lid').mate_formulas['slide.0'] === '=plate.width / 2 - 10');
+let badMf_t = ''; try { Mf_t.apply([{ op: 'mate', id: 'lid', to: 'plate', a: 'top', b: 'bottom', offset: '=2 +' }]); } catch (e) { badMf_t = e.message; }
+ok('a broken mate formula is refused, saying why', /ends too early/.test(badMf_t), badMf_t);
 /* the bundled pump housing (built over MCP) still rebuilds: constrained flange, threads, wrap, screw joint */
 const Ex_t = new Model(); Ex_t.load(exampleDoc('pump-housing'));
 const exFl_t = Ex_t.describe().objects.find(o => o.id === 'flange').sketch, exMass_t = massReport(Ex_t.doc, Ex_t.result);

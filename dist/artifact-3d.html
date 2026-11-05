@@ -89,7 +89,7 @@ table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var
 .sheetov{position:fixed;inset:0;background:#0008;z-index:40;display:grid;place-items:center;padding:20px}
 .sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
 .sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
-table.sk td{vertical-align:middle} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
+table.sk td{vertical-align:middle} table.sk tr.sub td{padding-top:0} table.sk td>.pin{flex-wrap:nowrap;gap:2px} table.sk td>.pin>.chain{width:22px;height:22px} table.sk .pin.fit{gap:4px} table.sk .pin.fit input:not([type=radio]){flex:none;width:50px} table.sk .pin.fit .note:first-child{min-width:42px} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
 #check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
 #check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
 #check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
@@ -1479,7 +1479,7 @@ const TYPES = {
   box: { label: 'Box', params: { width: 40, depth: 30, height: 20 } },
   wedge: { label: 'Wedge', params: { width: 40, depth: 20, height: 20 } },
   /* thread: none | M2…M24 | custom (with pitch): a modelled ISO thread on the outside, thread_length (0 = all of it) from the bottom or top; bore: a hole down the middle (a tube) */
-  cylinder: { label: 'Cylinder', params: { diameter: 30, height: 40, thread: 'none', pitch: 0, thread_length: 0, thread_from: 'bottom', bore: 0 } },
+  cylinder: { label: 'Cylinder', params: { diameter: 30, height: 40, thread: 'none', pitch: 0, thread_length: 0, thread_from: 'bottom', left_hand: false, bore: 0 } },
   cone: { label: 'Cone', params: { diameter: 30, top: 0, height: 40 } },
   sphere: { label: 'Sphere', params: { diameter: 30 } },
   fillet: { label: 'Fillet strip', params: { size: 6, length: 40, style: 'fillet' } },
@@ -1490,11 +1490,11 @@ const TYPES = {
   revolve: { label: 'Revolve', params: { profile: [[5, 0], [12, 0], [12, 4], [5, 4]], arcs: [], splines: [], degrees: 360, constraints: [] } },
   /* helix: {radius, pitch, turns, left} sweeps the profile along a helix instead of path (springs, coils, threads' cores) */
   sweep: { label: 'Sweep', params: { profile: [[-2, -2], [2, -2], [2, 2], [-2, 2]], path: [[0, 0, 0], [0, 0, 30], [30, 0, 30]], helix: null } },
-  /* fasteners with modelled ISO threads: a bolt (hex or socket head; thread_length 0 = threaded all the way) and a nut */
-  bolt: { label: 'Bolt', params: { size: 'M8', length: 25, head: 'hex', thread_length: 0 } },
-  nut: { label: 'Nut', params: { size: 'M8', shape: 'hex', thickness: 0, od: 0, diameter: 0, pitch: 0 } },
+  /* fasteners with modelled ISO threads: a bolt (hex or socket head; thread_length 0 = threaded all the way) and a nut; left_hand for a left-hand thread */
+  bolt: { label: 'Bolt', params: { size: 'M8', length: 25, head: 'hex', thread_length: 0, left_hand: false } },
+  nut: { label: 'Nut', params: { size: 'M8', shape: 'hex', thickness: 0, od: 0, diameter: 0, pitch: 0, left_hand: false } },
   /* a sketch (or text) wrapped onto a cylindrical face: emboss stands out of it, engrave cuts in; radius follows the cylinder */
-  wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
+  wrap: { label: 'Wrap', params: { profile: [[-5, -5], [5, -5], [5, 5], [-5, 5]], arcs: [], splines: [], constraints: [], text: '', size: 8, weight: 0, depth: 1, radius: 20, mode: 'emboss' } },
   /* a reference plane (no solid): sketch on it, mate to it, split with it. Mate it to a face with gap (offset) and tilt */
   plane: { label: 'Plane', params: { size: 60 } },
   /* everything on one side of a plane (a big block): the tool a split uses */
@@ -1505,7 +1505,7 @@ const TYPES = {
   /* an imported triangle mesh (STL / OBJ), stored in doc.meshes */
   mesh: { label: 'Mesh', params: { scale: 1 } },
   /* standard hole: a tool (subtract it into a part); its top sits on the surface and it goes down (−z) */
-  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0, modelled: false } },
+  hole: { label: 'Hole', params: { size: 'M6', kind: 'simple', fit: 'normal', through: true, depth: 12, diameter: 0, modelled: false, left_hand: false } },
   /* text (single-stroke engraving font) along a line, an arc or a polyline; emboss = union it onto a face, engrave = subtract it */
   text: { label: 'Text', params: { text: 'TEXT', height: 10, depth: 1, weight: 1.2, spacing: 1, path: 'line', radius: 40, angle: 0, align: 'center', points: [[-40, 0], [40, 0]] } },
   /* hollow a part to a wall thickness, optionally open on one face */
@@ -1574,7 +1574,6 @@ function connectorsOf(o, solid) {
     case 'cone': return roundLike(p.diameter / 2, p.height, (p.top || 0) / 2);
     case 'sphere': return roundLike(p.diameter / 2, p.diameter);
     case 'hole': { const dep = p.through ? Math.max(0.5, +p.depth || 10) : (+p.depth || 10); return [conn('top', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, -dep / 2], [0, 0, 1], [1, 0, 0], 'center'), conn('bottom', [0, 0, -dep], [0, 0, -1], [1, 0, 0])]; }
-    case 'sweep': if (p.helix) { const h = p.helix, rw = Math.max(...(p.profile || [[1, 0]]).map(q => Math.hypot(q[0], q[1]))), H = (+h.pitch || 0) * (+h.turns || 0); return [conn('bottom', [0, 0, -rw], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, H + rw], [0, 0, 1], [1, 0, 0]), conn('axis', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')]; } break;
     case 'bolt': { const T = threadSize(p.size), L = +p.length, k = p.head === 'socket' ? T.d : T.k; return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('seat', [0, 0, L], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, L + k], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, L / 2], [0, 0, 1], [1, 0, 0], 'center')]; }
     case 'nut': { const m = nutThickness(p); return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, m], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, m / 2], [0, 0, 1], [1, 0, 0], 'center')]; }
     case 'wrap': return [conn('base', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center')];
@@ -1584,6 +1583,8 @@ function connectorsOf(o, solid) {
     case 'text': return [conn('bottom', [0, 0, 0], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, +p.depth || 1], [0, 0, 1], [1, 0, 0]), conn('center', [0, 0, (+p.depth || 1) / 2], [0, 0, 1], [1, 0, 0], 'center')];
     case 'fillet': return [conn('edge', [0, 0, 0], [0, 1, 0], [1, 0, 1], 'edge'), conn('leg-x', [p.size / 2, 0, 0], [0, 0, -1], [1, 0, 0]), conn('leg-z', [0, 0, p.size / 2], [-1, 0, 0], [0, 0, 1]),
       conn('end-a', [0, -p.length / 2, 0], [0, -1, 0], [1, 0, 0]), conn('end-b', [0, p.length / 2, 0], [0, 1, 0], [1, 0, 0])];
+    case 'sweep': if (p.helix) { const h = p.helix, rw = Math.max(...(p.profile || [[1, 0]]).map(q => Math.hypot(q[0], q[1]))), H = (+h.pitch || 0) * (+h.turns || 0); return [conn('bottom', [0, 0, -rw], [0, 0, -1], [1, 0, 0]), conn('top', [0, 0, H + rw], [0, 0, 1], [1, 0, 0]), conn('axis', [0, 0, H / 2], [0, 0, 1], [1, 0, 0], 'center')]; }
+      /* a sweep along a path: falls through to the general connectors, with start / end on the path's ends */
     default: {
       /* features: start/end faces + bounding-box faces & centre (add-on shapes add their own connectors first) */
       const T = TYPES[o.type], c = T && T.def && T.def.connectors ? T.def.connectors(p, addonApi).slice() : [];
@@ -1592,6 +1593,11 @@ function connectorsOf(o, solid) {
         const L = o.type === 'extrude' && p.end === 'through' ? THROUGH : p.length, z0 = o.type === 'extrude' && p.end === 'symmetric' ? -L / 2 : 0, along = (z) => V.mul(dir, z / (dir[2] || 1));
         const start = V.add([cen[0], cen[1], 0], along(z0)), end = V.add([cen[0], cen[1], 0], along(z0 + L));
         c.push(conn('start', start, [0, 0, -1], [1, 0, 0]), conn('end', end, [0, 0, 1], [1, 0, 0]));
+      }
+      if (o.type === 'sweep' && Array.isArray(p.path) && p.path.length >= 2) {
+        const P = p.path.map(q => q.map(Number)), t0 = V.norm(V.sub(P[1], P[0])), t1 = V.norm(V.sub(P[P.length - 1], P[P.length - 2]));
+        const perp = (t) => V.norm(V.cross(Math.abs(t[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], t));
+        c.push(conn('start', P[0], V.neg(t0), perp(t0)), conn('end', P[P.length - 1], t1, perp(t1)));
       }
       if (solid && !solid.isEmpty()) {
         const b = solid.bbox(), m = V.lerp(b.min, b.max, 0.5);
@@ -1673,7 +1679,7 @@ function buildHole(p) {
   const seg = 48, up = 1, tr = (sol, z) => sol.transform(M4.translate([0, 0, z]));
   if (p.kind === 'tapped' && p.modelled && h.pitch) {
     /* a modelled internal thread: the tool is the mating bolt's shape (plus clearance), entered at the full diameter */
-    const d = +String(p.size).slice(1), P = h.pitch, fn = threadR(d, P, { clear: 0.1 }), Rm = d / 2 + 0.1, tip = (h.tap / 2) / Math.tan(59 * Math.PI / 180);
+    const d = +String(p.size).slice(1), P = h.pitch, fn = threadR(d, P, { clear: 0.1, left: !!p.left_hand }), Rm = d / 2 + 0.1, tip = (h.tap / 2) / Math.tan(59 * Math.PI / 180);
     const st = [];
     if (!p.through) st.push({ z: -depth - tip, r: () => 0.05, sid: 'tip' });
     st.push(...threadStations(-depth, 0, P, (t, z) => Math.max(fn(t, z), Rm + z, p.through ? Rm - (z + depth) : 0)), { z: 0, r: () => Rm, sid: 'entry' }, { z: up, r: () => Rm, sid: 'entry' });
@@ -1837,7 +1843,7 @@ function buildCylinder(p) {
 }
 function buildBolt(p) {
   const T = threadSize(p.size), d = T.d, P = T.p, L = +p.length; if (!(L > 0)) throw new Error('length must be above 0');
-  const Lt = +p.thread_length > 0 ? Math.min(L, +p.thread_length) : L, R = d / 2, N = threadN(d), fn = threadR(d, P, { z0: 0 });
+  const Lt = +p.thread_length > 0 ? Math.min(L, +p.thread_length) : L, R = d / 2, N = threadN(d), fn = threadR(d, P, { z0: 0, left: !!p.left_hand });
   const st = threadStations(0, Lt, P, fn);
   if (Lt < L) st.push({ z: Lt, r: () => R, sid: 'shank' }, { z: L, r: () => R, sid: 'shank' });
   if (p.head === 'socket') {
@@ -1849,11 +1855,22 @@ function buildBolt(p) {
   }
   return K.radialSolid(N, st, { sidFlat: flatSid });
 }
+/* the signed pitch of a part's modelled thread (negative = left-hand), or null: what a screw joint on it advances per turn */
+function threadPitchOf(o) {
+  if (!o || !o.params) return null;
+  const p = o.params, sg = p.left_hand ? -1 : 1, iso = (sz) => { try { return threadSize(sz).p; } catch (e) { return null; } };
+  let P = null;
+  if (o.type === 'bolt') P = iso(p.size);
+  else if (o.type === 'nut') P = p.size === 'custom' ? +p.pitch || null : iso(p.size);
+  else if (o.type === 'cylinder' && p.thread && p.thread !== 'none') P = p.thread === 'custom' ? +p.pitch || null : iso(p.thread);
+  else if (o.type === 'hole' && p.kind === 'tapped' && p.modelled) P = iso(p.size);
+  return P ? sg * P : null;
+}
 function nutThickness(p) { if (+p.thickness > 0) return +p.thickness; if (p.size === 'custom') return Math.max(2, +p.diameter * 0.8); return threadSize(p.size).m; }
 function buildNut(p) {
   const custom = p.size === 'custom', T = custom ? null : threadSize(p.size), d = custom ? +p.diameter : T.d, P = custom ? +p.pitch : T.p, m = nutThickness(p);
   if (!(d > 0 && P > 0)) throw new Error('a custom nut needs a diameter and a pitch');
-  const fn = threadR(d, P, { clear: 0.1 }), c = 0.1, Rm = d / 2 + c;
+  const fn = threadR(d, P, { clear: 0.1, left: !!p.left_hand }), c = 0.1, Rm = d / 2 + c;
   /* the bore: the mating thread's shape (plus clearance), opened 45° at both faces */
   const bore = (z) => (t) => Math.max(fn(t, z), Rm - Math.min(z, m - z));
   const shape = p.shape || 'hex', od = +p.od > 0 ? +p.od : (T ? T.af / Math.cos(Math.PI / 6) : d * 1.8);
@@ -2091,6 +2108,20 @@ function resolveLinks(doc, cfg) {
   for (const o of doc.objects) for (const prm of Object.keys(o.expr || {})) {
     try { resolveParam(o, prm); } catch (e) { state.set(o.id + '.' + prm, 'done'); warn.push({ kind: 'link', id: o.id, text: `${o.name}.${prm} ${o.expr[prm]}: ${e.message}` }); }
   }
+  /* mate formulas: offset / angle / tilt / slide.0 / slide.1 follow sizes and variables */
+  for (const o of doc.objects) {
+    if (!o.mexpr || !o.mate || o.mate.kind) continue;
+    for (const [k, e] of Object.entries(o.mexpr)) {
+      try {
+        const v = evalTree(parseExpr(e), (r) => look(r, [o.id + '.mate.' + k])); if (!isFinite(v)) throw new Error(`${e} is not a finite number`);
+        const r9 = Math.round(v * 1e9) / 1e9; o.mate = Object.assign({}, o.mate);
+        if (k === 'slide.0' || k === 'slide.1') { const sl = (o.mate.slide || [0, 0]).slice(); sl[+k.slice(6)] = r9; o.mate.slide = sl; }
+        else if (k === 'offset' && o.mate.joint === 'screw') { o.mate.base = r9; o.mate.offset = r9 + (o.mate.pitch || 0) * (o.mate.angle || 0) / 360; }   /* a screw's formula places it at angle 0 */
+        else o.mate[k] = r9;
+        if (k === 'angle' && o.mate.joint === 'screw') o.mate.offset = (o.mate.base || 0) + (o.mate.pitch || 0) * r9 / 360;
+      } catch (err) { warn.push({ kind: 'link', id: o.id, text: `${o.name} mate ${k} ${e}: ${err.message}` }); }
+    }
+  }
   return warn;
 }
 /* split given params into plain values and links ('=…' strings on numeric params) */
@@ -2132,6 +2163,21 @@ function measureDim(R, md) {
   return { value: Math.abs(t), from, to, dir, endA: from, endB: to };
 }
 
+/* when the solver moves a spline's end points, its fit points go with them: the similarity (move, turn, scale) that takes
+   the old chord onto the new one, so the curve keeps its shape relative to its ends */
+function carrySplines(before, after, splines, open) {
+  const n = before.length, r9 = (v) => Math.round(v * 1e9) / 1e9;
+  return splines.map(sp => {
+    if (!(sp.i >= 0 && sp.i < n) || (open && sp.i >= n - 1)) return sp;
+    const a0 = before[sp.i], b0 = before[(sp.i + 1) % n], a1 = after[sp.i], b1 = after[(sp.i + 1) % n];
+    const dx0 = b0[0] - a0[0], dy0 = b0[1] - a0[1], dx1 = b1[0] - a1[0], dy1 = b1[1] - a1[1], L2 = dx0 * dx0 + dy0 * dy0;
+    if (Math.abs(a1[0] - a0[0]) < 1e-12 && Math.abs(a1[1] - a0[1]) < 1e-12 && Math.abs(b1[0] - b0[0]) < 1e-12 && Math.abs(b1[1] - b0[1]) < 1e-12) return sp;
+    /* k = (b1 - a1) / (b0 - a0) as complex numbers; a zero-length chord just moves */
+    const kr = L2 > 1e-18 ? (dx1 * dx0 + dy1 * dy0) / L2 : 1, ki = L2 > 1e-18 ? (dy1 * dx0 - dx1 * dy0) / L2 : 0;
+    return Object.assign({}, sp, { pts: sp.pts.map(([x, y]) => { const ux = x - a0[0], uy = y - a0[1]; return [r9(a1[0] + kr * ux - ki * uy), r9(a1[1] + ki * ux + kr * uy)]; }) });
+  });
+}
+
 /* ---------- evaluation ---------- */
 const BODY_CACHE = new Map(), LOCAL_CACHE = new Map();
 function cachedLocal(o) {
@@ -2140,7 +2186,8 @@ function cachedLocal(o) {
   return s;
 }
 /* ---------- joints (moving mates) ----------
-   mate.joint: fixed | revolute (spins about the connector axis) | slider (travels along axis n / u / v) | cylindrical (spin + travel)
+   mate.joint: fixed | revolute (spins about the connector axis) | slider (travels along axis n / u / v) | cylindrical (spin + travel) | planar (u, v, spin)
+   | screw (spin, advancing mate.pitch per turn along the axis; negative pitch = left-hand)
    | planar (slides on the face + spin). The joint's values are the mate's own angle / offset / slide, so a pose is just data. */
 const JOINTS = {
   revolute: [{ key: 'angle', unit: '°', min: -180, max: 180 }],
@@ -2150,6 +2197,12 @@ const JOINTS = {
   /* screw: turning it moves it along the axis by the pitch per turn (a cap on a thread, a lead screw) */
   screw: [{ key: 'angle', unit: '°', min: -720, max: 720 }]
 };
+/* a joint move (or a driving dimension) sets a mate field directly, so a formula on that field lets go of it */
+function unlinkMateField(x, key) {
+  if (!x.mexpr) return;
+  const m = x.mate || {}, f = key === 'angle' ? ['angle'] : key === 'offset' ? ['offset'] : key === 'u' ? ['slide.0'] : key === 'v' ? ['slide.1'] : key === 'travel' ? [m.axis === 'u' ? 'slide.0' : m.axis === 'v' ? 'slide.1' : 'offset'] : [key];
+  for (const k of f) delete x.mexpr[k]; if (!Object.keys(x.mexpr).length) delete x.mexpr;
+}
 const dofGet = (m, key) => key === 'angle' ? (m.angle || 0) : key === 'offset' ? (m.offset || 0) : key === 'u' ? (m.slide || [0, 0])[0] : key === 'v' ? (m.slide || [0, 0])[1]
   : key === 'travel' ? (m.axis === 'u' ? (m.slide || [0, 0])[0] : m.axis === 'v' ? (m.slide || [0, 0])[1] : (m.offset || 0)) : 0;
 function dofSet(m, key, v) {
@@ -2189,7 +2242,7 @@ function evaluate(doc, opts) {
     const q = o.params; if (!q || !Array.isArray(q.profile) || (q.shape && q.shape !== 'points') || !((Array.isArray(q.constraints) && q.constraints.length) || (Array.isArray(q.arcs) && q.arcs.length))) continue;
     try {
       const res = solveSketch(q.profile, q.constraints || [], q, q.arcs || [], { open: !!q.open }); R.sketch.set(o.id, res);
-      if (res.ok) { q.profile = res.points; if (q.arcs && q.arcs.length) q.arcs = res.arcs; }
+      if (res.ok) { if (Array.isArray(q.splines) && q.splines.length) q.splines = carrySplines(q.profile, res.points, q.splines, !!q.open); q.profile = res.points; if (q.arcs && q.arcs.length) q.arcs = res.arcs; }
       else R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: the sketch can't satisfy ${res.conflicts.map(c => SKETCH_KINDS[c.type].label.toLowerCase() + ' ' + (c.i + 1) + (c.j != null ? '/' + (c.j + 1) : '')).join(', ') || 'all its constraints'} — remove one` });
     } catch (e) { R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${e.message}` }); }
   }
@@ -2745,6 +2798,7 @@ class Model {
       for (const md of dims) {
         const cur = measureDim(this.result, md); if (!cur || Math.abs(cur.value - md.drive) < 1e-6) continue;
         const mover = this.dimMover(md); if (!mover || (mover.mate && mover.mate.kind)) continue;
+        if (mover.mexpr && ['offset', 'slide.0', 'slide.1'].some(k => mover.mexpr[k])) { if (!this.result.warnings.some(w => w.kind === 'dim' && w.id === mover.id)) this.result.warnings.push({ kind: 'dim', id: mover.id, text: `${mover.name} is placed by a formula (${Object.entries(mover.mexpr).map(([k, e]) => k + ' ' + e).join(', ')}), so the driving dimension can't move it — unlink the formula or make the dimension a reference` }); continue; }
         const pm = mover.id === md.b.obj ? cur.endB : cur.endA, other = mover.id === md.b.obj ? cur.endA : cur.endB;
         const sign = Math.sign(V.dot(V.sub(pm, other), cur.dir)) || 1, move = V.mul(cur.dir, sign * (md.drive - cur.value));
         if (mover.mate) {
@@ -2838,8 +2892,18 @@ class Model {
         if (!sconns.find(c => c.name === b)) throw new Error(`No connector “${b}” on ${x.name}. Try: ${sconns.map(c => c.name).join(', ')}`);
         const kindA = tconns.find(c => c.name === a).kind, kindB = sconns.find(c => c.name === b).kind;
         const flip = o.flip != null ? !!o.flip : (kindA === 'face' && kindB === 'face') || (kindA === 'side' && kindB === 'side');
-        x.mate = { to: o.to, a, b, flip, offset: num(o.offset, 0), angle: num(o.angle, 0), slide: o.slide || [0, 0] }; if (num(o.tilt, 0)) x.mate.tilt = num(o.tilt, 0);
-        this.recompute(); return { label: 'Mate ' + x.name, id: x.id };
+        /* offset, angle, tilt and either slide can be "=formula" (resolved with the parameter links); a number unlinks */
+        const prev = x.mate && !x.mate.kind ? x.mate : null, mexpr = {}, isF = (v) => typeof v === 'string' && /^\s*=/.test(v);
+        const mv = (key, v, fallback) => { if (isF(v)) { parseExpr(v); mexpr[key] = v.trim(); return fallback; } return num(v, 0); };
+        const sl = Array.isArray(o.slide) ? o.slide : [0, 0], was = prev || {}, wsl = was.slide || [0, 0];
+        x.mate = { to: o.to, a, b, flip, offset: mv('offset', o.offset, was.offset || 0), angle: mv('angle', o.angle, was.angle || 0), slide: [mv('slide.0', sl[0], wsl[0] || 0), mv('slide.1', sl[1], wsl[1] || 0)] };
+        const tilt = mv('tilt', o.tilt, was.tilt || 0); if (tilt || mexpr.tilt) x.mate.tilt = tilt;
+        if (Object.keys(mexpr).length) x.mexpr = mexpr; else delete x.mexpr;
+        /* re-mating keeps the part's joint (its type, axis, limits, pitch); a joint can also be given here */
+        if (prev && prev.joint && o.joint === undefined) { for (const k of ['joint', 'axis', 'limits', 'pitch']) if (prev[k] !== undefined) x.mate[k] = prev[k]; if (x.mate.joint === 'screw') x.mate.base = x.mate.offset - x.mate.pitch * (x.mate.angle || 0) / 360; }
+        this.recompute();
+        if (o.joint && o.joint !== 'fixed') this.op({ op: 'joint', id: x.id, joint: o.joint, axis: o.axis, limits: o.limits, pitch: o.pitch });
+        return { label: 'Mate ' + x.name, id: x.id };
       }
       case 'unmate': { const x = need(o.id); const M = this.result.world.get(x.id); x.mate = null; if (M) x.pose = poseFromMatrix(M); this.recompute(); return { label: 'Unmate ' + x.name, id: x.id }; }
       case 'boolean': {
@@ -2964,13 +3028,18 @@ class Model {
         const j = o.joint || 'revolute'; if (j !== 'fixed' && !JOINTS[j]) throw new Error(`joint is one of fixed, ${Object.keys(JOINTS).join(', ')}`);
         x.mate = Object.assign({}, x.mate); if (j === 'fixed') { delete x.mate.joint; delete x.mate.limits; delete x.mate.axis; }
         else { x.mate.joint = j; if (o.axis) x.mate.axis = o.axis; else if (j === 'slider' && !x.mate.axis) x.mate.axis = 'n'; if (o.limits !== undefined) x.mate.limits = o.limits || undefined; }
-        if (j === 'screw') { const P = +o.pitch || +x.mate.pitch; if (!(P > 0)) throw new Error('a screw joint needs a pitch (mm per turn; negative for a left-hand thread)'); x.mate.pitch = P; x.mate.base = (x.mate.offset || 0) - P * (x.mate.angle || 0) / 360; }
+        if (j === 'screw') {
+          /* the pitch: given, kept from before, or read from the thread on this part or the one it is mated to (a nut on a bolt, a cap on a threaded neck) */
+          const P = o.pitch != null && o.pitch !== '' ? +o.pitch : x.mate.pitch ? +x.mate.pitch : (threadPitchOf(x) || threadPitchOf(this.get(x.mate.to)));
+          if (!P || !isFinite(P)) throw new Error(`a screw joint needs a pitch (mm per turn; negative for a left-hand thread): ${x.name} and ${(this.get(x.mate.to) || {}).name || 'what it is mated to'} have no modelled thread to take it from`);
+          x.mate.pitch = P; x.mate.base = (x.mate.offset || 0) - P * (x.mate.angle || 0) / 360;
+        } else { delete x.mate.pitch; delete x.mate.base; }
         this.recompute(); return { label: `${x.name}: ${j} joint`, id: x.id, joints: jointsOf(d).find(q => q.id === x.id) };
       }
       case 'drive': {
         /* set joint values: {values: {id: {angle: 30}} } or {id, key, value} */
         const vals = o.values || { [o.id]: { [o.key || 'angle']: o.value } };
-        for (const [id, kv] of Object.entries(vals)) { const x = need(id); if (!x.mate || !x.mate.joint) throw new Error(`${x.name} is not a joint`); x.mate = Object.assign({}, x.mate); for (const [k, v] of Object.entries(kv)) { const lim = (x.mate.limits || {})[k]; dofSet(x.mate, k, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v); } }
+        for (const [id, kv] of Object.entries(vals)) { const x = need(id); if (!x.mate || !x.mate.joint) throw new Error(`${x.name} is not a joint`); x.mate = Object.assign({}, x.mate); for (const [k, v] of Object.entries(kv)) { unlinkMateField(x, k); const lim = (x.mate.limits || {})[k]; dofSet(x.mate, k, lim ? Math.max(lim[0], Math.min(lim[1], +v)) : +v); } }
         this.recompute(); return { label: 'Move joints', joints: jointsOf(d) };
       }
       case 'hole': {
@@ -2983,7 +3052,7 @@ class Model {
         const face = faces.filter(c => V.dot(c.n, n) > 0.999).sort((a, b) => Math.abs(V.dot(V.sub(at, a.o), a.n)) - Math.abs(V.dot(V.sub(at, b.o), b.n)))[0];
         /* through unless a depth is given (an insert is blind by default) */
         const through = o.through !== undefined ? !!o.through : !(+o.depth > 0) && o.kind !== 'insert';
-        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0, modelled: !!o.modelled && (o.kind === 'tapped') };
+        const params = { size: o.size || 'M6', kind: o.kind || 'simple', fit: o.fit || 'normal', through, depth: +o.depth || 12, diameter: +o.diameter || 0, modelled: !!o.modelled && (o.kind === 'tapped'), left_hand: !!o.left_hand && !!o.modelled && (o.kind === 'tapped') };
         holeSpec(params);
         const id = o.id && !this.get(o.id) ? String(o.id) : uid('hol'), add = { op: 'add', type: 'hole', id, name: o.name || `${params.size} ${params.kind === 'simple' ? 'hole' : params.kind}`, params, into: root.id, mode: 'subtract', stack: false };
         if (face) { const d0 = V.sub(at, face.o), vv = V.cross(face.n, face.u); add.mate = { to: root.id, a: face.name, b: 'top', flip: false, slide: [+V.dot(d0, face.u).toFixed(4), +V.dot(d0, vv).toFixed(4)] }; }
@@ -3018,9 +3087,9 @@ class Model {
         return { label: `${name} on ${t.name} (R${fmt(cyl.radius)})`, id: r.id, name };
       }
       case 'thread': {
-        /* a modelled thread on a cylinder part: size M2…M24 (or custom with pitch), length (0 = all), from bottom | top */
+        /* a modelled thread on a cylinder part: size M2…M24 (or custom with pitch), length (0 = all), from bottom | top, left_hand */
         const t = need(o.target); if (t.type !== 'cylinder') throw new Error(`${t.name} is not a cylinder: threads go on cylinder parts (or use a bolt, nut, or a tapped hole with modelled: true)`);
-        const size = o.size || 'M8', patch = { thread: size, thread_length: +o.length || 0, thread_from: o.from === 'top' ? 'top' : 'bottom' };
+        const size = o.size || 'M8', patch = { thread: size, thread_length: +o.length || 0, thread_from: o.from === 'top' ? 'top' : 'bottom', left_hand: !!o.left_hand };
         if (size === 'custom') { if (!(+o.pitch > 0)) throw new Error('a custom thread needs a pitch'); patch.pitch = +o.pitch; if (o.diameter) patch.diameter = +o.diameter; }
         else { const T = threadSize(size); if (o.resize !== false) patch.diameter = T.d; }
         this.op({ op: 'set', id: t.id, params: patch });
@@ -3146,6 +3215,7 @@ class Model {
         const x = need(o.id), q = x.params; if (!Array.isArray(q.profile) || !Array.isArray(q.constraints) || (q.shape && q.shape !== 'points')) throw new Error(`${x.name} has no polyline sketch to constrain`);
         const k = SKETCH_KINDS[o.type]; if (!k) throw new Error(`type is one of ${Object.keys(SKETCH_KINDS).join(', ')}`);
         const c = { type: o.type, i: Math.round(o.i) }; if (k.args === 2) c.j = Math.round(o.j);
+        if (!k.point) for (const si of k.args === 2 ? [c.i, c.j] : [c.i]) if ((q.splines || []).some(z => z.i === si)) throw new Error(`${k.label}: segment ${si + 1} is a spline (a free curve through its points), so it has no straight direction or length to constrain — constrain its end points, or make it a line`);
         if (o.type === 'fix') c.at = o.at || q.profile[c.i % q.profile.length].slice();
         if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c, q.arcs); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c, q.arcs) * 1e4) / 1e4; } }
         q.constraints = [...q.constraints.filter(e => !(e.type === c.type && e.i === c.i && e.j === c.j && !k.value)), c];
@@ -3211,7 +3281,7 @@ class Model {
         if (o.factor != null && +o.factor !== 1) ex += ` * ${+o.factor}`; if (o.offset) ex += ` ${+o.offset < 0 ? '-' : '+'} ${Math.abs(+o.offset)}`;
         return this.op({ op: 'set', id: x.id, params: { [o.param]: ex } }) && { label: `${x.name}.${o.param} follows ${ex.slice(1)}`, id: x.id, expr: ex };
       }
-      case 'unlink': { const x = need(o.id); if (x.expr) { delete x.expr[o.param]; if (!Object.keys(x.expr).length) delete x.expr; } this.recompute(); return { label: `${x.name}.${o.param} unlinked`, id: x.id }; }
+      case 'unlink': { const x = need(o.id); if (/^mate\./.test(o.param || '')) { unlinkMateField(x, o.param.slice(5)); this.recompute(); return { label: `${x.name} ${o.param} unlinked`, id: x.id }; } if (x.expr) { delete x.expr[o.param]; if (!Object.keys(x.expr).length) delete x.expr; } this.recompute(); return { label: `${x.name}.${o.param} unlinked`, id: x.id }; }
       case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); return { label: 'Remove dimension', id: o.id }; }
       case 'rename': { d.name = String(o.name || d.name); return { label: 'Rename model', name: d.name }; }
       case 'material': {   /* the model's default material, used by parts that have none of their own */
@@ -3242,7 +3312,7 @@ class Model {
       objects: this.doc.objects.map(o => {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
-        return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
+        return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
@@ -3272,7 +3342,7 @@ function poseFromMatrix(M) {
   return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
 }
 
-return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
+return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, threadPitchOf, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, carrySplines, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
 })();
 
 __sf3.views = (() => {
@@ -4933,6 +5003,13 @@ function leaderMenu(ob, prm, anchor) {
 }
 function numInput(v, on) { const i = el('input', { type: 'number', step: 'any', value: v }); i.addEventListener('change', () => on(+i.value)); i.addEventListener('keydown', e => e.stopPropagation()); return i; }
 const OPTIONS = { shape: { extrude: ['rect', 'circle', 'slot', 'polygon', 'points'], nut: ['hex', 'round', 'knurled'] }, style: { edge: ['fillet', 'chamfer'], fillet: ['fillet', 'weld', 'chamfer'], gear: ['spur', 'helical', 'herringbone'] }, mode: { wrap: ['emboss', 'engrave'], '*': ['auto', 'add', 'subtract'] }, kind: { pattern: ['linear', 'circular', 'mirror'], hole: ['simple', 'counterbore', 'countersink', 'tapped', 'insert'] }, plane: { pattern: ['yz', 'xz', 'xy'] }, profile: { weld: ['flat', 'convex', 'concave'] }, size: { hole: Object.keys(HOLES), bolt: Object.keys(THREADS), nut: [...Object.keys(THREADS), 'custom'] }, fit: { hole: ['close', 'normal', 'loose', 'print'] }, open: { shell: ['none', 'top', 'bottom', 'front', 'back', 'left', 'right', 'start', 'end'] }, path: { text: ['line', 'arc', 'arc-inside', 'points'] }, end: { extrude: ['blind', 'symmetric', 'through'] }, thread: { cylinder: ['none', ...Object.keys(THREADS), 'custom'] }, thread_from: { cylinder: ['bottom', 'top'] }, head: { bolt: ['hex', 'socket'] }, align: { text: ['center', 'start', 'end'] } };   /* shell 'open' lists the part's own faces (shellOpens) */
+/* the parameters a threaded part shows: the thread's own settings only when it has one */
+const THREAD_KEYS = {
+  cylinder: (p) => ['diameter', 'height', 'thread', ...(p.thread && p.thread !== 'none' ? [...(p.thread === 'custom' ? ['pitch'] : []), 'thread_length', 'thread_from', 'left_hand'] : []), 'bore'],
+  bolt: () => ['size', 'length', 'head', 'thread_length', 'left_hand'],
+  nut: (p) => ['size', ...(p.size === 'custom' ? ['diameter', 'pitch'] : []), 'shape', 'thickness', ...(p.shape === 'round' || p.shape === 'knurled' || p.size === 'custom' ? ['od'] : []), 'left_hand'],
+  hole: (p) => ['size', 'kind', ...(p.kind === 'tapped' ? ['modelled', ...(p.modelled ? ['left_hand'] : [])] : ['fit']), 'through', ...(p.through ? [] : ['depth']), 'diameter']
+};
 const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o['*'] || null) : null; };
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
@@ -4985,13 +5062,27 @@ function sketchSection(o, sec) {
     const m = [(a[0] + b[0]) / 2 + out[0] * L * 0.134, (a[1] + b[1]) / 2 + out[1] * L * 0.134], g = arcThrough(a, b, m); if (!g) return;
     apply([{ op: 'set', id: o.id, params: { arcs: arcs.concat([{ i, c: g.c, ccw: g.ccw }]), constraints: cons.filter(c => !((c.type === 'h' || c.type === 'v') && c.i === i)) } }], `Segment ${i + 1} → arc`);
   };
+  const makeSpline = (i) => {
+    const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, out = open || ccwPoly ? [dy / L, -dx / L] : [-dy / L, dx / L];
+    const r3 = (v) => Math.round(v * 1000) / 1000, mid = [r3((a[0] + b[0]) / 2 + out[0] * L * 0.15), r3((a[1] + b[1]) / 2 + out[1] * L * 0.15)];
+    /* constraints that treat the segment as a straight line go (its end points keep theirs) */
+    const keep = cons.filter(c => SKETCH_KINDS[c.type].point || (c.i !== i && c.j !== i));
+    apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i).concat([{ i, pts: [mid] }]), constraints: keep } }], `Segment ${i + 1} → spline`);
+  };
   const makeLine = (i) => apply([{ op: 'set', id: o.id, params: { arcs: arcs.filter(a => a.i !== i), constraints: cons.filter(c => !(['radius', 'concentric', 'tangent'].includes(c.type) && (c.i === i || c.j === i)) && !(c.type === 'equal' && arcOf(c.i) && (c.i === i || c.j === i))) } }], `Segment ${i + 1} → line`);
   const tbl = el('table', { class: 'cfg sk' });
   tbl.append(el('tr', null, el('th', null, '#'), el('th', null, 'size'), el('th', null, ''), el('th', null, 'dimension')));
   for (let i = 0; i < nseg; i++) {
     const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), spl = splOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
     if (spl) {
-      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono' }, `spline · ${spl.pts.length + 2} pts`), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))), el('td', null, el('span', { class: 'note' }, 'through its points'))));
+      const setPts = (pts, label) => apply([{ op: 'set', id: o.id, params: { splines: splines.map(z => z.i === i ? { i, pts } : z) } }], label);
+      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))),
+        el('td', null, el('button', { class: 'btn', title: 'Add a fit point halfway between the last one and the end of the segment', onclick: () => { const last = spl.pts[spl.pts.length - 1], e = b; setPts(spl.pts.concat([[Math.round((last[0] + e[0]) * 500) / 1000, Math.round((last[1] + e[1]) * 500) / 1000]]), `Spline ${i + 1}: add a point`); } }, '+ point'))));
+      spl.pts.forEach((pt, k) => {
+        const upd = (c, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][c] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`); };
+        tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, `point ${k + 1}`), el('span', { class: 'note' }, 'x'), numInput(pt[0], v => upd(0, v)), el('span', { class: 'note' }, 'y'), numInput(pt[1], v => upd(1, v)),
+          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: () => setPts(spl.pts.filter((_, kk) => kk !== k), `Spline ${i + 1}: remove a point`) }, '×') : null))));
+      });
       continue;
     }
     if (arc) {
@@ -5003,11 +5094,11 @@ function sketchSection(o, sec) {
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]), has = (t) => cons.findIndex(c => c.type === t && c.i === i), hi = has('h'), vi = has('v'), li = cons.findIndex(c => c.type === 'length' && c.i === i);
     const tog = (t, idx) => el('button', { class: 'chain' + (idx >= 0 ? ' on' : ''), title: SKETCH_KINDS[t].label, onclick: () => (idx >= 0 ? apply([{ op: 'unconstrain', id: o.id, index: idx }]) : add({ type: t, i })) }, t.toUpperCase());
     const dimCell = li >= 0 ? el('span', { class: 'pin' }, paramInput(o, cons[li].p), el('button', { class: 'chain', title: 'Remove the dimension', onclick: () => apply([{ op: 'unconstrain', id: o.id, index: li }]) }, '×')) : el('button', { class: 'btn', onclick: () => add({ type: 'length', i }) }, '+ dimension');
-    tbl.append(el('tr', { class: bad ? 'bad' : '' }, el('td', null, String(i + 1)), el('td', { class: 'mono' }, fmt(L)), el('td', null, el('span', { class: 'pin' }, tog('h', hi), tog('v', vi), el('button', { class: 'chain', title: 'Make this segment an arc (then give it a radius)', onclick: () => makeArc(i) }, '⌒'))), el('td', null, dimCell)));
+    tbl.append(el('tr', { class: bad ? 'bad' : '' }, el('td', null, String(i + 1)), el('td', { class: 'mono' }, fmt(L)), el('td', null, el('span', { class: 'pin' }, tog('h', hi), tog('v', vi), el('button', { class: 'chain', title: 'Make this segment an arc (then give it a radius)', onclick: () => makeArc(i) }, '⌒'), el('button', { class: 'chain', title: 'Make this segment a spline (a smooth curve through points you can move)', onclick: () => makeSpline(i) }, '∿'))), el('td', null, dimCell)));
   }
   s.append(el('div', { class: 'tblwrap' }, tbl));
   /* relations between two segments */
-  const segSel = () => el('select', null, ...Array.from({ length: nseg }, (_, i) => el('option', { value: i }, (arcOf(i) ? 'arc ' : 'segment ') + (i + 1))));
+  const segSel = () => el('select', null, ...Array.from({ length: nseg }, (_, i) => el('option', { value: i, disabled: splOf(i) ? true : null }, (arcOf(i) ? 'arc ' : splOf(i) ? 'spline ' : 'segment ') + (i + 1))));
   const sa = segSel(), sb = segSel(); sb.value = String(Math.min(1, nseg - 1));
   s.append(el('div', { class: 'relrow' }, sa, ...[['parallel', '∥'], ['perpendicular', '⊥'], ['equal', '='], ['angle', '∠'], ['tangent', 'tan'], ['concentric', '◎']].map(([t, g]) => el('button', { class: 'chain', title: SKETCH_KINDS[t].label + (t === 'equal' ? ' (lengths, or radii of two arcs)' : t === 'tangent' ? ' (two segments that meet; one or both arcs)' : t === 'concentric' ? ' (two arcs)' : ''), onclick: () => { if (sa.value === sb.value) { toast('Pick two different segments'); return; } add({ type: t, i: +sa.value, j: +sb.value }); } }, g)), sb));
   /* the constraint list */
@@ -5100,7 +5191,8 @@ function renderProps() {
   s1.append(field('Name', textInput(o.name, v => apply([{ op: 'set', id: o.id, name: v }]))));
   const keys = o.type === 'pattern' ? PATTERN_KEYS[o.params.kind] || Object.keys(o.params)
     : o.type === 'extrude' ? (o.params.shape && o.params.shape !== 'points' ? ['shape', ...SKETCH_SHAPES[o.params.shape], 'length', 'end', 'draft', 'thin', 'twist', 'scale'] : ['length', 'end', 'draft', 'thin', 'open', 'twist', 'scale', 'direction'])
-      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs'].includes(k) && !/^d\d+$/.test(k))
+      : ['revolve', 'loft'].includes(o.type) ? Object.keys(o.params).filter(k => !['profile', 'constraints', 'arcs', 'splines'].includes(k) && !/^d\d+$/.test(k))
+      : THREAD_KEYS[o.type] ? THREAD_KEYS[o.type](o.params)
         : o.type === 'sweep' && o.params.helix ? [] : o.type === 'wrap' ? (o.params.text ? ['text', 'size', 'weight', 'depth', 'radius', 'mode'] : ['depth', 'radius', 'mode']) : Object.keys(o.params);
   for (const k of keys) { if (k === 'segments' || k === 'detail' && o.type !== 'gear') continue; s1.append(paramField(o, k, o.params[k])); }
   if (o.type === 'sweep' && o.params.helix) {
@@ -5127,7 +5219,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'A weld joins parts that are made separately: they stay separate parts (an assembly). To blend one part into another, use a fillet: that merges them.'));
   }
   infoSection(o, sec);
-  if (['extrude', 'revolve', 'loft'].includes(o.type) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
+  if ((['extrude', 'revolve', 'loft'].includes(o.type) || (o.type === 'wrap' && !o.params.text)) && Array.isArray(o.params.profile) && (!o.params.shape || o.params.shape === 'points')) { if (!Array.isArray(o.params.constraints)) o.params.constraints = []; sketchSection(o, sec); }
   if (o.type === 'text' && o.into && o.mate) {
     const eng = o.op === 'subtract', m = o.mate;
     s1.append(el('div', { class: 'note' }, eng ? 'Engraved: a boolean remove, cut in flush with the face' : 'Embossed: a boolean add, standing on the face'),
@@ -5152,17 +5244,29 @@ function renderProps() {
     } else if (o.mate) {
       const m = o.mate, targets = [['origin', 'World origin']].concat(model.doc.objects.filter(x => x.id !== o.id && !['edge', 'pattern', 'weld'].includes(x.type)).map(x => [x.id, x.name]));
       const to = el('select', null, ...targets.map(([id, n]) => el('option', { value: id, selected: m.to === id }, n))); to.onchange = () => apply([{ op: 'mate', id: o.id, to: to.value, a: m.a, b: m.b }]);
-      const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
-      const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([{ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value, flip: m.flip, offset: m.offset, angle: m.angle, slide: m.slide }]);
-      const mate = (patch) => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: m.b, flip: m.flip, offset: m.offset, angle: m.angle, tilt: m.tilt, slide: m.slide }, patch)]);
+      /* the mate's values as they are stored: a formula stays a formula when another field changes */
+      const mf = o.mexpr || {}, msl = m.slide || [0, 0], cur = { flip: m.flip, offset: mf.offset || m.offset, angle: mf.angle || m.angle, tilt: mf.tilt || m.tilt, slide: [mf['slide.0'] || msl[0], mf['slide.1'] || msl[1]] };
+      const tc = el('select', null, ...worldConnectors(R, m.to).map(c => el('option', { value: c.name, selected: m.a === c.name }, c.name))); tc.onchange = () => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: tc.value, b: m.b }, cur)]);
+      const sc = el('select', null, ...worldConnectors(R, o.id).map(c => el('option', { value: c.name, selected: m.b === c.name }, c.name))); sc.onchange = () => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: sc.value }, cur)]);
+      const mate = (patch) => apply([Object.assign({ op: 'mate', id: o.id, to: m.to, a: m.a, b: m.b }, cur, patch)]);
+      /* a mate value: a number, or =formula (e.g. =plate.width / 2 - 10, =#gap) that follows sizes */
+      const mateIn = (key, v, put) => {
+        const linked = mf[key], wrap = el('span', { class: 'pin' });
+        const i = el('input', { value: linked || fmt(v || 0), inputmode: 'decimal', class: linked ? 'linked' : '', title: linked ? `follows ${linked.slice(1)} = ${fmt(v || 0)} · type a number to unlink` : 'a number, or =formula e.g. =plate.width / 2 - 10' });
+        i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); });
+        i.addEventListener('change', () => { const t = i.value.trim(); if (t.startsWith('=')) put(t); else if (t !== '' && isFinite(+t)) put(+t); else i.value = linked || fmt(v || 0); });
+        wrap.append(i); if (linked) wrap.append(el('button', { class: 'chain on', title: 'Unlink (keep the value)', onclick: (e) => { e.preventDefault(); apply([{ op: 'unlink', id: o.id, param: 'mate.' + key }]); } }, icon('link')), el('span', { class: 'val' }, '= ' + fmt(v || 0)));
+        return wrap;
+      };
       const fl = el('input', { type: 'checkbox' }); fl.checked = !!m.flip; fl.onchange = () => mate({ flip: fl.checked });
-      s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', numInput(m.offset || 0, v => mate({ offset: v }))), field('angle °', numInput(m.angle || 0, v => mate({ angle: v }))), field('tilt °', numInput(m.tilt || 0, v => mate({ tilt: v }))),
-        field('slide x', numInput((m.slide || [0, 0])[0], v => mate({ slide: [v, (m.slide || [0, 0])[1]] }))), field('slide y', numInput((m.slide || [0, 0])[1], v => mate({ slide: [(m.slide || [0, 0])[0], v] }))), field('face to face', fl));
+      s2.append(field('mated to', to), field('their', tc), field('its', sc), field('gap', mateIn('offset', m.offset, v => mate({ offset: v }))), field('angle °', mateIn('angle', m.angle, v => mate({ angle: v }))), field('tilt °', mateIn('tilt', m.tilt, v => mate({ tilt: v }))),
+        field('slide x', mateIn('slide.0', msl[0], v => mate({ slide: [v, cur.slide[1]] }))), field('slide y', mateIn('slide.1', msl[1], v => mate({ slide: [cur.slide[0], v] }))), field('face to face', fl));
       s2.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'unmate', id: o.id }]) }, 'Unmate (keep where it is)')));
       /* joint: how this mate may move */
-      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
-      jt.onchange = () => apply([{ op: 'joint', id: o.id, joint: jt.value }]);
+      const sj = sec('Joint (motion)'), jt = el('select', null, ...[['fixed', 'Fixed (no motion)'], ['revolute', 'Revolute — spins about the mate axis'], ['slider', 'Slider — travels along an axis'], ['cylindrical', 'Cylindrical — spins and travels'], ['planar', 'Planar — slides on the face'], ['screw', 'Screw — turns along a thread (pitch per turn)']].map(([v, n]) => el('option', { value: v, selected: (m.joint || 'fixed') === v }, n)));
+      jt.onchange = () => { try { apply([{ op: 'joint', id: o.id, joint: jt.value }]); } catch (e) { jt.value = m.joint || 'fixed'; } };
       sj.append(field('type', jt));
+      if (m.joint === 'screw') sj.append(field('pitch mm', el('span', { class: 'pin' }, numInput(m.pitch, v => { if (v) apply([{ op: 'joint', id: o.id, joint: 'screw', pitch: v }]); }), el('span', { class: 'note' }, (m.pitch < 0 ? 'left-hand' : 'right-hand') + ' · per turn'))));
       if (m.joint === 'slider') { const ax = el('select', null, ...[['n', 'along the mate normal'], ['u', 'across the face (u)'], ['v', 'across the face (v)']].map(([v, n]) => el('option', { value: v, selected: (m.axis || 'n') === v }, n))); ax.onchange = () => apply([{ op: 'joint', id: o.id, joint: 'slider', axis: ax.value }]); sj.append(field('axis', ax)); }
       const jinfo = jointsOf(model.doc).find(q => q.id === o.id);
       if (jinfo) for (const dof of jinfo.dofs) {

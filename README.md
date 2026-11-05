@@ -123,7 +123,8 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
     - An arc is its end point, then a point it passes through.
     - A tangent arc carries on smoothly from the last segment and stays tangent.
     - Arcs are real sketch arcs, not short segments: give them an **R dimension**, make two **tangent** or **concentric**, set radii **equal**, or turn any segment into an arc (⌒ in Properties → Sketch).
-    - A spline is a smooth curve through the points you click. It leaves the last segment tangent and blends into the next one. Switch back to Line or Arc, or close the shape, to end it. Its fit points are editable in Properties → Sketch, and one spline is one smooth face on the solid.
+    - A spline is a smooth curve through the points you click. It leaves the last segment tangent and blends into the next one. Switch back to Line or Arc, or close the shape, to end it. One spline is one smooth face on the solid.
+    - In Properties → Sketch, **∿** turns any line into a spline, and a spline's fit points can be moved, added or removed. When dimensions move a spline's ends, its fit points go with them, so the curve keeps its shape.
   - **Shapes:** Rectangle, Circle, Slot, Polygon.
   - **Snap ▾:** grid on or off, with a step of 0.5–25 mm; points, corners and centres; edge midpoints; horizontal / vertical only; 15° angles. A green marker shows what you snapped to, with the length so far.
   - **Undo point**, **Close shape**, **Cancel**.
@@ -138,6 +139,7 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
   - **More ▾ → Bolt (threaded)…:** M2–M24, length, hex or socket head, thread length. Mate its *seat* to the face it goes into.
   - **More ▾ → Nut (threaded)…:** hex, round or knurled. It can be custom (any diameter and pitch), e.g. a screw cap for a bottle neck.
   - **Thread a cylinder or tube:** Properties → Thread, an ISO size or a custom pitch, over all or part of its length, from the top or bottom. *Bore* makes it a tube.
+  - **Left hand** (a tick box on threaded cylinders, bolts, nuts and modelled tapped holes) makes a left-hand thread.
   - **Tapped holes:** the hole wizard's *thread* choice is *drill only* (just the tap-drill hole) or *modelled* (the thread is cut).
   - A nut on its bolt, or a cap on its neck, meshes with 0.1 mm clearance and doesn't count as interference.
 - **More ▾** (in the Add bar):
@@ -156,6 +158,7 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
 - *Add-ons* menu: gears (single, pair, train, planetary, and an advisor that picks the right gear for the job and the process). Drop your own into `model/addons/`: see [model/ADDONS.md](model/ADDONS.md).
 - Click any orange dimension in the 2D views to change it. If another part had the same size running the same way, you're offered **Make it follow**: from then on it keeps step with the leader (shown teal, as =90).
 - Any size can be a formula: type `=plate.depth`, `=plate.depth - 10` or `=#wall * 2` in Properties (the link button beside each size picks a leader from a list). Model variables (#wall…) are in Properties with nothing selected.
+- Placement can follow sizes too: a mate's gap, angle, tilt and slides take formulas. For example, slide x `=plate.width / 2 - 10` keeps a part 10 mm in from the edge as the plate grows. Changing where a part is mated keeps its joint.
 - *Measure* (**G**): click two dots in a 2D view. A hole centre then a face dot (the middle of an edge in that view) gives the off-edge distance, measured square to the edge; two points offer horizontal / vertical / aligned. Type a value to make it **driving**: the hole moves and stays at that distance from the edge when the part changes size.
 - The feature list shows **By part** (each part with its holes, edges, welds and arrays) or **History** (the order you made things). In History, drag rows to reorder and drag the blue **rollback bar** to see the model as it was (new features go in at the bar). The ⋯ / right-click menu: suppress, duplicate (Ctrl D), linked instance, pattern, move, delete.
 - *Profile* sketches: Polyline, **Rectangle** (rounded corners), **Circle**, **Slot**, **Polygon** (two clicks). Then Extrude, **Cut through** the part underneath, or Revolve. The shape's sizes stay editable dimensions.
@@ -163,7 +166,7 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
 - *Shell…* (Properties) hollows **any** part to an even wall thickness, open on one of its faces or closed. This includes booleans, filleted parts and imported meshes. Every face moves inward by the wall (an offset, not a scale), so walls stay even on any shape, with mitred corners. A rounding smaller than the wall gets a sharp inner corner. A boss or rib thinner than two walls stays solid, and a note names it. A cut that would leave a section thinner than two walls is refused, by name.
 - **Text** (T): type the words, the height and depth, then pick emboss (a boolean add standing on the face) or engrave (a boolean remove cut into it), and a path: straight, round an arc (reading over the top), or the inside of an arc (reading along the bottom, as on a badge). Click a flat face to place it. The words, sizes, radius, angle, alignment, or a polyline path are all editable later. The built-in font is a single-stroke engraving font, the kind CNC engravers and laser markers use. It covers capitals, digits and the usual symbols, including Ø ± ° ×; lower case prints as capitals.
 - **Interference check** (I): one click lists every pair of parts that overlap, with the overlap volume, and shows the overlap in red. Parts that only touch, and welds on the parts they join, don't count.
-- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar or **screw**, with limits), then drag its slider or press play. A screw joint turns and advances by its pitch per turn, so a nut or cap runs along its thread in step (keeping the thread phase). Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
+- **Motion** (J): make a mated part a joint (Properties → Joint: revolute, slider, cylindrical, planar or **screw**, with limits), then drag its slider or press play. A screw joint turns and advances by its pitch per turn, so a nut or cap runs along its thread in step (keeping the thread phase). Its pitch is read from the thread, negative for a left-hand one, and you can change it. Meshed gears turn with it. *Keep this pose* makes it the model's position. **Collisions** are checked as it moves: parts that hit turn red, and *stop at contact* halts play at the first touch.
 - **Section** (X): cut the model along X, Y or Z with a slider; the cut shows hatched.
 - **Configurations**: add variables, use them in sizes (=#len), then *Add configuration* for each size; switch from the toolbar. Configurations can also switch features off.
 - File → *Save version…* / *Versions…*; *Import STL / OBJ…*; *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
@@ -338,6 +341,6 @@ These build on the same joint model:
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions
+npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference
 node build.mjs                                                      # rebuild dist/
 ```
