@@ -20,7 +20,7 @@ fs.writeFileSync(path.join(ROOT, 'dist', 'artifact.html'), inlined);
 
 /* v2 — the 3D workspace (ES modules) bundled into one classic-scope module script:
  * each module becomes an IIFE that returns its exports; imports become destructuring from the registry. */
-const MODS = [['kernel', 'js'], ['sketch', 'js'], ['text', 'js'], ['model', 'js'], ['views', 'js'], ['collide', 'js'], ['drawing', 'js'], ['examples', 'js'], ['step', 'js'], ['gears', 'addons'], ['app', 'js']];
+const MODS = [['kernel', 'js'], ['sketch', 'js'], ['text', 'js'], ['model', 'js'], ['views', 'js'], ['collide', 'js'], ['drawing', 'js'], ['examples', 'js'], ['step', 'js'], ['collab', 'js'], ['gears', 'addons'], ['app', 'js']];
 function bundleModule([name, dir]) {
   let src = fs.readFileSync(path.join(ROOT, 'model', dir, name + '.js'), 'utf8');
   const names = new Set();

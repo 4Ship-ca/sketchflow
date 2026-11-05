@@ -1437,6 +1437,8 @@ export class Model {
   undo() { const s = this.undoStack.pop(); if (!s) return false; this.redoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
   redo() { const s = this.redoStack.pop(); if (!s) return false; this.undoStack.push({ label: s.label, json: this.snapshot() }); const vers = this.doc.versions; this.doc = JSON.parse(s.json); if (vers) this.doc.versions = vers; this.recompute(); this.emit(); return s.label; }
   load(doc) { const before = this.snapshot(); this.doc = doc; this.commit('Open model', before); }
+  /* swap in a document without an undo step (a shared room's state; changes made by other people) */
+  replaceDoc(doc) { const vers = this.doc.versions; this.doc = doc; if (vers && !doc.versions) this.doc.versions = vers; this.recompute(); this.emit(); }
   /* apply a batch of operations atomically (one undo step). Returns per-op results. */
   /* opts.relative: positions (at, near) are measured from the ephemeral world origin, the same frame describe() reports */
   apply(ops, label, opts = {}) {

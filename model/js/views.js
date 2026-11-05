@@ -197,7 +197,7 @@ export class Views {
       gl.uniform1f(mp.loc.uFlat, ortho ? 0.55 : 0); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
       const selBody = this.sel ? this.model.bodyContaining(this.sel) : null;
       for (const [id, b] of this.buffers) {
-        const col = this.collide && this.collide.has(id) ? [0.95, 0.25, 0.22] : selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : b.color;
+        const col = this.collide && this.collide.has(id) ? [0.95, 0.25, 0.22] : selBody && selBody.id === id ? mix(b.color, C.sel, 0.35) : this.peerTint && this.peerTint.has(id) ? mix(b.color, this.peerTint.get(id), 0.3) : b.color;   /* someone else in a shared room is on it */
         gl.uniform3fv(mp.loc.uC, col); gl.uniform1f(mp.loc.uA, 1); gl.uniformMatrix4fv(mp.loc.uM, false, this.bodyMatrix(id));
         this.bindAttr(mp.loc.aP, b.mesh, 3); this.bindAttr(mp.loc.aN, b.nrm, 3); gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }

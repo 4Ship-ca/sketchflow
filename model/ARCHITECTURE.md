@@ -14,9 +14,10 @@ model/
 ├── js/views.js       WebGL2 renderer: TOP | 3D / FRONT | RIGHT, hidden lines, carried dimensions, view cube
 ├── js/examples.js    bundled example models (File → Example)
 ├── js/step.js        STEP (AP214) export as exact planar B-reps, its reader / vetting, planar STEP import
+├── js/collab.js      shared editing: document diffs, merging and conflict rules (run by the server and every browser)
 ├── js/app.js         tools, panels, autosave, export, AI bridge, add-on loading
 ├── addons/           gears.js (built in) · examples/fasteners.js — see ADDONS.md
-└── test/             kernel · model · gears · addons · collide · reference · step  (npm test)
+└── test/             kernel · model · gears · addons · collide · reference · step · collab · rooms  (npm test)
 ```
 
 The MCP server is `server.mjs`; its op reference (`model_reference`) is `mcp-reference.mjs`, and `test/reference.test.mjs` runs every worked example in it, so the reference can't drift from what the model accepts.
@@ -77,6 +78,17 @@ Served by `server.mjs` at `http://localhost:7777/3d/`. `node build.mjs` also wri
 | Dimensions in the views | The 4 views always show each object's own dimensions. Click one to edit it. Measure adds driven dimensions between connectors. | Dimensions are carried automatically, not placed by hand |
 | FeatureScript / API | `model.apply(ops)`. The UI and the MCP bridge call the same function | Batches are atomic and roll back on error. Positions can be origin-relative |
 | Versions & branches | Undo/redo, `.sf3d.json` files, git | — |
+
+### Shared editing: diffs, a sequencing server, refusal over overwrite
+
+A room (`collab-server.mjs`, run by `server.mjs`) holds the model as plain JSON, a revision number and the log of changes. It runs no geometry. The browsers do all modelling.
+
+- **Changes travel as diffs, not as operations.** Replaying an op elsewhere is not deterministic (fresh ids, geometry lookups), but a diff is. `collab.js` diffs a document per object field, and one level down in `params`, `meta` and `expr` (and `vars` and `meshes` at document level), with the feature order handled separately. The capture is a model listener, so every route that changes the model is covered automatically: tools, Properties, MCP, undo.
+- **The server sequences changes.** A change made on the latest revision is accepted. One made on an older revision is checked against the changes since, excluding the same session's own earlier ones. It **merges** when it touches different things. It is **refused**, with reasons naming who changed what, when it overlaps a field, reorders while someone else reordered, or changes or relies on (any field that is the id of) something deleted meanwhile. Retries are idempotent (batch ids), a client too far behind reloads the model, and rooms are written to disk atomically.
+- **Clients:** what you see = the room's confirmed model + your batches on their way. Remote batches apply in revision order; gaps fetch what's missing. Your own batch is confirmed when it comes back on the stream, and a refused one is dropped with a toast.
+- **Per-person undo:** the inverse of your diff, restricted to what it touched. It is allowed only if those paths still hold the values you left (`changedSince`), so undo never overwrites anyone.
+- **Presence:** selection, active tool and the part it works on, sent on change plus a 15 s heartbeat. It drives tints in the views, dots in the feature list and banners in Properties. These are soft locks: editing stays possible, and real clashes are caught by the sequencer.
+- **The AI stays with its owner.** A tab joining a shared room, or a tab on another computer, never takes the MCP connection from the local tab already holding it.
 
 ### STEP: a vetted exact planar B-rep
 
@@ -210,6 +222,7 @@ Built so far, on top of the first version:
 - formulas on mate offsets, angles, tilts and slides; re-mating keeps a part's joint
 - spline fit points that move with their segment when dimensions change, and edit in Properties
 - STEP export (AP214 solid B-reps, assemblies, placed copies), vetted on every export; planar STEP import
+- shared live editing: per-field merges, conflicting changes refused with reasons, presence and soft locks, per-person undo, offline-safe
 - spline ends that are exactly tangent (or a corner, or an angle), smooth joins between splines, pinned and dimensioned fit points
 - an op reference that covers every op, with examples checked by the tests
 - lofts through any number of sections, with guide curves; smooth, twisted and scaled sweeps
@@ -224,7 +237,7 @@ Still to come, roughly in order of how much each unlocks:
 5. **Constraints between parts' sketches** (a sketch point on another part's edge, projected geometry). Mate formulas and driving dimensions cover placement today.
 6. **More on drawings**: section views on the sheet, GD&T and notes.
 7. **Exact curved surfaces in STEP** (cylinders, cones, spheres as analytic surfaces rather than facets) and import of curved CAD files. STEP export of exact *planar* B-reps is done and vetted. Analytic surfaces need a B-rep kernel (Manifold, OpenCascade.js); the `Solid` interface is small on purpose so one could be swapped in.
-8. **Multi-user editing and branches**, as Onshape has them. Versions exist but are linear.
+8. **Branches and merges of shared models**, and live cursors. Shared live editing with merging, refusal of conflicting changes, presence and per-person undo is done; versions are still linear.
 9. **More add-ons**: bearings and shafts, sheet metal, extrusion profiles, pipe and tube.
 
 ## Testing
@@ -237,5 +250,7 @@ node model/test/addons.test.mjs   # the add-on contract and the fasteners exampl
 node model/test/collide.test.mjs  # interference volumes, touching ≠ overlapping, meshed vs clashing gears, motion first contact
 node model/test/reference.test.mjs # every op has a reference entry, and every worked example in mcp-reference.mjs runs
 node model/test/step.test.mjs      # STEP: exact topology, vetting catches broken files, round trips, assemblies, threads plain / modelled
+node model/test/collab.test.mjs    # diffs reproduce changes; merges of different fields; conflicts (same field, deleted, relied on, reorders); per-person undo
+node model/test/rooms.test.mjs     # rooms: accept / merge / refuse, idempotent retries, catch-up, presence, restart, HTTP + token
 node build.mjs                    # single-file builds in dist/
 ```

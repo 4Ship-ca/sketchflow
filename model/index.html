@@ -90,6 +90,12 @@ table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var
 .sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
 .sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
 table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:44px} table.cfg.loft th{font-size:9px} table.sk tr.sub td{padding-top:0} table.sk td>.pin{flex-wrap:nowrap;gap:2px} table.sk td>.pin>.chain{width:22px;height:22px} table.sk .pin.fit{gap:4px} table.sk .pin.fit input:not([type=radio]){flex:none;width:44px} table.sk .pin.fit .note:first-child{min-width:42px} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
+#people{position:absolute;right:12px;top:12px;width:min(380px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:8;display:flex;flex-direction:column;gap:8px}
+#people .phead{display:flex;align-items:center;gap:6px} #people .plist{display:flex;flex-direction:column;gap:4px} #people .prow{display:flex;align-items:center;gap:8px;font:500 12px var(--f-ui)} #people .prow i,.peerban i{width:10px;height:10px;border-radius:50%;flex:none}
+#people .swatches{display:flex;gap:4px} #people .sw{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0} #people .sw.on{border-color:var(--ink)}
+#people .feed{display:flex;flex-direction:column;gap:3px;font:500 11.5px var(--f-ui)} #people .fe{display:grid;grid-template-columns:40px auto 1fr;gap:6px;align-items:baseline} #people .fe.bad{color:var(--warn)} #people input{min-width:0;flex:1}
+.peerdot{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;color:#fff;font:700 9px var(--f-ui);margin-left:4px;flex:none}
+.peerban{display:flex;gap:8px;align-items:center;border:1px solid;border-left-width:4px;border-radius:8px;padding:6px 8px;margin:8px 10px 0;font:500 12px var(--f-ui);color:var(--ink-2)}
 #check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
 #check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
 #check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
@@ -131,6 +137,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
     <select id="cfgSel" hidden title="Configuration (size variant)" aria-label="Configuration"></select>
     <div class="grp"><button class="tb" id="fileBtn" title="New, open, save, export, drawings, versions, import" data-icon="file">File ▾</button></div>
     <span class="chip" id="aiChip"><i></i><span>AI off</span></span>
+    <button class="tb" id="peopleBtn" title="Share this model for live editing with others; who is here and what they are doing" data-icon="people"><span>Share</span></button>
     <div class="grp"><span class="lbl">Add</span>
       <button class="tb" data-add="box" title="Box (B)" data-icon="box">Box</button>
       <button class="tb" data-add="wedge" title="Wedge / triangle prism (W)" data-icon="wedge">Wedge</button>
@@ -179,7 +186,7 @@ table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:
     </div>
   </header>
   <aside id="tree"><h3>Feature list <span class="badge" id="count">0</span></h3><div id="list"></div><div id="warn" hidden></div></aside>
-  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
+  <main id="stage"><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="banner" hidden></div><div id="motion" hidden></div><div id="check" hidden></div><div id="people" hidden></div><input id="dimEd" hidden inputmode="decimal"><div id="hint" hidden></div></main>
   <aside id="props"><h3>Properties</h3><div id="pbody"></div></aside>
 </div>
 <div id="toasts" aria-live="polite"></div>

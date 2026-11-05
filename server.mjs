@@ -22,6 +22,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { reference } from './mcp-reference.mjs';
+import { createCollab } from './collab-server.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '2.0.0';
@@ -41,6 +42,12 @@ const kindOf = (k) => (k === 'model' ? 'model' : 'board');
 const live = (kind) => { const p = primaries[kind]; return p && clients.has(p) ? p : null; };
 const pending = new Map();      /* request id -> {resolve, reject, timer} */
 let inbox = null;               /* last sketch the user pressed Send on */
+/* shared editing rooms (3D): changes from each tab reach everyone else in its room */
+const collab = createCollab({
+  dir: process.env.SKETCHFLOW_ROOMS || path.join(os.homedir(), '.sketchflow', 'rooms'),
+  broadcast: (room, data) => { for (const c of clients.values()) if (c.room === room) sse(c, 'collab', data); },
+  log: (m) => log(m)
+});
 const sketchWaiters = new Set();
 
 /* ======================= HTTP + SSE bridge ======================= */
@@ -101,11 +108,15 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
         res.write(': hi\n\n');
         const kind = kindOf(url.searchParams.get('kind'));
-        const c = { res, at: Date.now(), kind }; clients.set(cid, c); primaries[kind] = cid;
-        sse(c, 'hello', { primary: true, version: VERSION, kind }); broadcastRoles(kind);
+        const c = { res, at: Date.now(), kind, room: url.searchParams.get('room') || null, local }; clients.set(cid, c);
+        /* the newest tab gets the AI — but not a tab joining someone's shared room, nor one on another computer while one on
+           this computer has it: the AI stays with the person who runs it */
+        const cur = live(kind), keep = cur && (c.room || (!local && clients.get(cur).local));
+        if (!keep) primaries[kind] = cid;
+        sse(c, 'hello', { primary: primaries[kind] === cid, version: VERSION, kind }); broadcastRoles(kind);
         const ka = setInterval(() => { try { res.write(': ka\n\n'); } catch { /* closed */ } }, 20000);
         req.on('close', () => {
-          clearInterval(ka); clients.delete(cid);
+          clearInterval(ka); clients.delete(cid); collab.gone(cid);
           if (primaries[kind] === cid) { primaries[kind] = [...clients].filter(([, v]) => v.kind === kind).map(([k]) => k).pop() || null; broadcastRoles(kind); }
         });
         log(kind === 'model' ? '3D workspace connected' : 'board connected', cid);
@@ -122,6 +133,17 @@ const server = http.createServer(async (req, res) => {
         inbox = Object.assign({ at: Date.now() }, body);
         for (const w of sketchWaiters) w(inbox); sketchWaiters.clear();
         return send(res, 200, { ok: true });
+      }
+      if (url.pathname.startsWith('/bridge/collab/')) {
+        const act = url.pathname.slice('/bridge/collab/'.length), c = clients.get(body.cid);
+        try {
+          if (act === 'create') return send(res, 200, await collab.create(body.doc, body.by));
+          if (act === 'join') { if (c) c.room = body.room; const r = await collab.join(body.room, body.cid, body.since); return send(res, 200, r); }
+          if (act === 'commit') return send(res, 200, await collab.commit(body.room, body));
+          if (act === 'presence') { if (c) c.room = body.room; return send(res, 200, await collab.presence(body.room, body.cid, body)); }
+          if (act === 'leave') { if (c && c.room === body.room) c.room = null; return send(res, 200, await collab.leave(body.room, body.cid)); }
+          return send(res, 404, { error: 'unknown collab action' });
+        } catch (e) { return send(res, e.code || 500, { error: e.message }); }
       }
       if (url.pathname === '/bridge/claim') { const c = clients.get(body.cid); if (c) { primaries[c.kind] = body.cid; broadcastRoles(c.kind); } return send(res, 200, { ok: true }); }
       return send(res, 404, { error: 'unknown bridge route' });
@@ -322,7 +344,7 @@ const TOOLS = [
       const r = await model('import', { name: path.basename(f), file_b64: buf.toString('base64'), scale: a.scale, material: a.material }, 180000);
       return json({ imported: r.result, model: r.model });
     } },
-  { name: 'model_session', description: 'Model-level actions: undo / redo (steps), new (name), demo (load the bracket example), example (no id: list the bundled examples; id: load one, e.g. "pump-housing" — a flanged pump housing with spline gussets, wrapped text, modelled threads and a screw-jointed cap), load (a .sf3d.json file path or a doc object), select (id, highlights it for the user), say (short message shown to the user), save_version (name), versions (list), restore_version (id or name — undoable).', inputSchema: S({ action: { type: 'string', enum: ['undo', 'redo', 'new', 'demo', 'example', 'load', 'select', 'say', 'save_version', 'versions', 'restore_version'] }, steps: { type: 'integer' }, name: { type: 'string' }, path: { type: 'string' }, doc: { type: 'object' }, id: { type: 'string' }, text: { type: 'string' }, seconds: { type: 'integer' } }, ['action']),
+  { name: 'model_session', description: 'Model-level actions: undo / redo (steps), new (name), demo (load the bracket example), share (share this model for live editing: returns the link others open — changes merge, clashes are refused, never overwritten), room (who is in the shared model, what each is selecting or working on, recent changes), example (no id: list the bundled examples; id: load one, e.g. "pump-housing" — a flanged pump housing with spline gussets, wrapped text, modelled threads and a screw-jointed cap), load (a .sf3d.json file path or a doc object), select (id, highlights it for the user), say (short message shown to the user), save_version (name), versions (list), restore_version (id or name — undoable).', inputSchema: S({ action: { type: 'string', enum: ['undo', 'redo', 'new', 'demo', 'example', 'share', 'room', 'load', 'select', 'say', 'save_version', 'versions', 'restore_version'] }, steps: { type: 'integer' }, name: { type: 'string' }, path: { type: 'string' }, doc: { type: 'object' }, id: { type: 'string' }, text: { type: 'string' }, seconds: { type: 'integer' } }, ['action']),
     run: async (a) => {
       if (a.action === 'save_version') return json(await model('version', { save: true, name: a.name }));
       if (a.action === 'versions') return json(await model('version', {}));

@@ -8,6 +8,7 @@ import { autoConstraints, KINDS as SKETCH_KINDS, expandArcs, arcThrough, arcTang
 import { interference, collisions, restBaseline } from './collide.js';
 import { EXAMPLES, exampleDoc } from './examples.js';
 import { exportStep, stepToSolids } from './step.js';
+import { docDiff, applyDiff, isEmpty, inverse, changedSince, sameDoc } from './collab.js';
 const { V, M4 } = K;
 /* built-in add-ons are registered before the saved model is evaluated (it may use their shapes) */
 registerAddon(gears);
@@ -25,6 +26,7 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  people: 'M9 11a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.7.8 2.8 2.6 3 5.2',
   pin: 'M9 3h6l-1 6 3 3H7l3-3zM12 12v9',
   wrap: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3zM9 10h6M12 10v6',
   drape: 'M3 17c3-9 15-9 18 0M9 9l1 4h4l1-4M12 3v4',
@@ -52,7 +54,9 @@ document.querySelectorAll('[data-icon]').forEach(b => b.prepend(icon(b.dataset.i
 /* ---------- model + persistence ---------- */
 const load = () => { try { const s = localStorage.getItem('sf3.model'); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
 const model = new Model(load() || newDoc('Model'));
-const save = debounce(() => { try { localStorage.setItem('sf3.model', JSON.stringify(model.doc)); } catch (e) { /* storage blocked */ } }, 400);
+const save = debounce(() => { try { if (inRoom()) return; localStorage.setItem('sf3.model', JSON.stringify(model.doc)); } catch (e) { /* storage blocked */ } }, 400);   /* in a shared room the server keeps the model */
+function inRoom() { try { return !!collab.room; } catch (e) { return false; } }
+function presenceSoon() { try { sendPresence(); } catch (e) { /* not set up yet */ } }
 const views = new Views($('#gl'), $('#ov'), model);
 let selected = null;
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('sf3.prefs') || '{}'); } catch (e) { return {}; } })();
@@ -271,6 +275,7 @@ function renderTree() {
     w.slice(0, 8).forEach(x => box.append(el('div', { style: 'cursor:pointer', onclick: () => select(x.id) }, '• ' + x.text)));
     box.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: false }]) }, 'Fix orphans'), el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: true }]) }, 'Fix all in place')));
   }
+  try { if (collab.room) paintPeers(); } catch (e) { /* shared editing not set up yet */ }
 }
 /* ---------- properties ---------- */
 function field(label, input) { return el('label', { class: 'f' }, label, input); }
@@ -516,6 +521,8 @@ function renderProps() {
   if (addonForm) { renderAddonForm(body); return; }
   const o = selected && model.get(selected);
   const R = model.result, sec = (t) => { const s = el('div', { class: 'sec' }, el('h4', null, t)); body.append(s); return s; };
+  /* someone else is on this part: say so (a soft lock — you can still edit; a clash is refused, never overwritten) */
+  if (o && inRoom()) for (const p of peersOn(rootOf(o.id)).concat(peersOn(o.id)).filter((p, i, a) => a.indexOf(p) === i)) body.append(el('div', { class: 'peerban', style: `border-color:${p.color}` }, el('i', { style: `background:${p.color}` }), `${p.name} ${p.on && (p.on === o.id || p.on === rootOf(o.id)) ? 'is working on this' + (p.tool ? ' (' + p.tool + ')' : '') : 'has this selected'} — you can still edit; if you both change the same thing, the second change is refused, not merged over the first`));
   if (!o) {
     const s = sec('Model');
     s.append(field('Name', textInput(model.doc.name, v => apply([{ op: 'rename', name: v }]))));
@@ -727,7 +734,7 @@ function renderAddonForm(body) {
     show(addonForm.result, r);
   }
 }
-function select(id) { id = model.resolveId(id); if (id) addonForm = null; selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); }
+function select(id) { id = model.resolveId(id); if (id) addonForm = null; selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); presenceSoon(); }
 function refreshGhost() {
   const o = selected && model.get(selected), R = model.result;
   if (o && (o.into || o.hidden) && R.local.has(o.id)) views.setGhost(R.local.get(o.id).transform(M4.mul(M4.translate(V.neg(R.originPoint)), R.world.get(o.id))).transform(M4.translate(R.originPoint)));
@@ -754,8 +761,8 @@ function addShape(type) {
   toast(first ? `${r.name} placed on the origin — it’s the ground` : on ? `${r.name} sits on ${model.get(on).name} — Join it or Cut it under “Combine” in Properties, or move it with slide x / y` : `${r.name} sits on ${model.get(g).name} — Mate to move it`, 2600);
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(tool && tool.name === b.dataset.tool ? null : b.dataset.tool)));
-$('#undo').onclick = () => { const l = model.undo(); if (l) toast('Undo · ' + l, 900); };
-$('#redo').onclick = () => { const l = model.redo(); if (l) toast('Redo · ' + l, 900); };
+$('#undo').onclick = () => { if (inRoom()) { undoMine(); return; } const l = model.undo(); if (l) toast('Undo · ' + l, 900); };
+$('#redo').onclick = () => { if (inRoom()) { redoMine(); return; } const l = model.redo(); if (l) toast('Redo · ' + l, 900); };
 /* view settings: the View menu and the keys share these */
 const VIEW = {
   layout: (l) => { views.layout = l; views.draw(); },
@@ -804,8 +811,8 @@ $('#name').addEventListener('keydown', e => e.stopPropagation());
 $('#fileBtn').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 4}px` });
   const item = (t, fn) => m.append(el('button', { onclick: () => { m.remove(); fn(); } }, t));
-  item('New model', () => { if (model.doc.objects.length) model.load(newDoc('Model')); select(null); });
-  item('Open model file…', () => $('#openIn').click());
+  item('New model', () => roomGuard('A new model', () => { if (model.doc.objects.length) model.load(newDoc('Model')); select(null); }));
+  item('Open model file…', () => roomGuard('Opening a file', () => $('#openIn').click()));
   item('Save model file (.json)', () => download(new Blob([JSON.stringify(model.doc, null, 1)], { type: 'application/json' }), slug() + '.sf3d.json'));
   item('Export STL (3D print)', () => download(new Blob([exportSTL()], { type: 'model/stl' }), slug() + '.stl'));
   item('Export OBJ', () => download(new Blob([exportOBJ()], { type: 'text/plain' }), slug() + '.obj'));
@@ -818,8 +825,8 @@ $('#fileBtn').onclick = (e) => {
   item('Import STL / OBJ / STEP…', () => $('#meshIn').click());
   item('Save version…', () => { hint('Save a version of the model (you can go back to it any time):', [['Save', () => { const nm = document.querySelector('#hint input.vname').value; const v = model.saveVersion(nm); hint(null); toast(`Saved “${v.name}”`); save(); }]]); const i = el('input', { class: 'vname', placeholder: 'name, e.g. before shelling' }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') document.querySelector('#hint button').click(); }); $('#hint').insertBefore(i, $('#hint').children[1]); setTimeout(() => i.focus(), 0); });
   item('Versions…', showVersions);
-  item('Load the demo model', demo);
-  for (const ex of EXAMPLES) item('Example: ' + ex.name, () => loadExample(ex.id));
+  item('Load the demo model', () => roomGuard('The demo model', demo));
+  for (const ex of EXAMPLES) item('Example: ' + ex.name, () => roomGuard('The example', () => loadExample(ex.id)));
   if (/^\/3d\b/.test(location.pathname)) item('2D sketch board ↗', () => { location.href = '/'; });
   document.body.append(m); setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 };
@@ -974,6 +981,7 @@ function coilHint() {
 function hintValues() { return Object.fromEntries([...document.querySelectorAll('#hint [data-k]')].map(i => [i.dataset.k, i.dataset.str || i.tagName === 'SELECT' ? i.value : parseFloat(String(i.value).replace(',', '.'))])); }
 const rootOf = (id) => (model.bodyContaining(id) || {}).id || id;
 function setTool(name, arg) {
+  setTimeout(presenceSoon, 0);
   if (tool && tool.data && tool.data.prevLayout) views.layout = tool.data.prevLayout;   /* a face sketch maximised its view: put the layout back */
   views.sketchGrid = 0; views.sketchPane = null; snapCache = null; document.querySelectorAll('.menu.snapmenu').forEach(m => m.remove());
   tool = name ? { name, step: 0, data: {} } : null; views.connectorsFor = null; views.preview = null;
@@ -1634,17 +1642,196 @@ function demo() {
   select(null); views.fitAll(); toast('Demo: a welded steel bracket (two separate parts), an arrayed countersunk hole, mates and materials — Properties shows mass and balance', 3200);
 }
 
+/* ---------- shared editing: a room on this SketchFlow server ----------
+   Everyone in a room edits one model. Each change goes to the server as a diff (collab.js): accepted, merged with what
+   others did meanwhile when it touched different things, or refused — with the reasons — when it would overwrite them.
+   What you see is the room's model with your changes on their way on top. Undo undoes YOUR last change, and only while
+   nobody has changed the same thing since. Others' selections tint the views and mark the feature list. */
+const PEER_COLORS = ['#e8590c', '#2f9e44', '#1971c2', '#c2255c', '#6741d9', '#0c8599', '#e67700', '#5c940d'];
+const collab = { room: null, rev: 0, confirmed: null, shown: null, pending: [], inflight: false, mine: [], undone: [], peers: [], feed: [], online: false, applying: false, undoing: false, by: null, label: null, retry: 0, link: '' };
+collab.me = (() => { try { const m = JSON.parse(localStorage.getItem('sf3.me') || 'null'); if (m && m.id) return m; } catch (e) { /* storage blocked */ } const me = { id: 'u' + Math.random().toString(36).slice(2, 10), name: '', color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)] }; try { localStorage.setItem('sf3.me', JSON.stringify(me)); } catch (e) { /* storage blocked */ } return me; })();
+const collabReady = () => !!bridge.token && /^https?:$/.test(location.protocol);
+const meName = () => collab.me.name || 'Someone';
+const saveMe = () => { try { localStorage.setItem('sf3.me', JSON.stringify(collab.me)); } catch (e) { /* storage blocked */ } };
+async function cpost(act, body) {
+  const r = await fetch('/bridge/collab/' + act + '?t=' + encodeURIComponent(bridge.token), { method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': bridge.token }, body: JSON.stringify(Object.assign({ cid: bridge.cid }, body)) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'server ' + r.status); return j;
+}
+const clone = (x) => JSON.parse(JSON.stringify(x));
+/* what you see: the room's model + your changes on their way */
+function collabShow() {
+  let d = collab.confirmed; for (const b of collab.pending) d = applyDiff(d, b.diff);
+  collab.shown = clone(d);
+  if (!sameDoc(d, model.doc)) { collab.applying = true; try { model.replaceDoc(clone(d)); } finally { collab.applying = false; } }
+  paintPeers(); renderPeople();
+}
+/* a change you made (by any route: tools, Properties, the AI) becomes a batch on its way to the room */
+model.on(() => {
+  if (!collab.room || collab.applying) return;
+  const d = docDiff(collab.shown, model.doc); if (isEmpty(d)) return;
+  const label = collab.label || (model.undoStack.length ? model.undoStack[model.undoStack.length - 1].label : 'Edit');
+  const b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), label, by: collab.by ? `${collab.by} (via ${meName()})` : meName(), diff: d, before: collab.shown, after: clone(model.doc), undo: collab.undoing, sent: false };
+  collab.label = null; if (!collab.undoing && !collab.redoing) collab.undone = [];
+  collab.pending.push(b); collab.shown = b.after; pumpCollab(); renderPeople();
+});
+async function pumpCollab() {
+  if (!collab.room || collab.inflight || !collab.online) return;
+  const b = collab.pending.find(x => !x.sent); if (!b) return;
+  collab.inflight = true;
+  try {
+    const r = await cpost('commit', { room: collab.room, base: collab.rev, batch: { id: b.id, label: b.label, by: b.by, user: collab.me.id, session: bridge.cid, diff: b.diff } });
+    collab.retry = 0;
+    if (r.ok) { b.sent = true; if (r.duplicate && r.rev <= collab.rev) { collab.pending = collab.pending.filter(x => x !== b); } }
+    else if (r.conflict) refuse(b, r.conflict);
+    else if (r.stale) { collab.inflight = false; await collabCatchUp(true); return; }
+  } catch (e) {
+    collab.online = false; renderPeople();
+    setTimeout(() => { collab.online = true; collab.inflight = false; pumpCollab(); }, Math.min(8000, 500 * 2 ** collab.retry++));
+    return;
+  }
+  collab.inflight = false; renderPeople(); pumpCollab();
+}
+function refuse(b, why) {
+  collab.pending = collab.pending.filter(x => x !== b);
+  addFeed({ by: b.by, label: b.label, at: Date.now(), me: true, refused: why });
+  toastAct(`Your change “${b.label}” was not applied — ${why[0]}${why.length > 1 ? ` (+${why.length - 1} more)` : ''}. The model shows the room's version.`, [['Details', () => openPeople()]], 9000);
+  collabShow();
+}
+/* a change from the room (yours coming back, or someone else's) — in revision order */
+function takeBatch(b) {
+  collab.confirmed = applyDiff(collab.confirmed, b.diff); collab.rev = b.rev;
+  const k = collab.pending.findIndex(x => x.id === b.id);
+  if (k >= 0) { const m = collab.pending.splice(k, 1)[0]; if (!m.undo) { collab.mine.push(m); if (collab.mine.length > 100) collab.mine.shift(); } addFeed({ by: m.by, label: m.label, at: b.at, me: true, merged: b.merged }); }
+  else { addFeed({ by: b.by, label: b.label, at: b.at, merged: b.merged }); toast(`${b.by}: ${b.label}`, 1800); }
+}
+function onCollab(ev) {
+  if (!collab.room) return;
+  if (ev.type === 'presence') { collab.peers = (ev.users || []).filter(u => u.cid !== bridge.cid); paintPeers(); renderPeople(); renderProps(); return; }
+  if (ev.type === 'batch') { const b = ev.batch; if (b.rev <= collab.rev) return; if (b.rev > collab.rev + 1) { collabCatchUp(); return; } takeBatch(b); collabShow(); }
+}
+async function collabCatchUp(full) {
+  if (!collab.room) return;
+  try {
+    const r = await cpost('join', { room: collab.room, since: full ? undefined : collab.rev });
+    if (r.doc) { collab.confirmed = r.doc; collab.rev = r.rev; for (const b of collab.pending) b.sent = false; }
+    else for (const b of r.batches || []) if (b.rev === collab.rev + 1) takeBatch(b);
+    collab.peers = (r.users || []).filter(u => u.cid !== bridge.cid); collab.online = true;
+    collabShow(); sendPresence(); pumpCollab();
+  } catch (e) { collab.online = false; renderPeople(); toast('Shared room: ' + e.message, 4000); }
+}
+function collabConnected() {
+  const want = new URL(location.href).searchParams.get('room');
+  if (collab.room) { collabCatchUp(); return; }
+  if (want) joinRoom(want).catch(e => toast('Could not join the shared model: ' + e.message, 5000));
+}
+async function shareModel() {
+  if (!collabReady()) { toast('Shared editing needs SketchFlow running as a server: npm run serve (and SKETCHFLOW_LAN=1 for other computers)', 5000); return; }
+  const r = await cpost('create', { doc: model.doc, by: meName() }); await joinRoom(r.room, true);
+}
+async function joinRoom(room, own) {
+  const r = await cpost('join', { room });
+  if (!own) { try { if (model.doc.objects.length) localStorage.setItem('sf3.solo', JSON.stringify(model.doc)); } catch (e) { /* storage blocked */ } }
+  Object.assign(collab, { room, rev: r.rev, confirmed: r.doc, pending: [], mine: [], undone: [], feed: [], online: true, inflight: false });
+  collab.peers = (r.users || []).filter(u => u.cid !== bridge.cid);
+  const u = new URL(location.href); u.searchParams.set('room', room); history.replaceState(null, '', u); collab.link = u.href;
+  collabShow(); select(null); views.fitAll(); sendPresence();
+  toast(own ? 'Shared — copy the link from the Share panel and send it to the people you want to edit with' : `Joined the shared model “${model.doc.name}”${collab.peers.length ? ' with ' + collab.peers.map(p => p.name).join(', ') : ''}`, 3600);
+  openPeople();
+}
+function leaveRoom(keep) {
+  if (!collab.room) return; const room = collab.room;
+  cpost('leave', { room }).catch(() => { /* gone anyway */ });
+  collab.room = null; collab.peers = []; collab.pending = []; paintPeers();
+  const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u);
+  if (!keep) { try { const s = localStorage.getItem('sf3.solo'); if (s) model.load(JSON.parse(s)); } catch (e) { /* storage blocked */ } }
+  save(); renderPeople(); toast(keep ? 'Left the shared model — this copy is yours now' : 'Left the shared model', 2400);
+}
+const sendPresence = debounce(() => {
+  if (!collab.room || !collab.online) return;
+  const on = tool && tool.data && tool.data.on ? (tool.data.on.root || tool.data.on.id) : tool && tool.data && tool.data.only ? tool.data.only : null;
+  cpost('presence', { room: collab.room, user: { id: collab.me.id, name: meName(), color: collab.me.color }, sel: selected || null, tool: tool ? tool.name : null, on }).catch(() => { /* next heartbeat */ });
+}, 150);
+setInterval(() => { if (collab.room) sendPresence(); }, 15000);
+/* undo / redo YOUR changes only, and only while nobody has changed the same things since */
+function undoMine() {
+  const b = collab.mine[collab.mine.length - 1]; if (!b) { toast('Nothing of yours to undo in this shared model', 1800); return; }
+  const moved = changedSince(model.doc, b.after, b.diff);
+  if (moved.length) { toast(`Can't undo “${b.label}”: it has been changed since (${moved.slice(0, 3).join(', ')}) — undoing would overwrite that`, 5000); return; }
+  collab.mine.pop(); collab.undone.push(b); collab.label = 'Undo · ' + b.label; collab.undoing = true;
+  try { model.replaceDoc(applyDiff(model.doc, inverse(b.before, b.after, b.diff))); } finally { collab.undoing = false; }
+  toast('Undo · ' + b.label, 1200);
+}
+function redoMine() {
+  const b = collab.undone[collab.undone.length - 1]; if (!b) { toast('Nothing of yours to redo', 1500); return; }
+  const moved = changedSince(model.doc, b.before, b.diff);
+  if (moved.length) { toast(`Can't redo “${b.label}”: changed since (${moved.slice(0, 3).join(', ')})`, 5000); return; }
+  collab.undone.pop(); collab.label = 'Redo · ' + b.label; collab.redoing = true;
+  try { model.replaceDoc(applyDiff(model.doc, b.diff)); } finally { collab.redoing = false; }
+  toast('Redo · ' + b.label, 1200);
+}
+$('#peopleBtn').onclick = () => { const P = $('#people'); if (P.hidden) openPeople(); else P.hidden = true; };
+/* in a shared room, replacing the whole model changes it for everyone: ask first */
+function roomGuard(what, fn) {
+  if (!inRoom()) { fn(); return; }
+  hint(`${what} would replace the shared model for everyone in the room (${collab.peers.length + 1} here).`, [['Open it on my own (leave the room)', () => { hint(null); leaveRoom(false); fn(); }], ['Replace it for everyone', () => { hint(null); fn(); }]]);
+}
+function addFeed(e) { collab.feed.unshift(e); if (collab.feed.length > 40) collab.feed.pop(); }
+/* others' selections and edits: tinted in the views, marked in the feature list, named over Properties */
+const rgb = (h) => [0, 2, 4].map(k => parseInt(h.slice(1 + k, 3 + k), 16) / 255);
+function paintPeers() {
+  const tint = new Map();
+  for (const p of collab.room ? collab.peers : []) for (const id of [p.on, p.sel]) { if (!id || !model.get(id)) continue; const b = model.bodyContaining(id); if (b) tint.set(b.id, rgb(p.color)); }
+  views.peerTint = tint; views.draw();
+  document.querySelectorAll('#list .peerdot').forEach(x => x.remove());
+  for (const p of collab.room ? collab.peers : []) for (const id of new Set([p.on, p.sel].filter(Boolean))) {
+    const row = document.querySelector(`#list .row[data-id="${CSS.escape(id)}"]`); if (!row) continue;
+    row.append(el('span', { class: 'peerdot', style: `background:${p.color}`, title: `${p.name} ${p.on === id ? (p.tool ? 'is working on this (' + p.tool + ')' : 'is editing this') : 'has this selected'}` }, (p.name || '?').slice(0, 1).toUpperCase()));
+  }
+}
+function peersOn(id) { return collab.room ? collab.peers.filter(p => p.sel === id || p.on === id) : []; }
+/* the Share panel */
+function openPeople() { $('#people').hidden = false; renderPeople(); }
+function renderPeople() {
+  const btn = $('#peopleBtn'); if (btn) { btn.classList.toggle('pri', !!collab.room); btn.querySelector('span').textContent = collab.room ? `${collab.peers.length + 1} here${collab.pending.length ? ' · ' + collab.pending.length + '…' : ''}${collab.online ? '' : ' · offline'}` : 'Share'; }
+  const P = $('#people'); if (!P || P.hidden) return; P.innerHTML = '';
+  P.append(el('div', { class: 'phead' }, el('b', null, 'Shared editing'), el('span', { style: 'flex:1' }), el('button', { class: 'chain', title: 'Close', onclick: () => { P.hidden = true; } }, '×')));
+  if (!collabReady()) { P.append(el('div', { class: 'note' }, 'Shared editing needs SketchFlow running as a server: start it with npm run serve (or through Claude), then open the model from it. For other computers, start it with SKETCHFLOW_LAN=1; they open the link with the pairing code.')); return; }
+  const nm = el('input', { value: collab.me.name, placeholder: 'your name', maxlength: 40 }); nm.addEventListener('keydown', e => e.stopPropagation()); nm.addEventListener('change', () => { collab.me.name = nm.value.trim(); saveMe(); sendPresence(); renderPeople(); });
+  const sw = el('span', { class: 'swatches' }, ...PEER_COLORS.map(c => el('button', { class: 'sw' + (c === collab.me.color ? ' on' : ''), style: `background:${c}`, title: 'Your colour', onclick: () => { collab.me.color = c; saveMe(); sendPresence(); renderPeople(); } })));
+  P.append(el('div', { class: 'f' }, 'You', el('span', { class: 'pin' }, nm)), el('div', { class: 'f' }, 'Colour', sw));
+  if (!collab.room) {
+    P.append(el('div', { class: 'note' }, 'Everyone with the link edits this model live. Changes to different things merge; a change that would overwrite someone else\'s is refused with the reason, never applied over it. Undo undoes your own changes only.'),
+      el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: () => shareModel().catch(e => toast('Could not share: ' + e.message, 4000)) }, 'Share this model')));
+    return;
+  }
+  const link = el('input', { value: collab.link || location.href, readonly: true }); link.addEventListener('focus', () => link.select());
+  P.append(el('div', { class: 'f' }, 'Link', el('span', { class: 'pin' }, link, el('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(link.value); toast('Link copied', 1200); } catch (e) { link.select(); toast('Select the link and copy it', 1600); } } }, 'Copy'))));
+  P.append(el('div', { class: collab.online ? 'ok' : 'warnline' }, collab.online ? `Connected · revision ${collab.rev}${collab.pending.length ? ` · ${collab.pending.length} change${collab.pending.length > 1 ? 's' : ''} on the way` : ' · all saved'}` : 'Reconnecting… your changes are kept and will be sent'));
+  const doing = (p) => { const o = p.on && model.get(p.on), s2 = p.sel && model.get(p.sel); return p.tool && o ? `${p.tool} on ${o.name}` : p.tool ? `using ${p.tool}` : s2 ? `has ${s2.name} selected` : 'looking'; };
+  const ul = el('div', { class: 'plist' }, el('div', { class: 'prow' }, el('i', { style: `background:${collab.me.color}` }), el('b', null, meName() + ' (you)'), el('span', { class: 'note' }, selected && model.get(selected) ? `has ${model.get(selected).name} selected` : '')),
+    ...collab.peers.map(p => el('div', { class: 'prow' }, el('i', { style: `background:${p.color}` }), el('b', null, p.name), el('span', { class: 'note' }, doing(p)))));
+  P.append(ul);
+  P.append(el('div', { class: 'btns' }, el('button', { class: 'btn', disabled: collab.mine.length ? null : true, title: 'Undo your last change (others\' changes are left alone)', onclick: undoMine }, `Undo mine${collab.mine.length ? ' (' + collab.mine.length + ')' : ''}`), el('button', { class: 'btn', disabled: collab.undone.length ? null : true, onclick: redoMine }, 'Redo mine'),
+    el('span', { style: 'flex:1' }), el('button', { class: 'btn', title: 'Leave and keep this model as your own copy', onclick: () => leaveRoom(true) }, 'Leave · keep a copy')));
+  if (collab.feed.length) {
+    const t = (at) => new Date(at).toTimeString().slice(0, 5);
+    P.append(el('div', { class: 'mh' }, 'Activity'), el('div', { class: 'feed' }, ...collab.feed.slice(0, 20).map(e => el('div', { class: 'fe' + (e.refused ? ' bad' : '') }, el('span', { class: 'mono' }, t(e.at)), el('b', null, e.me ? 'You' + (e.by && /Claude/.test(e.by) ? ' (Claude)' : '') : e.by), el('span', null, e.label + (e.merged ? ' · merged' : '') + (e.refused ? ' — not applied: ' + e.refused[0] : ''))))));
+  }
+}
+
 /* ---------- AI bridge (MCP) ---------- */
 const bridge = { token: (document.querySelector('meta[name="sketchflow-bridge"]') || {}).content || '', cid: 'm' + Math.random().toString(36).slice(2, 9) };
 async function post(path, body) { const r = await fetch(path + '?t=' + encodeURIComponent(bridge.token), { method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': bridge.token }, body: JSON.stringify(body) }); if (!r.ok) throw new Error('bridge ' + r.status); return r.json().catch(() => ({})); }
 function chip(on, t) { const c = $('#aiChip'); c.classList.toggle('live', on); c.querySelector('span').textContent = t; }
 function connectBridge() {
   if (!bridge.token || !/^https?:$/.test(location.protocol)) { chip(false, 'AI off'); return; }
-  const es = new EventSource('/bridge/events?t=' + encodeURIComponent(bridge.token) + '&cid=' + bridge.cid + '&kind=model');
-  es.addEventListener('hello', () => chip(true, 'AI linked'));
+  const roomParam = collab.room || new URL(location.href).searchParams.get('room');   /* joining a shared room: say so, so this tab doesn't take the AI */
+  const es = new EventSource('/bridge/events?t=' + encodeURIComponent(bridge.token) + '&cid=' + bridge.cid + '&kind=model' + (roomParam ? '&room=' + encodeURIComponent(roomParam) : ''));
+  es.addEventListener('hello', (e) => { let d = {}; try { d = JSON.parse(e.data); } catch (err) { /* old server */ } chip(true, d.primary === false ? 'AI on other tab' : 'AI linked'); collabConnected(); });
+  es.addEventListener('collab', (e) => { try { onCollab(JSON.parse(e.data)); } catch (err) { console.error(err); } });
   es.addEventListener('role', (e) => { const d = JSON.parse(e.data); chip(true, d.primary ? 'AI linked' : 'AI on other tab'); });
-  es.addEventListener('cmd', async (e) => { const { id, cmd, args } = JSON.parse(e.data); try { await post('/bridge/reply', { id, ok: true, result: await runCmd(cmd, args || {}) }); } catch (err) { await post('/bridge/reply', { id, ok: false, error: String(err && err.message || err) }).catch(() => {}); } });
-  es.onerror = () => { chip(false, 'AI reconnecting'); es.close(); setTimeout(async () => { try { const h = await (await fetch(location.pathname, { cache: 'no-store' })).text(); const m = h.match(/name="sketchflow-bridge" content="([a-f0-9]+)"/); if (m) bridge.token = m[1]; } catch (err) { /* down */ } connectBridge(); }, 1500); };
+  es.addEventListener('cmd', async (e) => { const { id, cmd, args } = JSON.parse(e.data); collab.by = 'Claude'; try { const result = await runCmd(cmd, args || {}); collab.by = null; await post('/bridge/reply', { id, ok: true, result }); } catch (err) { await post('/bridge/reply', { id, ok: false, error: String(err && err.message || err) }).catch(() => {}); } });
+  es.onerror = () => { chip(false, 'AI reconnecting'); collab.by = null; if (collab.room) { collab.online = false; renderPeople(); } es.close(); setTimeout(async () => { try { const h = await (await fetch(location.pathname, { cache: 'no-store' })).text(); const m = h.match(/name="sketchflow-bridge" content="([a-f0-9]+)"/); if (m) bridge.token = m[1]; } catch (err) { /* down */ } connectBridge(); }, 1500); };
 }
 const b64 = async (canvas) => { const blob = await new Promise(r => canvas.toBlob(r, 'image/png')); const u = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const r3 = (p) => p.map(v => +v.toFixed(3));
@@ -1690,7 +1877,10 @@ async function runCmd(cmd, a) {
     case 'model.snapshot': return Object.assign(await snapshotFor(a), { model: model.describe() });
     case 'model.export': { const f = a.format || 'stl'; if (f === 'step') { const r = exportStep(model, { threads: a.threads || 'modelled', file: slug() + '.step' }); return { name: slug() + '.step', text: r.text, report: r.report }; } return { name: slug() + (f === 'stl' ? '.stl' : f === 'obj' ? '.obj' : f === 'bom' ? '-parts.csv' : f === 'svg' ? '-drawing.svg' : f === 'dxf' ? '-drawing.dxf' : '.sf3d.json'), text: f === 'stl' ? exportSTL() : f === 'obj' ? exportOBJ() : f === 'bom' ? bomCSV() : f === 'svg' ? drawingSVG(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : f === 'dxf' ? drawingDXF(model, { sheet: a.sheet || 'A3', exploded: a.exploded !== false }) : JSON.stringify(model.doc, null, 1) }; }
     case 'model.select': select(a.id || null); return { selected };
-    case 'model.undo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
+    case 'model.share': { if (!collab.room) await shareModel(); return { room: collab.room, link: collab.link || location.href, people: [meName(), ...collab.peers.map(p => p.name)], revision: collab.rev }; }
+    case 'model.room': return collab.room ? { room: collab.room, link: collab.link || location.href, revision: collab.rev, online: collab.online, people: [{ name: meName(), you: true }, ...collab.peers.map(p => ({ name: p.name, selected: p.sel && model.get(p.sel) ? model.get(p.sel).name : null, working_on: p.on && model.get(p.on) ? model.get(p.on).name : null, tool: p.tool }))], waiting: collab.pending.length, recent: collab.feed.slice(0, 10).map(e => ({ by: e.me ? 'you' : e.by, label: e.label, merged: e.merged || undefined, refused: e.refused || undefined })) } : { room: null, note: 'Not shared. model_session action:"share" shares it.' };
+    case 'model.undo': { if (inRoom()) { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const b = collab.mine[collab.mine.length - 1]; if (!b) break; undoMine(); if (collab.mine.includes(b)) break; done.push(b.label); } return { undone: done, note: 'In a shared model undo undoes your own changes only', model: model.describe() }; }
+      const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.undo(); if (!l) break; done.push(l); } return { undone: done, model: model.describe() }; }
     case 'model.redo': { const n = Math.max(1, a.steps || 1), done = []; for (let i = 0; i < n; i++) { const l = model.redo(); if (!l) break; done.push(l); } return { redone: done, model: model.describe() }; }
     case 'model.example': { if (!a.id) return { examples: EXAMPLES.map(e => ({ id: e.id, name: e.name, about: e.blurb })) }; loadExample(a.id); return { model: model.describe() }; }
     case 'model.new': model.load(newDoc(a.name || 'Untitled model')); select(null); views.fitAll(); return { model: model.describe() };
@@ -1793,7 +1983,7 @@ async function runCmd(cmd, a) {
   }
   throw new Error('Unknown command ' + cmd);
 }
-window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, startFaceSketch, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear };
+window.SF3 = { model, views, apply: (ops) => model.apply(ops), select, setTool, startFaceSketch, demo, exportSTL, exportOBJ, runCmd, bomCSV, patternHint, openAddonForm, seamNear, collab, shareModel, joinRoom, undoMine, redoMine, leaveRoom };
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 /* the 2D board link only makes sense when both are served by the SketchFlow server */
 if (!bridge.token || !/^https?:$/.test(location.protocol)) { const a = document.querySelector('a[href="/"]'); if (a) a.remove(); }

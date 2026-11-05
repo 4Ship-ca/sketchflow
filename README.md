@@ -88,7 +88,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 | `model_build` | add / set / mate / boolean / edge / extrude / loft / revolve / sweep / delete / origin / ground / fix / cleanup / dim, as one atomic batch; `look:true` returns a picture |
 | `model_describe` | parameters, positions from the origin, mates, connector names (with positions and normals on request), volumes, warnings |
 | `model_view` | a picture of the four views or one view, from any direction |
-| `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say |
+| `model_session` | undo, redo, new, demo, example (the bundled pump housing), load a `.sf3d.json`, select, say, **share** (a link for live editing together), **room** (who's in it and what they're doing) |
 | `model_mass` | mass, centre of gravity and inertia per part and for the assembly, whether it stands, and the parts list |
 | `model_addon` | list add-ons, or run one: e.g. `gears/advise` (module, teeth and form for a ratio and a process) or `gears/pair` |
 | `model_import` | an STL, OBJ or STEP file from disk as mesh parts (STEP: planar faces, each solid kept in place) |
@@ -182,6 +182,14 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
   - It is **vetted before it is saved**: SketchFlow reads the file back and checks it is a closed, consistently oriented solid whose volume, surface area and size match the model. The toast says what passed. Any hairline gaps a boolean left are closed and listed.
   - With threaded parts you choose **plain threads** (cosmetic, as CAD systems exchange them; about 6× smaller) or **modelled** threads.
 - File → *Save version…* / *Versions…*; *Import STL / OBJ / STEP…* (STEP with planar faces, such as SketchFlow's own; curved CAD surfaces aren't read); *Preview drawing* / *Export drawing (SVG, DXF)*: an A4/A3/A2 sheet with TOP / FRONT / RIGHT + isometric, hidden lines, dimensions, parts list and title block. With two or more parts the isometric becomes an **exploded isometric with numbered balloons** tied to the parts list (repeated parts are one item, with their quantity). *Exploded* in the preview bar turns it off.
+- **Share** (toolbar) opens **shared editing**. Everyone with the link edits one model live, through the SketchFlow server.
+  - **Safe by design.** A change travels as a diff down to single parameters, so two people changing different sizes of one part both keep their change. A change that would overwrite someone else's is **refused, with the reason**, and never applied over it. The reasons are: the same field, two reorders at once, or a part someone else deleted or relies on.
+  - **Undo is yours alone.** It undoes your own last change, and only while nobody has changed the same things since. It never touches anyone else's work.
+  - **You can see each other.** The panel lists who's here and what each person has selected or is working on. Their parts are tinted in their colour in the views and marked in the feature list. Properties says when someone else is on the part you're editing. This is a soft lock: you can still edit, and a real clash is refused.
+  - **Activity** shows every change, who made it, and whether it was merged or refused. Edits Claude makes over MCP appear as "Claude (via *you*)", and the AI stays with the person who runs it, even when others join.
+  - **Offline-safe.** If the connection drops, your changes wait and are sent on reconnect, checked like any other. Rooms are saved on the server, so a restart loses nothing.
+  - File → New, Open or Example while shared asks first, because it would replace the model for everyone. *Leave · keep a copy* keeps the model as your own.
+  - Other computers: start the server with `SKETCHFLOW_LAN=1` and send them the link with the pairing code (`?k=…`).
 - **View ▾** holds:
   - layouts: all four views, or one view;
   - fit, zoom in and out;
@@ -348,11 +356,11 @@ These build on the same joint model:
 - slider and prismatic joints, gears and springs in the motion solver
 - the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP with exact curved surfaces (cylinders, cones) and import of curved CAD files, multi-user editing
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP with exact curved surfaces (cylinders, cones) and import of curved CAD files, branches for shared models, live cursors
 
 ## Tests
 
 ```bash
-npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference, STEP
+npm test                                                            # 3D kernel, model (incl. the pump housing example), gears, add-ons, collisions, the MCP op reference, STEP, shared editing
 node build.mjs                                                      # rebuild dist/
 ```
