@@ -29,15 +29,18 @@ A flanged pump housing with a screw-on cap. Claude built it in one session using
 
 ### What Claude checked, and the answers
 
+The figures are for the current release. Spline ends now meet a line as a true corner unless they set off within 45° of it, and that slightly changes the gussets: the first MCP session measured 600.6 g and 1097.8 mm² with the earlier rule.
+
+
 | Call | Result |
 |---|---|
 | `model_describe` | flange sketch `{"dof": 0, "ok": true}`, no warnings |
 | `model_query {what:"bbox"}` | 140 × 90 × 97 overall: the screw tips stand 16.4 mm below the flange, and the embossed text on the cap reaches z = 80.6. The housing alone is 76 mm tall |
 | `model_query {what:"measure", from: flange.start, to: lid.top}` | 80 mm, faces antiparallel (180°) |
-| `model_query {what:"section", axis:"z", offset:40}` | 1097.8 mm² of material through the housing wall and gussets |
+| `model_query {what:"section", axis:"z", offset:40}` | 1082.3 mm² of material through the housing wall and gussets |
 | `model_check` | `{"overlaps": []}`. The cap's thread and the neck's mesh with 0.1 mm clearance; the screws clear their counterbores |
 | `model_check {motion: cap 0→720°}` | `{"first_contact": null, "clear": true}`: two full turns of the cap without a touch |
-| `model_mass` | flange (aluminium 6061) 531.41 g, cap (PETG) 41.07 g, 4 × M6 screws (304) 7.03 g each; **600.6 g** in total |
+| `model_mass` | flange (aluminium 6061) 528.56 g, cap (PETG) 41.07 g, 4 × M6 screws (304) 7.03 g each; **597.75 g** in total |
 | `model_view` ×4 | isometric; cap screwed open (540°); a Y section; all four views |
 | `model_export` | `.sf3d.json`, STL, drawing sheet SVG + DXF (exploded isometric with balloons), parts list CSV |
 
@@ -45,4 +48,4 @@ A flanged pump housing with a screw-on cap. Claude built it in one session using
 
 ![Section through the housing and the threaded neck](pump-housing-section.png)
 
-The same checks run in `npm test` (model suite). The example must rebuild with no warnings and a fully defined sketch, weigh 600.6 g, and show no interference. One turn of the cap must lift it exactly 3 mm, still clear of the neck.
+The same checks run in `npm test` (model suite). The example must rebuild with no warnings and a fully defined sketch, weigh 597.75 g, and show no interference. One turn of the cap must lift it exactly 3 mm, still clear of the neck.

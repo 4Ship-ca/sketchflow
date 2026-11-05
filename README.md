@@ -105,7 +105,7 @@ Ask: *"open the 3D model and make a flange: Ø80 × 8 disc, Ø36 neck 30 tall, �
 - a threaded neck with a knurled screw cap on a **screw joint**, with "TURN TO OPEN" embossed on an arc;
 - four stainless M6 socket screws.
 
-The checks Claude ran: no interference; a motion sweep of two turns of the cap with no contact; section areas; a measured 80 mm from the flange underside to the cap top; mass 600.6 g; drawing and parts-list exports.
+The checks Claude ran: no interference; a motion sweep of two turns of the cap with no contact; section areas; a measured 80 mm from the flange underside to the cap top; mass 597.75 g; drawing and parts-list exports.
 
 **In the browser:**
 - Add a shape with the toolbar: Box, Wedge, Cylinder, Cone, Sphere, Strip (a fillet strip). If a part is selected, the new shape lands on top of it, and Properties → **Combine** joins it, cuts it or keeps the overlap.
@@ -125,6 +125,8 @@ The checks Claude ran: no interference; a motion sweep of two turns of the cap w
     - Arcs are real sketch arcs, not short segments: give them an **R dimension**, make two **tangent** or **concentric**, set radii **equal**, or turn any segment into an arc (⌒ in Properties → Sketch).
     - A spline is a smooth curve through the points you click. It leaves the last segment tangent and blends into the next one. Switch back to Line or Arc, or close the shape, to end it. One spline is one smooth face on the solid.
     - In Properties → Sketch, **∿** turns any line into a spline, and a spline's fit points can be moved, added or removed. When dimensions move a spline's ends, its fit points go with them, so the curve keeps its shape.
+    - **Pin** a fit point so it stays put, or dimension its x or y (formulas work too).
+    - Each end is *auto*, *tangent*, *corner* or a set *angle*. Auto means tangent if the spline already sets off within 45° of the line, arc or other spline it meets, and a corner otherwise. Tangent is exact, and two splines meeting at a point share one tangent.
   - **Shapes:** Rectangle, Circle, Slot, Polygon.
   - **Snap ▾:** grid on or off, with a step of 0.5–25 mm; points, corners and centres; edge midpoints; horizontal / vertical only; 15° angles. A green marker shows what you snapped to, with the length so far.
   - **Undo point**, **Close shape**, **Cancel**.
@@ -346,7 +348,7 @@ These build on the same joint model:
 - slider and prismatic joints, gears and springs in the motion solver
 - the 3D profile sketcher's geometric constraints (parallel, perpendicular, equal length) on the 2D board too
 - sending a 2D board sketch to the 3D workspace as a profile, and projecting 3D views back onto the board
-- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP with exact curved surfaces (cylinders, cones) and import of curved CAD files, constraints on spline fit points, multi-user editing
+- 3D: see "What is not there yet" in [model/ARCHITECTURE.md](model/ARCHITECTURE.md): STEP with exact curved surfaces (cylinders, cones) and import of curved CAD files, multi-user editing
 
 ## Tests
 

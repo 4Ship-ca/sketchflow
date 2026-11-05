@@ -137,8 +137,11 @@ export function solidToBrep(solid, opts = {}) {
         while (guard++ < 10000) { const out = excess.get(cur); if (!out || !out.length) break; const nx = out.pop(); if (nx === start) { ok = true; break; } cyc.push(nx); cur = nx; }
         if (!ok || cyc.length < 2) { repairs.holesLeft++; continue; }
         let c = [0, 0, 0]; for (const v of cyc) c = V.add(c, P[v]); c = V.mul(c, 1 / cyc.length);
+        /* small (at most holeMax across) or a sliver (mean width 2 × area / perimeter at most sliverMax): a boolean's leftover */
         const size = Math.max(...cyc.map(v => V.len(V.sub(P[v], c)))) * 2;
-        if (size > holeMax) { repairs.holesLeft++; continue; }
+        let va = [0, 0, 0], per = 0; for (let k = 0; k < cyc.length; k++) { const a = P[cyc[k]], b = P[cyc[(k + 1) % cyc.length]]; va = V.add(va, V.cross(V.sub(a, c), V.sub(b, c))); per += V.len(V.sub(b, a)); }
+        const width = per > 0 ? V.len(va) / per : 0;
+        if (size > holeMax && !(width <= (opts.sliverMax || 0.05) && size <= holeMax * 10)) { repairs.holesLeft++; continue; }
         const ci = P.length; P.push(c);
         for (let i = 0; i < cyc.length; i++) { const a = cyc[i], b = cyc[(i + 1) % cyc.length]; F.push({ ring: [b, a, ci], n: null, w: 0 }); repairs.fillArea += V.len(V.cross(V.sub(P[a], c), V.sub(P[b], c))) / 2; }
         repairs.holesFilled++;

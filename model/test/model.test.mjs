@@ -4,6 +4,7 @@ import { layoutSheet, drawingSVG, drawingDXF } from '../js/drawing.js';
 import { textSolid, layoutText } from '../js/text.js';
 import * as K0 from '../js/kernel.js';
 import { EXAMPLES, exampleDoc } from '../js/examples.js';
+import { expandArcs as expandArcs_t, splineCurve as splineCurve_t } from '../js/sketch.js';
 import { interference } from '../js/collide.js';
 const { V, M4 } = K0;
 let pass = 0, fail = 0;
@@ -509,11 +510,39 @@ Dt_t.apply([{ op: 'wrap', target: 'k', at: [0, -12.5, 20], normal: [0, -0.8, 0.6
 ok('text engraved onto a cone (projected)', Dt_t.result.bodies[0].solid.volume() < dtV_t - 5 && !Dt_t.result.errors.size, dtV_t - Dt_t.result.bodies[0].solid.volume());
 let off_t = ''; try { new Model().apply([{ op: 'add', type: 'sphere', id: 'b', params: { diameter: 20 } }, { op: 'wrap', target: 'b', at: [0, -10, 10], normal: [0, -1, 0], profile: [[-30, -2], [30, -2], [30, 2], [-30, 2]], depth: 1 }]); } catch (e) { off_t = e.message; }
 ok('a sketch bigger than the face it is projected onto is refused, saying why', /runs off the surface/.test(off_t), off_t);
+/* spline ends: exactly tangent (to a line, an arc, another spline), a corner, or a set angle */
+const angAt_t = (pts, at, dir) => { const k = pts.findIndex(p => Math.abs(p[0] - at[0]) < 1e-9 && Math.abs(p[1] - at[1]) < 1e-9), q = dir > 0 ? pts[k + 1] : pts[k - 1]; return Math.atan2(dir > 0 ? q[1] - at[1] : at[1] - q[1], dir > 0 ? q[0] - at[0] : at[0] - q[0]) * 180 / Math.PI; };
+const fin_t = [[0, 0], [40, 0], [40, 10], [0, 30]], fine_t = { splineSteps: 2000 };
+const tg_t = expandArcs_t(fin_t, [], Object.assign({ splines: [{ i: 2, pts: [[35, 22], [15, 29]], start: 'tangent', end: 'tangent' }] }, fine_t)).pts;
+ok('a tangent spline leaves a line along it and arrives along the next one', Math.abs(angAt_t(tg_t, [40, 10], 1) - 90) < 0.1 && Math.abs(angAt_t(tg_t, [0, 30], -1) + 90) < 0.1, [angAt_t(tg_t, [40, 10], 1), angAt_t(tg_t, [0, 30], -1)]);
+const au_t = expandArcs_t(fin_t, [], Object.assign({ splines: [{ i: 2, pts: [[39, 20], [15, 29]] }] }, fine_t)).pts, co_t = expandArcs_t(fin_t, [], Object.assign({ splines: [{ i: 2, pts: [[25, 12], [12, 22]] }] }, fine_t)).pts;
+ok('auto: tangent when it sets off near the line\'s direction, a corner when it turns away', Math.abs(angAt_t(au_t, [40, 10], 1) - 90) < 0.1 && Math.abs(angAt_t(co_t, [40, 10], 1) - 90) > 30, [angAt_t(au_t, [40, 10], 1), angAt_t(co_t, [40, 10], 1)]);
+const an_t = expandArcs_t(fin_t, [], Object.assign({ splines: [{ i: 2, pts: [[25, 22]], start: 135 }] }, fine_t)).pts;
+ok('a set angle: it leaves at that direction', Math.abs(angAt_t(an_t, [40, 10], 1) - 135) < 0.1, angAt_t(an_t, [40, 10], 1));
+const ss_t = expandArcs_t([[0, 0], [40, 0], [40, 20], [20, 30], [0, 20]], [], Object.assign({ splines: [{ i: 2, pts: [[34, 28]] }, { i: 3, pts: [[8, 27]] }] }, fine_t)).pts;
+ok('two splines meeting at a corner share one tangent there (smooth)', Math.abs(angAt_t(ss_t, [20, 30], -1) - angAt_t(ss_t, [20, 30], 1)) < 0.1, [angAt_t(ss_t, [20, 30], -1), angAt_t(ss_t, [20, 30], 1)]);
+const ar_t = expandArcs_t([[0, 0], [40, 0], [40, 20], [0, 20]], [{ i: 0, c: [20, 20], ccw: true }], Object.assign({ splines: [{ i: 1, pts: [[45, 12]], start: 'tangent' }] }, fine_t)).pts;
+/* the arc round (20, 20) reaches (40, 0) heading at 45° (its chords are 6° steps, so measure against the exact tangent) */
+ok('…and a spline after an arc carries on along the arc\'s exact tangent', Math.abs(angAt_t(ar_t, [40, 0], 1) - 45) < 0.1, angAt_t(ar_t, [40, 0], 1));
+/* fit-point constraints: pinned points stay, dimensioned coordinates follow their value (or formula) */
+const Fp_t = new Model();
+Fp_t.apply([{ op: 'var', name: 'rise', value: 24 }, { op: 'extrude', id: 'g', profile: [[0, 0], [40, 0], [40, 10], [0, 30]], splines: [{ i: 2, pts: [[25, 12], [12, 22]] }], length: 5, fixed: true, constraints: [{ type: 'fix', i: 0, at: [0, 0] }, { type: 'h', i: 0 }, { type: 'v', i: 1 }, { type: 'v', i: 3 }] }]);
+Fp_t.apply([{ op: 'constrain', id: 'g', type: 'fitfix', i: 2, k: 0 }, { op: 'constrain', id: 'g', type: 'fity', i: 2, k: 1, value: '=#rise + 1' }]);
+Fp_t.apply([{ op: 'constrain', id: 'g', type: 'length', i: 0, value: 80 }]);
+const fpP_t = Fp_t.get('g').params.splines[0].pts;
+ok('a pinned fit point stays put when a dimension moves the spline\'s ends', near(fpP_t[0][0], 25) && near(fpP_t[0][1], 12), fpP_t);
+ok('…a dimensioned coordinate follows its formula, the other one moves with the spline', near(fpP_t[1][1], 25) && !near(fpP_t[1][0], 12), fpP_t[1]);
+Fp_t.apply([{ op: 'var', name: 'rise', value: 30 }]);
+ok('…and follows the variable when it changes', near(Fp_t.get('g').params.splines[0].pts[1][1], 31));
+const fpS_t = Fp_t.describe().objects.find(o => o.id === 'g').sketch.spline_fit;
+ok('the sketch reports how many fit-point coordinates are held', fpS_t && fpS_t.coordinates === 4 && fpS_t.held === 3 && fpS_t.carried === 1, fpS_t);
+let fpBad_t = ''; try { Fp_t.apply([{ op: 'constrain', id: 'g', type: 'fitfix', i: 1, k: 0 }]); } catch (e) { fpBad_t = e.message; }
+ok('a fit-point constraint on a segment that is not a spline is refused', /not a spline/.test(fpBad_t), fpBad_t);
 /* the bundled pump housing (built over MCP) still rebuilds: constrained flange, threads, wrap, screw joint */
 const Ex_t = new Model(); Ex_t.load(exampleDoc('pump-housing'));
 const exFl_t = Ex_t.describe().objects.find(o => o.id === 'flange').sketch, exMass_t = massReport(Ex_t.doc, Ex_t.result);
 ok('the pump housing example rebuilds with no warnings and a fully defined flange sketch', EXAMPLES.length >= 1 && !Ex_t.result.warnings.length && exFl_t.ok && exFl_t.dof === 0, { warnings: Ex_t.result.warnings, dof: exFl_t.dof });
-ok('its parts: housing, cap and four socket screws (≈ 600 g)', Ex_t.result.bodies.length === 6 && near(exMass_t.total_mass_g, 600.6, 0.01), exMass_t.total_mass_g);
+ok('its parts: housing, cap and four socket screws (597.75 g)', Ex_t.result.bodies.length === 6 && near(exMass_t.total_mass_g, 597.75, 1e-5), exMass_t.total_mass_g);
 ok('nothing in it interferes (cap threads on the neck, screws in their counterbores)', interference(Ex_t).length === 0);
 const capZ_t = () => Ex_t.result.bodies.find(b => b.id === 'cap').solid.bbox().max[2], cz0_t = capZ_t();
 Ex_t.apply([{ op: 'drive', id: 'cap', key: 'angle', value: 360 }]);

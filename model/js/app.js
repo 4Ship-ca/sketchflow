@@ -25,6 +25,7 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  pin: 'M9 3h6l-1 6 3 3H7l3-3zM12 12v9',
   wrap: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3zM9 10h6M12 10v6',
   drape: 'M3 17c3-9 15-9 18 0M9 9l1 4h4l1-4M12 3v4',
   split: 'M3 21L21 3M6 9V6h3M18 15v3h-3M4 14l6 6M14 4l6 6',
@@ -411,6 +412,7 @@ function sketchSection(o, sec) {
   const nseg = open ? n - 1 : n, arcOf = (i) => arcs.find(a => a.i === i), splines = q.splines || [], splOf = (i) => splines.find(z => z.i === i);
   const s = sec('Sketch'), add = (c) => { try { apply([Object.assign({ op: 'constrain', id: o.id }, c)]); } catch (e) { /* toast */ } };
   const status = !cons.length ? ['note', 'No constraints: the profile is exactly as drawn.'] : st && !st.ok ? ['warnline', 'Conflict — remove one of the highlighted constraints'] : st && st.dof === 0 ? ['ok', 'Fully defined'] : ['note', `${st ? st.dof : '?'} degree${st && st.dof === 1 ? '' : 's'} of freedom left (it keeps the drawn shape there)`];
+  if (st && st.fit && st.fit.coordinates) status[1] += ` · spline fit points: ${st.fit.held} of ${st.fit.coordinates} coordinates held${st.fit.carried ? ` (the rest move with their spline's ends)` : ''}`;
   s.append(el('div', { class: status[0] }, status[1]));
   /* turn a line into a gentle arc bulging outward, or an arc back into a line */
   const ccwPoly = K.area2(P) > 0;
@@ -432,14 +434,29 @@ function sketchSection(o, sec) {
   for (let i = 0; i < nseg; i++) {
     const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), spl = splOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
     if (spl) {
-      const setPts = (pts, label) => apply([{ op: 'set', id: o.id, params: { splines: splines.map(z => z.i === i ? { i, pts } : z) } }], label);
-      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))),
+      /* a spline: its fit points (move, pin, add, remove) and how each end meets its neighbour */
+      const fitCons = cons.map((c, idx) => [c, idx]).filter(([c]) => SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i);
+      const setSpl = (patch, label, consNext) => apply([{ op: 'set', id: o.id, params: Object.assign({ splines: splines.map(z => z.i === i ? Object.assign({}, z, patch) : z) }, consNext ? { constraints: consNext } : {}) }], label);
+      const setPts = (pts, label, consNext) => setSpl({ pts }, label, consNext);
+      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'),
+        el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i), constraints: cons.filter(c => !(SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i)) } }], `Segment ${i + 1} → line`) }, '∿'))),
         el('td', null, el('button', { class: 'btn', title: 'Add a fit point halfway between the last one and the end of the segment', onclick: () => { const last = spl.pts[spl.pts.length - 1], e = b; setPts(spl.pts.concat([[Math.round((last[0] + e[0]) * 500) / 1000, Math.round((last[1] + e[1]) * 500) / 1000]]), `Spline ${i + 1}: add a point`); } }, '+ point'))));
       spl.pts.forEach((pt, k) => {
-        const upd = (c, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][c] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`); };
+        const pin = fitCons.find(([c]) => c.type === 'fitfix' && c.k === k);
+        const upd = (cc, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][cc] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`, pin ? cons.map((c, idx) => idx === pin[1] ? Object.assign({}, c, { at: pts[k].slice() }) : c) : null); };
+        const drop = () => { const pts = spl.pts.filter((_, kk) => kk !== k), nc = cons.filter(c => !(SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i && c.k === k)).map(c => (SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i && c.k > k) ? Object.assign({}, c, { k: c.k - 1 }) : c); setPts(pts, `Spline ${i + 1}: remove a point`, nc); };
         tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, `point ${k + 1}`), el('span', { class: 'note' }, 'x'), numInput(pt[0], v => upd(0, v)), el('span', { class: 'note' }, 'y'), numInput(pt[1], v => upd(1, v)),
-          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: () => setPts(spl.pts.filter((_, kk) => kk !== k), `Spline ${i + 1}: remove a point`) }, '×') : null))));
+          el('button', { class: 'chain' + (pin ? ' on' : ''), title: pin ? 'Pinned: it stays here when the sketch\'s dimensions change — click to let it move with its spline' : 'Pin this fit point where it is (otherwise it moves with its spline when the ends move)', onclick: () => pin ? apply([{ op: 'unconstrain', id: o.id, index: pin[1] }], `Unpin spline ${i + 1} point ${k + 1}`) : add({ type: 'fitfix', i, k }) }, icon('pin')),
+          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: drop }, '×') : null))));
       });
+      const endSel = (key, label) => {
+        const v = spl[key], mode = typeof v === 'number' ? 'angle' : (v || 'auto'), sel = el('select', null, ...[['auto', 'auto'], ['tangent', 'tangent'], ['corner', 'corner'], ['angle', 'angle °']].map(([val, t]) => el('option', { value: val, selected: mode === val }, t)));
+        sel.title = 'auto: tangent when the spline already sets off within 45° of what it meets, a corner otherwise · tangent: smooth into the line, arc or spline there · corner: free · angle: leaves at that direction (° from x)';
+        sel.onchange = () => setSpl({ [key]: sel.value === 'angle' ? 0 : sel.value === 'auto' ? undefined : sel.value }, `Spline ${i + 1} ${label}: ${sel.value}`);
+        const parts = [el('span', { class: 'note' }, label), sel]; if (mode === 'angle') parts.push(numInput(v, val => setSpl({ [key]: val }, `Spline ${i + 1} ${label} ${val}°`)));
+        return el('span', { class: 'pin fit' }, ...parts);
+      };
+      tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, endSel('start', 'start'), endSel('end', 'end'))));
       continue;
     }
     if (arc) {

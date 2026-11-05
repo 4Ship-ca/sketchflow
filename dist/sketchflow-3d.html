@@ -93,7 +93,7 @@ table.cfg input:not([type=radio]){width:64px;background:var(--panel-2);color:var
 .sheetov{position:fixed;inset:0;background:#0008;z-index:40;display:grid;place-items:center;padding:20px}
 .sheetbox{background:var(--panel);border-radius:12px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0007}
 .sheetbar{display:flex;gap:8px;align-items:center;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)} .sheetimg{overflow:auto;background:#fff} .sheetimg img{display:block;width:min(1400px,92vw);height:auto}
-table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:44px} table.cfg.loft th{font-size:9px} table.sk tr.sub td{padding-top:0} table.sk td>.pin{flex-wrap:nowrap;gap:2px} table.sk td>.pin>.chain{width:22px;height:22px} table.sk .pin.fit{gap:4px} table.sk .pin.fit input:not([type=radio]){flex:none;width:50px} table.sk .pin.fit .note:first-child{min-width:42px} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
+table.sk td{vertical-align:middle} table.cfg.loft input:not([type=radio]){width:44px} table.cfg.loft th{font-size:9px} table.sk tr.sub td{padding-top:0} table.sk td>.pin{flex-wrap:nowrap;gap:2px} table.sk td>.pin>.chain{width:22px;height:22px} table.sk .pin.fit{gap:4px} table.sk .pin.fit input:not([type=radio]){flex:none;width:44px} table.sk .pin.fit .note:first-child{min-width:42px} table.sk tr.bad td,.f.bad{background:color-mix(in srgb, var(--warn) 16%, transparent)} .relrow{display:flex;gap:4px;align-items:center;flex-wrap:wrap} .relrow select{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:500 12px var(--f-ui)}
 #check{position:absolute;right:12px;top:64px;width:min(360px,calc(100% - 24px));max-height:60%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px #0000003a;z-index:7;display:flex;flex-direction:column;gap:6px}
 #check .mhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap} #check .mhead b{font:700 13px var(--f-brand)}
 #check .clash{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:7px 9px;cursor:pointer;font:600 12px var(--f-ui);color:var(--ink);text-align:left} #check .clash:hover{border-color:#ff3b3b}
@@ -1344,7 +1344,9 @@ const KINDS = {
   equal: { label: 'Equal', args: 2 }, parallel: { label: 'Parallel', args: 2 }, perpendicular: { label: 'Perpendicular', args: 2 },
   angle: { label: 'Angle', args: 2, value: true }, radius: { label: 'Radius', args: 1, value: true, arc: true },
   tangent: { label: 'Tangent', args: 2 }, concentric: { label: 'Concentric', args: 2, arc: true },
-  fix: { label: 'Fix point', args: 1, point: true }, fixx: { label: 'Point x', args: 1, point: true, value: true }, fixy: { label: 'Point y', args: 1, point: true, value: true }
+  fix: { label: 'Fix point', args: 1, point: true }, fixx: { label: 'Point x', args: 1, point: true, value: true }, fixy: { label: 'Point y', args: 1, point: true, value: true },
+  /* on a spline's fit points (i = the spline's segment, k = which fit point): applied after the solve, over the carried shape */
+  fitfix: { label: 'Fix fit point', args: 1, point: true, fit: true }, fitx: { label: 'Fit point x', args: 1, point: true, fit: true, value: true }, fity: { label: 'Fit point y', args: 1, point: true, fit: true, value: true }
 };
 const TAU = 2 * Math.PI, normA = (t) => ((t % TAU) + TAU) % TAU;
 
@@ -1416,6 +1418,7 @@ function arcIndex(arcs, n, open) {
   return at;
 }
 function solveSketch(points, cons, params = {}, arcs = [], opts = {}) {
+  cons = (cons || []).filter(c => !(KINDS[c.type] && KINDS[c.type].fit));   /* fit-point constraints are applied by the model after the solve */
   const n = points.length, m = (arcs || []).length;
   if (n < 2 || ((!cons || !cons.length) && !m)) return { points, arcs: arcs || [], ok: true, dof: 2 * n + m, residual: 0, conflicts: [] };
   const arcAt = arcIndex(arcs, n, opts.open);
@@ -1485,9 +1488,32 @@ function expandArcs(points, arcs, opts = {}) {
     if (open && i === n - 1) break;
     const sp = spl.get(i);
     if (sp) {
-      /* a spline: through its fit points, smooth; its ends lean on the neighbouring points so it blends in */
-      const prev = open && i === 0 ? null : points[(i - 1 + n) % n], next = open && i + 1 === n - 1 ? null : points[(i + 2) % n];
-      const curve = splinePoints([points[i], ...sp.pts, points[(i + 1) % n]], prev && !spl.has((i - 1 + n) % n) && !by.has((i - 1 + n) % n) ? prev : null, next && !spl.has((i + 1) % n) && !by.has((i + 1) % n) ? next : null, opts.splineSteps || 10);
+      /* a spline through its fit points; at each end tangent to what it meets (a line, an arc, or another spline — then
+         both share one tangent), free, or at a set angle (°) */
+      const A = points[i], B = points[(i + 1) % n], fit = sp.pts || [];
+      /* auto (the default): tangent when the spline already sets off within 45° of what it meets (a blend was meant),
+         a corner otherwise (a gusset's curve meeting its leg) */
+      const endDir = (mode, at, inward) => {
+        if (mode === 'free' || mode === 'corner') return null;
+        if (typeof mode === 'number' && isFinite(mode)) return [Math.cos(mode * Math.PI / 180), Math.sin(mode * Math.PI / 180)];
+        const d = inward ? dirIn(i, fit) : dirOut(i, fit); if (!d || mode === 'tangent') return d;
+        const q = inward ? (fit.length ? fit[0] : B) : (fit.length ? fit[fit.length - 1] : A), c = inward ? [q[0] - at[0], q[1] - at[1]] : [at[0] - q[0], at[1] - q[1]];
+        const cos = (d[0] * c[0] + d[1] * c[1]) / ((Math.hypot(d[0], d[1]) * Math.hypot(c[0], c[1])) || 1);
+        return cos >= Math.cos(Math.PI / 4) ? d : null;
+      };
+      const dirIn = (si, f) => {
+        if (open && si === 0) return null; const j = (si - 1 + n) % n, a = by.get(j), s2 = spl.get(j), P = points[si];
+        if (a) { const r = [P[0] - a.c[0], P[1] - a.c[1]]; return a.ccw ? [-r[1], r[0]] : [r[1], -r[0]]; }
+        if (s2) { const pa = (s2.pts || []).length ? s2.pts[s2.pts.length - 1] : points[j], pb = f.length ? f[0] : points[(si + 1) % n]; return jointDir(pa, P, pb); }
+        return [P[0] - points[j][0], P[1] - points[j][1]];
+      };
+      const dirOut = (si, f) => {
+        const j = (si + 1) % n; if (open && j === n - 1) return null; const a = by.get(j), s2 = spl.get(j), P = points[j];
+        if (a) { const r = [P[0] - a.c[0], P[1] - a.c[1]]; return a.ccw ? [-r[1], r[0]] : [r[1], -r[0]]; }
+        if (s2) { const pa = f.length ? f[f.length - 1] : points[si], pb = (s2.pts || []).length ? s2.pts[0] : points[(j + 1) % n]; return jointDir(pa, P, pb); }
+        return [points[(j + 1) % n][0] - P[0], points[(j + 1) % n][1] - P[1]];
+      };
+      const curve = splineCurve([A, ...fit, B], endDir(sp.start, A, true), endDir(sp.end, B, false), opts.splineSteps || 10);
       for (let k = 1; k < curve.length - 1; k++) pts.push(curve[k]);
       for (let k = 0; k < curve.length - 1; k++) sides.push('spl' + i);
       continue;
@@ -1515,25 +1541,50 @@ function arcTangent(a, t, b) {
   const s = -(d[0] * d[0] + d[1] * d[1]) / den;
   return { c: [a[0] + nx * s, a[1] + ny * s], ccw: s > 0 };
 }
-/* a smooth curve through points (centripetal Catmull–Rom, no loops or cusps); before / after are the neighbouring
-   points beyond each end (or null: the curve then starts straight at its end) */
-function splinePoints(P, before, after, steps = 10) {
-  if (P.length < 2) return P.slice();
-  const ext = [before || [2 * P[0][0] - P[1][0], 2 * P[0][1] - P[1][1]], ...P, after || [2 * P[P.length - 1][0] - P[P.length - 2][0], 2 * P[P.length - 1][1] - P[P.length - 2][1]]];
+/* a smooth curve through P (a profile corner, its fit points, the next corner) as cubic Hermite spans on centripetal knots.
+   Inside, each fit point takes the centripetal Catmull–Rom tangent (no loops, no cusps). At each end a direction can be
+   given (a unit vector): the curve then leaves / arrives exactly along it — tangent to the line or arc it meets; with none
+   the end is free (a parabolic end condition). */
+function splineCurve(P, startDir, endDir, steps = 10) {
+  const n = P.length; if (n < 2) return P.slice();
+  const t = [0]; for (let k = 1; k < n; k++) t.push(t[k - 1] + Math.max(1e-9, Math.sqrt(Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]))));
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], mul = (a, s) => [a[0] * s, a[1] * s], add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const m = new Array(n);
+  for (let k = 1; k < n - 1; k++) m[k] = add(sub(mul(sub(P[k], P[k - 1]), 1 / (t[k] - t[k - 1])), mul(sub(P[k + 1], P[k - 1]), 1 / (t[k + 1] - t[k - 1]))), mul(sub(P[k + 1], P[k]), 1 / (t[k + 1] - t[k])));
+  const speed = (a, b, ta, tb) => Math.hypot(b[0] - a[0], b[1] - a[1]) / (tb - ta);
+  const unit = (d) => { const l = Math.hypot(d[0], d[1]); return l > 1e-12 ? [d[0] / l, d[1] / l] : null; };
+  const sd = startDir && unit(startDir), ed = endDir && unit(endDir);
+  if (sd) m[0] = mul(sd, speed(P[0], P[1], t[0], t[1]));
+  if (ed) m[n - 1] = mul(ed, speed(P[n - 2], P[n - 1], t[n - 2], t[n - 1]));
+  const chord0 = mul(sub(P[1], P[0]), 1 / (t[1] - t[0])), chordN = mul(sub(P[n - 1], P[n - 2]), 1 / (t[n - 1] - t[n - 2]));
+  if (!m[0]) m[0] = n > 2 || m[n - 1] ? sub(mul(chord0, 2), m[1] || m[n - 1]) : chord0;
+  if (!m[n - 1]) m[n - 1] = n > 2 || sd ? sub(mul(chordN, 2), m[n - 2] || m[0]) : chordN;
   const out = [P[0]];
-  for (let k = 1; k < ext.length - 2; k++) {
-    const p0 = ext[k - 1], p1 = ext[k], p2 = ext[k + 1], p3 = ext[k + 2], d = (a, b) => Math.max(1e-9, Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), 0.5));
-    const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3), L = (a, b, ta, tb, t) => [(a[0] * (tb - t) + b[0] * (t - ta)) / (tb - ta), (a[1] * (tb - t) + b[1] * (t - ta)) / (tb - ta)];
+  for (let k = 0; k < n - 1; k++) {
+    const h = t[k + 1] - t[k];
     for (let s = 1; s <= steps; s++) {
-      const t = t1 + (t2 - t1) * s / steps;
-      const A1 = L(p0, p1, t0, t1, t), A2 = L(p1, p2, t1, t2, t), A3 = L(p2, p3, t2, t3, t), B1 = L(A1, A2, t0, t2, t), B2 = L(A2, A3, t1, t3, t);
-      out.push(s === steps ? p2 : L(B1, B2, t1, t2, t));
+      if (s === steps) { out.push(P[k + 1]); continue; }
+      const u = s / steps, u2 = u * u, u3 = u2 * u, h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+      out.push([h00 * P[k][0] + h10 * h * m[k][0] + h01 * P[k + 1][0] + h11 * h * m[k + 1][0], h00 * P[k][1] + h10 * h * m[k][1] + h01 * P[k + 1][1] + h11 * h * m[k + 1][1]]);
     }
   }
   return out;
 }
+/* the old call: before / after are the points beyond each end on the straight lines it meets (or null: a free end) —
+   the curve is exactly tangent to those lines */
+function splinePoints(P, before, after, steps = 10) {
+  if (P.length < 2) return P.slice();
+  const sd = before ? [P[0][0] - before[0], P[0][1] - before[1]] : null, l = P.length - 1, ed = after ? [after[0] - P[l][0], after[1] - P[l][1]] : null;
+  return splineCurve(P, sd, ed, steps);
+}
+/* the shared tangent where two splines meet at v (a the last fit point before, b the first after): the centripetal one */
+function jointDir(a, v, b) {
+  const d = (p, q) => Math.max(1e-9, Math.sqrt(Math.hypot(q[0] - p[0], q[1] - p[1]))), t0 = 0, t1 = d(a, v), t2 = t1 + d(v, b);
+  const g = [(v[0] - a[0]) / (t1 - t0) - (b[0] - a[0]) / (t2 - t0) + (b[0] - v[0]) / (t2 - t1), (v[1] - a[1]) / (t1 - t0) - (b[1] - a[1]) / (t2 - t0) + (b[1] - v[1]) / (t2 - t1)];
+  return g;
+}
 
-return { KINDS, solveSketch, autoConstraints, measure, arcSweep, arcMid, expandArcs, arcThrough, arcTangent, splinePoints };
+return { KINDS, solveSketch, autoConstraints, measure, arcSweep, arcMid, expandArcs, arcThrough, arcTangent, splineCurve, splinePoints };
 })();
 
 __sf3.text = (() => {
@@ -2285,6 +2336,7 @@ function constraintDims(p, rz) {
     if (c.type === 'length') out.push({ param: c.p, a: L3(P[c.i % n]), b: L3(P[(c.i + 1) % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixx') out.push({ param: c.p, a: L3([0, P[c.i % n][1]]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixy') out.push({ param: c.p, a: L3([P[c.i % n][0], 0]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
+    if (c.type === 'fitx' || c.type === 'fity') { const sp = (p.splines || []).find(z => z.i === c.i), q = sp && sp.pts[c.k]; if (q) out.push({ param: c.p, a: L3(c.type === 'fitx' ? [0, q[1]] : [q[0], 0]), b: L3(q), view: 'auto', kind: 'linear' }); }
     if (c.type === 'radius') { const a = (p.arcs || []).find(q => q.i === c.i); if (a) out.push({ param: c.p, a: L3(a.c), b: L3(arcMid(P[c.i % n], P[(c.i + 1) % n], a.c, a.ccw)), view: 'auto', kind: 'radius' }); }
   }
   return out;
@@ -2446,6 +2498,24 @@ function carrySplines(before, after, splines, open) {
   });
 }
 
+/* fit-point constraints (fitfix / fitx / fity) put the fit points they name where they say, over the carried shape */
+function applyFitConstraints(q) {
+  const fits = (q.constraints || []).filter(c => SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit); if (!fits.length) return null;
+  let bad = null; q.splines = (q.splines || []).map(sp => Object.assign({}, sp, { pts: sp.pts.map(p => p.slice()) }));
+  for (const c of fits) {
+    const sp = q.splines.find(z => z.i === c.i); if (!sp || !sp.pts[c.k]) { bad = `${SKETCH_KINDS[c.type].label.toLowerCase()} ${c.i + 1}.${(c.k || 0) + 1} has no fit point to hold (remove it)`; continue; }
+    if (c.type === 'fitfix') sp.pts[c.k] = c.at.slice();
+    else { const v = q[c.p]; if (typeof v === 'number' && isFinite(v)) sp.pts[c.k][c.type === 'fitx' ? 0 : 1] = v; }
+  }
+  return bad;
+}
+/* how many fit-point coordinates are held: each fit point has two; a fix holds both, fitx / fity one each */
+function fitStatus(q) {
+  const total = (q.splines || []).reduce((a, sp) => a + 2 * (sp.pts || []).length, 0), held = new Set();
+  for (const c of q.constraints || []) { if (c.type === 'fitfix') { held.add(c.i + '.' + c.k + 'x'); held.add(c.i + '.' + c.k + 'y'); } else if (c.type === 'fitx') held.add(c.i + '.' + c.k + 'x'); else if (c.type === 'fity') held.add(c.i + '.' + c.k + 'y'); }
+  return { coordinates: total, held: held.size, carried: total - held.size };
+}
+
 /* ---------- evaluation ---------- */
 const BODY_CACHE = new Map(), LOCAL_CACHE = new Map();
 function cachedLocal(o) {
@@ -2512,6 +2582,8 @@ function evaluate(doc, opts) {
       const res = solveSketch(q.profile, q.constraints || [], q, q.arcs || [], { open: !!q.open }); R.sketch.set(o.id, res);
       if (res.ok) { if (Array.isArray(q.splines) && q.splines.length) q.splines = carrySplines(q.profile, res.points, q.splines, !!q.open); q.profile = res.points; if (q.arcs && q.arcs.length) q.arcs = res.arcs; }
       else R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: the sketch can't satisfy ${res.conflicts.map(c => SKETCH_KINDS[c.type].label.toLowerCase() + ' ' + (c.i + 1) + (c.j != null ? '/' + (c.j + 1) : '')).join(', ') || 'all its constraints'} — remove one` });
+      const fitWarn = applyFitConstraints(q); if (fitWarn) R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${fitWarn}` });
+      res.fit = fitStatus(q);
     } catch (e) { R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${e.message}` }); }
   }
   R.off = off;
@@ -3516,6 +3588,15 @@ class Model {
         const x = need(o.id), q = x.params; if (!Array.isArray(q.profile) || !Array.isArray(q.constraints) || (q.shape && q.shape !== 'points')) throw new Error(`${x.name} has no polyline sketch to constrain`);
         const k = SKETCH_KINDS[o.type]; if (!k) throw new Error(`type is one of ${Object.keys(SKETCH_KINDS).join(', ')}`);
         const c = { type: o.type, i: Math.round(o.i) }; if (k.args === 2) c.j = Math.round(o.j);
+        if (k.fit) {
+          const sp = (q.splines || []).find(z => z.i === c.i); if (!sp) throw new Error(`${k.label}: segment ${c.i + 1} is not a spline`);
+          c.k = Math.round(+o.k || 0); if (!(c.k >= 0 && c.k < sp.pts.length)) throw new Error(`${k.label}: spline ${c.i + 1} has fit points 1…${sp.pts.length} (k is 0…${sp.pts.length - 1})`);
+          if (o.type === 'fitfix') c.at = (o.at || sp.pts[c.k]).slice();
+          else { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : sp.pts[c.k][o.type === 'fitx' ? 0 : 1]; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = sp.pts[c.k][o.type === 'fitx' ? 0 : 1]; } else q[c.p] = Math.round(+v * 1e4) / 1e4; }
+          q.constraints = [...q.constraints.filter(e => !(e.type === c.type && e.i === c.i && e.k === c.k)), c];
+          if (o.type === 'fitfix') q.constraints = q.constraints.filter(e => !((e.type === 'fitx' || e.type === 'fity') && e.i === c.i && e.k === c.k));
+          this.recompute(); return { label: `${k.label} ${c.i + 1}.${c.k + 1}`, id: x.id, constraint: c };
+        }
         if (!k.point) for (const si of k.args === 2 ? [c.i, c.j] : [c.i]) if ((q.splines || []).some(z => z.i === si)) throw new Error(`${k.label}: segment ${si + 1} is a spline (a free curve through its points), so it has no straight direction or length to constrain — constrain its end points, or make it a line`);
         if (o.type === 'fix') c.at = o.at || q.profile[c.i % q.profile.length].slice();
         if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c, q.arcs); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c, q.arcs) * 1e4) / 1e4; } }
@@ -3614,7 +3695,7 @@ class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
-          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined } : undefined,
+          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
@@ -4739,8 +4820,11 @@ function solidToBrep(solid, opts = {}) {
         while (guard++ < 10000) { const out = excess.get(cur); if (!out || !out.length) break; const nx = out.pop(); if (nx === start) { ok = true; break; } cyc.push(nx); cur = nx; }
         if (!ok || cyc.length < 2) { repairs.holesLeft++; continue; }
         let c = [0, 0, 0]; for (const v of cyc) c = V.add(c, P[v]); c = V.mul(c, 1 / cyc.length);
+        /* small (at most holeMax across) or a sliver (mean width 2 × area / perimeter at most sliverMax): a boolean's leftover */
         const size = Math.max(...cyc.map(v => V.len(V.sub(P[v], c)))) * 2;
-        if (size > holeMax) { repairs.holesLeft++; continue; }
+        let va = [0, 0, 0], per = 0; for (let k = 0; k < cyc.length; k++) { const a = P[cyc[k]], b = P[cyc[(k + 1) % cyc.length]]; va = V.add(va, V.cross(V.sub(a, c), V.sub(b, c))); per += V.len(V.sub(b, a)); }
+        const width = per > 0 ? V.len(va) / per : 0;
+        if (size > holeMax && !(width <= (opts.sliverMax || 0.05) && size <= holeMax * 10)) { repairs.holesLeft++; continue; }
         const ci = P.length; P.push(c);
         for (let i = 0; i < cyc.length; i++) { const a = cyc[i], b = cyc[(i + 1) % cyc.length]; F.push({ ring: [b, a, ci], n: null, w: 0 }); repairs.fillArea += V.len(V.cross(V.sub(P[a], c), V.sub(P[b], c))) / 2; }
         repairs.holesFilled++;
@@ -5216,9 +5300,10 @@ function stepToSolids(text) {
   const get = (r) => entities.get(r.ref), num = (v) => v.num;
   const point = (r) => get(r).args[1].map(num), direction = (r) => V.norm(get(r).args[1].map(num));
   const unitScale = (() => { for (const e of entities.values()) if (!e.type && e.parts.LENGTH_UNIT && e.parts.SI_UNIT) { const pre = (e.parts.SI_UNIT[0] || {}).enum; return pre === 'MILLI' ? 1 : pre === 'CENTI' ? 10 : pre === 'DECI' ? 100 : pre === 'MICRO' ? 1e-3 : 1000; } return 1; })();
-  const out = [], unsupported = new Set();
-  for (const e of entities.values()) {
+  const out = [], unsupported = new Set(), brepIds = [];
+  for (const [bid, e] of entities) {
     if (e.type !== 'MANIFOLD_SOLID_BREP' && e.type !== 'BREP_WITH_VOIDS') continue;
+    brepIds.push(bid);
     const shell = get(e.args[1]), polys = [];
     for (const fr of shell.args[1]) {
       const face = get(fr), surf = get(face.args[2]);
@@ -5242,10 +5327,24 @@ function stepToSolids(text) {
       for (const [a, b, c] of tris) { const pl = K.poly([all[a], all[b], all[c]], 'step'); if (pl) { if (V.dot(pl.plane.n, n0) < 0) pl.flip(); polys.push(pl); } }
     }
     if (unsupported.size) throw new Error(`this STEP file has ${[...unsupported].join(', ')} geometry — only planar faces with straight edges can be read (SketchFlow's own STEP files, and faceted exports from other tools)`);
-    out.push({ name: e.args[0].str || 'Part', solid: new K.Solid(polys) });
+    out.push({ id: bid, name: e.args[0].str || 'Part', solid: new K.Solid(polys) });
   }
   if (!out.length) throw new Error('no solids (MANIFOLD_SOLID_BREP) in this STEP file');
-  return out;
+  /* an assembly: each occurrence (NEXT_ASSEMBLY_USAGE_OCCURRENCE) places its part's solids by the transform between two axes */
+  const repSolids = new Map(), addRep = (r, ids) => { if (!repSolids.has(r)) repSolids.set(r, new Set()); for (const i of ids) repSolids.get(r).add(i); };
+  for (const [rid, e] of entities) if (e.type && /SHAPE_REPRESENTATION$/.test(e.type) && Array.isArray(e.args[1])) { const ids = e.args[1].filter(x => x.ref != null && brepIds.includes(x.ref)).map(x => x.ref); if (ids.length) addRep(rid, ids); }
+  for (let pass = 0; pass < 3; pass++) for (const e of entities.values()) if (e.type === 'SHAPE_REPRESENTATION_RELATIONSHIP') { const a = e.args[2].ref, b = e.args[3].ref; if (repSolids.has(b)) addRep(a, repSolids.get(b)); if (repSolids.has(a)) addRep(b, repSolids.get(a)); }
+  const frame = (r) => { const ax = get(r), o = point(ax.args[1]).map(x => x * unitScale), z = ax.args[2].unset ? [0, 0, 1] : direction(ax.args[2]), x0 = ax.args[3].unset ? [1, 0, 0] : direction(ax.args[3]); const xx = V.norm(V.sub(x0, V.mul(z, V.dot(x0, z)))), y = V.cross(z, xx); return [xx[0], xx[1], xx[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, o[0], o[1], o[2], 1]; };
+  const placed = [], usedBreps = new Set();
+  for (const e of entities.values()) {
+    if (e.type !== 'CONTEXT_DEPENDENT_SHAPE_REPRESENTATION') continue;
+    const rel = get(e.args[0]), pds = get(e.args[1]); if (rel.type || !rel.parts.REPRESENTATION_RELATIONSHIP || !rel.parts.REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION) continue;
+    const child = rel.parts.REPRESENTATION_RELATIONSHIP[2].ref, idt = get(rel.parts.REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION[0]);
+    if (!repSolids.has(child) || idt.type !== 'ITEM_DEFINED_TRANSFORMATION') continue;
+    const T = M4.mul(frame(idt.args[2]), M4.inv(frame(idt.args[3]))), nauo = pds && pds.args[2] && get(pds.args[2]), nm = nauo && nauo.args[1] && nauo.args[1].str;
+    for (const bid of repSolids.get(child)) { const src = out.find(x => x.id === bid); usedBreps.add(bid); placed.push({ name: nm || src.name, solid: src.solid.transform(T) }); }
+  }
+  return (placed.length ? placed.concat(out.filter(x => !usedBreps.has(x.id))) : out).map(({ name, solid }) => ({ name, solid }));
 }
 
 
@@ -5662,6 +5761,7 @@ const toastAct = (t, actions, ms) => {
 };
 
 const ICON = {
+  pin: 'M9 3h6l-1 6 3 3H7l3-3zM12 12v9',
   wrap: 'M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3zM9 10h6M12 10v6',
   drape: 'M3 17c3-9 15-9 18 0M9 9l1 4h4l1-4M12 3v4',
   split: 'M3 21L21 3M6 9V6h3M18 15v3h-3M4 14l6 6M14 4l6 6',
@@ -6048,6 +6148,7 @@ function sketchSection(o, sec) {
   const nseg = open ? n - 1 : n, arcOf = (i) => arcs.find(a => a.i === i), splines = q.splines || [], splOf = (i) => splines.find(z => z.i === i);
   const s = sec('Sketch'), add = (c) => { try { apply([Object.assign({ op: 'constrain', id: o.id }, c)]); } catch (e) { /* toast */ } };
   const status = !cons.length ? ['note', 'No constraints: the profile is exactly as drawn.'] : st && !st.ok ? ['warnline', 'Conflict — remove one of the highlighted constraints'] : st && st.dof === 0 ? ['ok', 'Fully defined'] : ['note', `${st ? st.dof : '?'} degree${st && st.dof === 1 ? '' : 's'} of freedom left (it keeps the drawn shape there)`];
+  if (st && st.fit && st.fit.coordinates) status[1] += ` · spline fit points: ${st.fit.held} of ${st.fit.coordinates} coordinates held${st.fit.carried ? ` (the rest move with their spline's ends)` : ''}`;
   s.append(el('div', { class: status[0] }, status[1]));
   /* turn a line into a gentle arc bulging outward, or an arc back into a line */
   const ccwPoly = K.area2(P) > 0;
@@ -6069,14 +6170,29 @@ function sketchSection(o, sec) {
   for (let i = 0; i < nseg; i++) {
     const a = P[i], b = P[(i + 1) % n], arc = arcOf(i), spl = splOf(i), bad = st && st.conflicts && st.conflicts.some(c => c.i === i);
     if (spl) {
-      const setPts = (pts, label) => apply([{ op: 'set', id: o.id, params: { splines: splines.map(z => z.i === i ? { i, pts } : z) } }], label);
-      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'), el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i) } }], `Segment ${i + 1} → line`) }, '∿'))),
+      /* a spline: its fit points (move, pin, add, remove) and how each end meets its neighbour */
+      const fitCons = cons.map((c, idx) => [c, idx]).filter(([c]) => SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i);
+      const setSpl = (patch, label, consNext) => apply([{ op: 'set', id: o.id, params: Object.assign({ splines: splines.map(z => z.i === i ? Object.assign({}, z, patch) : z) }, consNext ? { constraints: consNext } : {}) }], label);
+      const setPts = (pts, label, consNext) => setSpl({ pts }, label, consNext);
+      tbl.append(el('tr', null, el('td', null, String(i + 1)), el('td', { class: 'mono', title: `a spline through ${spl.pts.length} fit point${spl.pts.length > 1 ? 's' : ''} (below)` }, 'spline'),
+        el('td', null, el('span', { class: 'pin' }, el('button', { class: 'chain on', title: 'This segment is a spline — make it straight', onclick: () => apply([{ op: 'set', id: o.id, params: { splines: splines.filter(z => z.i !== i), constraints: cons.filter(c => !(SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i)) } }], `Segment ${i + 1} → line`) }, '∿'))),
         el('td', null, el('button', { class: 'btn', title: 'Add a fit point halfway between the last one and the end of the segment', onclick: () => { const last = spl.pts[spl.pts.length - 1], e = b; setPts(spl.pts.concat([[Math.round((last[0] + e[0]) * 500) / 1000, Math.round((last[1] + e[1]) * 500) / 1000]]), `Spline ${i + 1}: add a point`); } }, '+ point'))));
       spl.pts.forEach((pt, k) => {
-        const upd = (c, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][c] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`); };
+        const pin = fitCons.find(([c]) => c.type === 'fitfix' && c.k === k);
+        const upd = (cc, v) => { const pts = spl.pts.map(q2 => q2.slice()); pts[k][cc] = v; setPts(pts, `Spline ${i + 1} point ${k + 1}`, pin ? cons.map((c, idx) => idx === pin[1] ? Object.assign({}, c, { at: pts[k].slice() }) : c) : null); };
+        const drop = () => { const pts = spl.pts.filter((_, kk) => kk !== k), nc = cons.filter(c => !(SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i && c.k === k)).map(c => (SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit && c.i === i && c.k > k) ? Object.assign({}, c, { k: c.k - 1 }) : c); setPts(pts, `Spline ${i + 1}: remove a point`, nc); };
         tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, el('span', { class: 'pin fit' }, el('span', { class: 'note' }, `point ${k + 1}`), el('span', { class: 'note' }, 'x'), numInput(pt[0], v => upd(0, v)), el('span', { class: 'note' }, 'y'), numInput(pt[1], v => upd(1, v)),
-          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: () => setPts(spl.pts.filter((_, kk) => kk !== k), `Spline ${i + 1}: remove a point`) }, '×') : null))));
+          el('button', { class: 'chain' + (pin ? ' on' : ''), title: pin ? 'Pinned: it stays here when the sketch\'s dimensions change — click to let it move with its spline' : 'Pin this fit point where it is (otherwise it moves with its spline when the ends move)', onclick: () => pin ? apply([{ op: 'unconstrain', id: o.id, index: pin[1] }], `Unpin spline ${i + 1} point ${k + 1}`) : add({ type: 'fitfix', i, k }) }, icon('pin')),
+          spl.pts.length > 1 ? el('button', { class: 'chain', title: 'Remove this fit point', onclick: drop }, '×') : null))));
       });
+      const endSel = (key, label) => {
+        const v = spl[key], mode = typeof v === 'number' ? 'angle' : (v || 'auto'), sel = el('select', null, ...[['auto', 'auto'], ['tangent', 'tangent'], ['corner', 'corner'], ['angle', 'angle °']].map(([val, t]) => el('option', { value: val, selected: mode === val }, t)));
+        sel.title = 'auto: tangent when the spline already sets off within 45° of what it meets, a corner otherwise · tangent: smooth into the line, arc or spline there · corner: free · angle: leaves at that direction (° from x)';
+        sel.onchange = () => setSpl({ [key]: sel.value === 'angle' ? 0 : sel.value === 'auto' ? undefined : sel.value }, `Spline ${i + 1} ${label}: ${sel.value}`);
+        const parts = [el('span', { class: 'note' }, label), sel]; if (mode === 'angle') parts.push(numInput(v, val => setSpl({ [key]: val }, `Spline ${i + 1} ${label} ${val}°`)));
+        return el('span', { class: 'pin fit' }, ...parts);
+      };
+      tbl.append(el('tr', { class: 'sub' }, el('td', null, ''), el('td', { colspan: 3 }, endSel('start', 'start'), endSel('end', 'end'))));
       continue;
     }
     if (arc) {

@@ -15,7 +15,9 @@ export const KINDS = {
   equal: { label: 'Equal', args: 2 }, parallel: { label: 'Parallel', args: 2 }, perpendicular: { label: 'Perpendicular', args: 2 },
   angle: { label: 'Angle', args: 2, value: true }, radius: { label: 'Radius', args: 1, value: true, arc: true },
   tangent: { label: 'Tangent', args: 2 }, concentric: { label: 'Concentric', args: 2, arc: true },
-  fix: { label: 'Fix point', args: 1, point: true }, fixx: { label: 'Point x', args: 1, point: true, value: true }, fixy: { label: 'Point y', args: 1, point: true, value: true }
+  fix: { label: 'Fix point', args: 1, point: true }, fixx: { label: 'Point x', args: 1, point: true, value: true }, fixy: { label: 'Point y', args: 1, point: true, value: true },
+  /* on a spline's fit points (i = the spline's segment, k = which fit point): applied after the solve, over the carried shape */
+  fitfix: { label: 'Fix fit point', args: 1, point: true, fit: true }, fitx: { label: 'Fit point x', args: 1, point: true, fit: true, value: true }, fity: { label: 'Fit point y', args: 1, point: true, fit: true, value: true }
 };
 const TAU = 2 * Math.PI, normA = (t) => ((t % TAU) + TAU) % TAU;
 
@@ -87,6 +89,7 @@ function arcIndex(arcs, n, open) {
   return at;
 }
 export function solveSketch(points, cons, params = {}, arcs = [], opts = {}) {
+  cons = (cons || []).filter(c => !(KINDS[c.type] && KINDS[c.type].fit));   /* fit-point constraints are applied by the model after the solve */
   const n = points.length, m = (arcs || []).length;
   if (n < 2 || ((!cons || !cons.length) && !m)) return { points, arcs: arcs || [], ok: true, dof: 2 * n + m, residual: 0, conflicts: [] };
   const arcAt = arcIndex(arcs, n, opts.open);
@@ -156,9 +159,32 @@ export function expandArcs(points, arcs, opts = {}) {
     if (open && i === n - 1) break;
     const sp = spl.get(i);
     if (sp) {
-      /* a spline: through its fit points, smooth; its ends lean on the neighbouring points so it blends in */
-      const prev = open && i === 0 ? null : points[(i - 1 + n) % n], next = open && i + 1 === n - 1 ? null : points[(i + 2) % n];
-      const curve = splinePoints([points[i], ...sp.pts, points[(i + 1) % n]], prev && !spl.has((i - 1 + n) % n) && !by.has((i - 1 + n) % n) ? prev : null, next && !spl.has((i + 1) % n) && !by.has((i + 1) % n) ? next : null, opts.splineSteps || 10);
+      /* a spline through its fit points; at each end tangent to what it meets (a line, an arc, or another spline — then
+         both share one tangent), free, or at a set angle (°) */
+      const A = points[i], B = points[(i + 1) % n], fit = sp.pts || [];
+      /* auto (the default): tangent when the spline already sets off within 45° of what it meets (a blend was meant),
+         a corner otherwise (a gusset's curve meeting its leg) */
+      const endDir = (mode, at, inward) => {
+        if (mode === 'free' || mode === 'corner') return null;
+        if (typeof mode === 'number' && isFinite(mode)) return [Math.cos(mode * Math.PI / 180), Math.sin(mode * Math.PI / 180)];
+        const d = inward ? dirIn(i, fit) : dirOut(i, fit); if (!d || mode === 'tangent') return d;
+        const q = inward ? (fit.length ? fit[0] : B) : (fit.length ? fit[fit.length - 1] : A), c = inward ? [q[0] - at[0], q[1] - at[1]] : [at[0] - q[0], at[1] - q[1]];
+        const cos = (d[0] * c[0] + d[1] * c[1]) / ((Math.hypot(d[0], d[1]) * Math.hypot(c[0], c[1])) || 1);
+        return cos >= Math.cos(Math.PI / 4) ? d : null;
+      };
+      const dirIn = (si, f) => {
+        if (open && si === 0) return null; const j = (si - 1 + n) % n, a = by.get(j), s2 = spl.get(j), P = points[si];
+        if (a) { const r = [P[0] - a.c[0], P[1] - a.c[1]]; return a.ccw ? [-r[1], r[0]] : [r[1], -r[0]]; }
+        if (s2) { const pa = (s2.pts || []).length ? s2.pts[s2.pts.length - 1] : points[j], pb = f.length ? f[0] : points[(si + 1) % n]; return jointDir(pa, P, pb); }
+        return [P[0] - points[j][0], P[1] - points[j][1]];
+      };
+      const dirOut = (si, f) => {
+        const j = (si + 1) % n; if (open && j === n - 1) return null; const a = by.get(j), s2 = spl.get(j), P = points[j];
+        if (a) { const r = [P[0] - a.c[0], P[1] - a.c[1]]; return a.ccw ? [-r[1], r[0]] : [r[1], -r[0]]; }
+        if (s2) { const pa = f.length ? f[f.length - 1] : points[si], pb = (s2.pts || []).length ? s2.pts[0] : points[(j + 1) % n]; return jointDir(pa, P, pb); }
+        return [points[(j + 1) % n][0] - P[0], points[(j + 1) % n][1] - P[1]];
+      };
+      const curve = splineCurve([A, ...fit, B], endDir(sp.start, A, true), endDir(sp.end, B, false), opts.splineSteps || 10);
       for (let k = 1; k < curve.length - 1; k++) pts.push(curve[k]);
       for (let k = 0; k < curve.length - 1; k++) sides.push('spl' + i);
       continue;
@@ -186,20 +212,45 @@ export function arcTangent(a, t, b) {
   const s = -(d[0] * d[0] + d[1] * d[1]) / den;
   return { c: [a[0] + nx * s, a[1] + ny * s], ccw: s > 0 };
 }
-/* a smooth curve through points (centripetal Catmull–Rom, no loops or cusps); before / after are the neighbouring
-   points beyond each end (or null: the curve then starts straight at its end) */
-export function splinePoints(P, before, after, steps = 10) {
-  if (P.length < 2) return P.slice();
-  const ext = [before || [2 * P[0][0] - P[1][0], 2 * P[0][1] - P[1][1]], ...P, after || [2 * P[P.length - 1][0] - P[P.length - 2][0], 2 * P[P.length - 1][1] - P[P.length - 2][1]]];
+/* a smooth curve through P (a profile corner, its fit points, the next corner) as cubic Hermite spans on centripetal knots.
+   Inside, each fit point takes the centripetal Catmull–Rom tangent (no loops, no cusps). At each end a direction can be
+   given (a unit vector): the curve then leaves / arrives exactly along it — tangent to the line or arc it meets; with none
+   the end is free (a parabolic end condition). */
+export function splineCurve(P, startDir, endDir, steps = 10) {
+  const n = P.length; if (n < 2) return P.slice();
+  const t = [0]; for (let k = 1; k < n; k++) t.push(t[k - 1] + Math.max(1e-9, Math.sqrt(Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]))));
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], mul = (a, s) => [a[0] * s, a[1] * s], add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const m = new Array(n);
+  for (let k = 1; k < n - 1; k++) m[k] = add(sub(mul(sub(P[k], P[k - 1]), 1 / (t[k] - t[k - 1])), mul(sub(P[k + 1], P[k - 1]), 1 / (t[k + 1] - t[k - 1]))), mul(sub(P[k + 1], P[k]), 1 / (t[k + 1] - t[k])));
+  const speed = (a, b, ta, tb) => Math.hypot(b[0] - a[0], b[1] - a[1]) / (tb - ta);
+  const unit = (d) => { const l = Math.hypot(d[0], d[1]); return l > 1e-12 ? [d[0] / l, d[1] / l] : null; };
+  const sd = startDir && unit(startDir), ed = endDir && unit(endDir);
+  if (sd) m[0] = mul(sd, speed(P[0], P[1], t[0], t[1]));
+  if (ed) m[n - 1] = mul(ed, speed(P[n - 2], P[n - 1], t[n - 2], t[n - 1]));
+  const chord0 = mul(sub(P[1], P[0]), 1 / (t[1] - t[0])), chordN = mul(sub(P[n - 1], P[n - 2]), 1 / (t[n - 1] - t[n - 2]));
+  if (!m[0]) m[0] = n > 2 || m[n - 1] ? sub(mul(chord0, 2), m[1] || m[n - 1]) : chord0;
+  if (!m[n - 1]) m[n - 1] = n > 2 || sd ? sub(mul(chordN, 2), m[n - 2] || m[0]) : chordN;
   const out = [P[0]];
-  for (let k = 1; k < ext.length - 2; k++) {
-    const p0 = ext[k - 1], p1 = ext[k], p2 = ext[k + 1], p3 = ext[k + 2], d = (a, b) => Math.max(1e-9, Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), 0.5));
-    const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3), L = (a, b, ta, tb, t) => [(a[0] * (tb - t) + b[0] * (t - ta)) / (tb - ta), (a[1] * (tb - t) + b[1] * (t - ta)) / (tb - ta)];
+  for (let k = 0; k < n - 1; k++) {
+    const h = t[k + 1] - t[k];
     for (let s = 1; s <= steps; s++) {
-      const t = t1 + (t2 - t1) * s / steps;
-      const A1 = L(p0, p1, t0, t1, t), A2 = L(p1, p2, t1, t2, t), A3 = L(p2, p3, t2, t3, t), B1 = L(A1, A2, t0, t2, t), B2 = L(A2, A3, t1, t3, t);
-      out.push(s === steps ? p2 : L(B1, B2, t1, t2, t));
+      if (s === steps) { out.push(P[k + 1]); continue; }
+      const u = s / steps, u2 = u * u, u3 = u2 * u, h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+      out.push([h00 * P[k][0] + h10 * h * m[k][0] + h01 * P[k + 1][0] + h11 * h * m[k + 1][0], h00 * P[k][1] + h10 * h * m[k][1] + h01 * P[k + 1][1] + h11 * h * m[k + 1][1]]);
     }
   }
   return out;
+}
+/* the old call: before / after are the points beyond each end on the straight lines it meets (or null: a free end) —
+   the curve is exactly tangent to those lines */
+export function splinePoints(P, before, after, steps = 10) {
+  if (P.length < 2) return P.slice();
+  const sd = before ? [P[0][0] - before[0], P[0][1] - before[1]] : null, l = P.length - 1, ed = after ? [after[0] - P[l][0], after[1] - P[l][1]] : null;
+  return splineCurve(P, sd, ed, steps);
+}
+/* the shared tangent where two splines meet at v (a the last fit point before, b the first after): the centripetal one */
+function jointDir(a, v, b) {
+  const d = (p, q) => Math.max(1e-9, Math.sqrt(Math.hypot(q[0] - p[0], q[1] - p[1]))), t0 = 0, t1 = d(a, v), t2 = t1 + d(v, b);
+  const g = [(v[0] - a[0]) / (t1 - t0) - (b[0] - a[0]) / (t2 - t0) + (b[0] - v[0]) / (t2 - t1), (v[1] - a[1]) / (t1 - t0) - (b[1] - a[1]) / (t2 - t0) + (b[1] - v[1]) / (t2 - t1)];
+  return g;
 }

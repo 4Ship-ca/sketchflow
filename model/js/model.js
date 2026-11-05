@@ -587,6 +587,7 @@ function constraintDims(p, rz) {
     if (c.type === 'length') out.push({ param: c.p, a: L3(P[c.i % n]), b: L3(P[(c.i + 1) % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixx') out.push({ param: c.p, a: L3([0, P[c.i % n][1]]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
     if (c.type === 'fixy') out.push({ param: c.p, a: L3([P[c.i % n][0], 0]), b: L3(P[c.i % n]), view: 'auto', kind: 'linear' });
+    if (c.type === 'fitx' || c.type === 'fity') { const sp = (p.splines || []).find(z => z.i === c.i), q = sp && sp.pts[c.k]; if (q) out.push({ param: c.p, a: L3(c.type === 'fitx' ? [0, q[1]] : [q[0], 0]), b: L3(q), view: 'auto', kind: 'linear' }); }
     if (c.type === 'radius') { const a = (p.arcs || []).find(q => q.i === c.i); if (a) out.push({ param: c.p, a: L3(a.c), b: L3(arcMid(P[c.i % n], P[(c.i + 1) % n], a.c, a.ccw)), view: 'auto', kind: 'radius' }); }
   }
   return out;
@@ -748,6 +749,24 @@ export function carrySplines(before, after, splines, open) {
   });
 }
 
+/* fit-point constraints (fitfix / fitx / fity) put the fit points they name where they say, over the carried shape */
+function applyFitConstraints(q) {
+  const fits = (q.constraints || []).filter(c => SKETCH_KINDS[c.type] && SKETCH_KINDS[c.type].fit); if (!fits.length) return null;
+  let bad = null; q.splines = (q.splines || []).map(sp => Object.assign({}, sp, { pts: sp.pts.map(p => p.slice()) }));
+  for (const c of fits) {
+    const sp = q.splines.find(z => z.i === c.i); if (!sp || !sp.pts[c.k]) { bad = `${SKETCH_KINDS[c.type].label.toLowerCase()} ${c.i + 1}.${(c.k || 0) + 1} has no fit point to hold (remove it)`; continue; }
+    if (c.type === 'fitfix') sp.pts[c.k] = c.at.slice();
+    else { const v = q[c.p]; if (typeof v === 'number' && isFinite(v)) sp.pts[c.k][c.type === 'fitx' ? 0 : 1] = v; }
+  }
+  return bad;
+}
+/* how many fit-point coordinates are held: each fit point has two; a fix holds both, fitx / fity one each */
+function fitStatus(q) {
+  const total = (q.splines || []).reduce((a, sp) => a + 2 * (sp.pts || []).length, 0), held = new Set();
+  for (const c of q.constraints || []) { if (c.type === 'fitfix') { held.add(c.i + '.' + c.k + 'x'); held.add(c.i + '.' + c.k + 'y'); } else if (c.type === 'fitx') held.add(c.i + '.' + c.k + 'x'); else if (c.type === 'fity') held.add(c.i + '.' + c.k + 'y'); }
+  return { coordinates: total, held: held.size, carried: total - held.size };
+}
+
 /* ---------- evaluation ---------- */
 const BODY_CACHE = new Map(), LOCAL_CACHE = new Map();
 function cachedLocal(o) {
@@ -814,6 +833,8 @@ export function evaluate(doc, opts) {
       const res = solveSketch(q.profile, q.constraints || [], q, q.arcs || [], { open: !!q.open }); R.sketch.set(o.id, res);
       if (res.ok) { if (Array.isArray(q.splines) && q.splines.length) q.splines = carrySplines(q.profile, res.points, q.splines, !!q.open); q.profile = res.points; if (q.arcs && q.arcs.length) q.arcs = res.arcs; }
       else R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: the sketch can't satisfy ${res.conflicts.map(c => SKETCH_KINDS[c.type].label.toLowerCase() + ' ' + (c.i + 1) + (c.j != null ? '/' + (c.j + 1) : '')).join(', ') || 'all its constraints'} — remove one` });
+      const fitWarn = applyFitConstraints(q); if (fitWarn) R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${fitWarn}` });
+      res.fit = fitStatus(q);
     } catch (e) { R.warnings.push({ kind: 'sketch', id: o.id, text: `${o.name}: ${e.message}` }); }
   }
   R.off = off;
@@ -1818,6 +1839,15 @@ export class Model {
         const x = need(o.id), q = x.params; if (!Array.isArray(q.profile) || !Array.isArray(q.constraints) || (q.shape && q.shape !== 'points')) throw new Error(`${x.name} has no polyline sketch to constrain`);
         const k = SKETCH_KINDS[o.type]; if (!k) throw new Error(`type is one of ${Object.keys(SKETCH_KINDS).join(', ')}`);
         const c = { type: o.type, i: Math.round(o.i) }; if (k.args === 2) c.j = Math.round(o.j);
+        if (k.fit) {
+          const sp = (q.splines || []).find(z => z.i === c.i); if (!sp) throw new Error(`${k.label}: segment ${c.i + 1} is not a spline`);
+          c.k = Math.round(+o.k || 0); if (!(c.k >= 0 && c.k < sp.pts.length)) throw new Error(`${k.label}: spline ${c.i + 1} has fit points 1…${sp.pts.length} (k is 0…${sp.pts.length - 1})`);
+          if (o.type === 'fitfix') c.at = (o.at || sp.pts[c.k]).slice();
+          else { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : sp.pts[c.k][o.type === 'fitx' ? 0 : 1]; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = sp.pts[c.k][o.type === 'fitx' ? 0 : 1]; } else q[c.p] = Math.round(+v * 1e4) / 1e4; }
+          q.constraints = [...q.constraints.filter(e => !(e.type === c.type && e.i === c.i && e.k === c.k)), c];
+          if (o.type === 'fitfix') q.constraints = q.constraints.filter(e => !((e.type === 'fitx' || e.type === 'fity') && e.i === c.i && e.k === c.k));
+          this.recompute(); return { label: `${k.label} ${c.i + 1}.${c.k + 1}`, id: x.id, constraint: c };
+        }
         if (!k.point) for (const si of k.args === 2 ? [c.i, c.j] : [c.i]) if ((q.splines || []).some(z => z.i === si)) throw new Error(`${k.label}: segment ${si + 1} is a spline (a free curve through its points), so it has no straight direction or length to constrain — constrain its end points, or make it a line`);
         if (o.type === 'fix') c.at = o.at || q.profile[c.i % q.profile.length].slice();
         if (k.value) { let pn = 1; while (('d' + pn) in q) pn++; c.p = 'd' + pn; const v = o.value != null ? o.value : measureConstraint(q.profile, c, q.arcs); q[c.p] = typeof v === 'string' ? v : Math.round(v * 1e4) / 1e4; if (typeof v === 'string') { x.expr = Object.assign({}, x.expr || {}, { [c.p]: v }); q[c.p] = Math.round(measureConstraint(q.profile, c, q.arcs) * 1e4) / 1e4; } }
@@ -1916,7 +1946,7 @@ export class Model {
         const M = R.world.get(o.id), at = M ? [M[12], M[13], M[14]].map((v, k) => +(v - R.originPoint[k]).toFixed(3)) : null;
         const T = TYPES[o.type], info = T && T.def && T.def.info ? (() => { try { return T.def.info(o.params, addonApi); } catch (e) { return undefined; } })() : undefined;
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
-          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined } : undefined,
+          sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
           of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
