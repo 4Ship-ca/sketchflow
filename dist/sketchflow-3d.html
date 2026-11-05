@@ -4354,11 +4354,18 @@ class Views {
       if (Math.abs(dy) < 0.35) dy = dy < 0 ? -0.6 : 0.6;
       const n = Math.hypot(dx, dy); dx /= n; dy /= n;
       /* the reference line runs away from the joint: to the left when the leader leaves to the left */
-      const left = dx < -0.05, spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' };
-      const sel = this.sel && (this.sel === k.id || this.sel === k.on), col = sel ? '#ff7b3d' : ink, scale = 3.4, P = weldSymbol(spec, { left });
+      let left = dx < -0.05; const spec = k.symbol || { sym: k.kind === 'tab' ? 'tab' : 'adhesive' }, scale = 3.4;
+      /* a symbol that would run out of the pane turns to the other side */
+      const over = (lf, ddx) => { const Q = weldSymbol(spec, { left: lf }), x0 = p.x + ddx * 38; return Math.max(0, pane.x + 4 - (x0 + Q.box.x0 * scale)) + Math.max(0, x0 + (Q.box.x0 + Q.box.w) * scale - (pane.x + pane.w - 4)); };
+      if (over(left, dx) > 0 && over(!left, -dx) < over(left, dx)) { left = !left; dx = -dx; }
+      const sel = this.sel && (this.sel === k.id || this.sel === k.on), col = sel ? '#ff7b3d' : ink, P = weldSymbol(spec, { left });
       let len = 38, kx, ky, box;
       for (let tries = 0; tries < 6; tries++) {
-        kx = p.x + dx * len; ky = p.y + dy * len; box = { x: kx + P.box.x0 * scale - 4, y: ky - 7 * scale, w: P.box.w * scale + 8, h: 13 * scale };
+        kx = p.x + dx * len; ky = p.y + dy * len;
+        /* still too wide for the pane: slide the knee in (the leader steepens) */
+        const lo = pane.x + 4 - (kx + P.box.x0 * scale), hi = kx + (P.box.x0 + P.box.w) * scale - (pane.x + pane.w - 4);
+        if (lo > 0) kx += lo; else if (hi > 0) kx -= Math.min(hi, Math.max(0, -lo));
+        box = { x: kx + P.box.x0 * scale - 4, y: ky - 7 * scale, w: P.box.w * scale + 8, h: 13 * scale };
         if (!placed.some(b => b.x < box.x + box.w && box.x < b.x + b.w && b.y < box.y + box.h && box.y < b.y + b.h)) break;
         len += 18;
       }
