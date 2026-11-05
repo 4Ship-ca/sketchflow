@@ -113,8 +113,8 @@ function blockedBy(Vv, bodies, p, dir, reach) {
 }
 const rot = (Vv, v, axis, a) => Vv.add(Vv.add(Vv.mul(v, Math.cos(a)), Vv.mul(Vv.cross(axis, v), Math.sin(a))), Vv.mul(axis, Vv.dot(axis, v) * (1 - Math.cos(a))));
 /* how a torch reaches a seam: rays from points along it, round the approach direction */
-function accessOf(ctx, seam, reach = 80) {
-  const Vv = ctx.api.V, bodies = ctx.result.bodies.filter(b => !b.hidden && b.solid && !b.solid.isEmpty()).map(b => ({ id: b.id, solid: b.solid, bb: b.solid.bbox() }));
+function accessOf(ctx, seam, reach = 80, skip = null) {
+  const Vv = ctx.api.V, bodies = ctx.result.bodies.filter(b => !b.hidden && b.solid && !b.solid.isEmpty() && !(skip && skip.has(b.id))).map(b => ({ id: b.id, solid: b.solid, bb: b.solid.bbox() }));
   let clear = 0, total = 0; const who = new Map();
   for (const f of [0.1, 0.3, 0.5, 0.7, 0.9]) {
     const p0 = Vv.add(Vv.add(seam.O, Vv.mul(seam.e1, seam.L * f)), Vv.mul(seam.approach, 1.5));
@@ -145,6 +145,8 @@ function analyze(ctx, args) {
   const ba = ctx.bodyOf(args.a), bb = ctx.bodyOf(args.b);
   if (!ba || !bb) throw new Error('both parts need geometry');
   if (ba.id === bb.id) throw new Error(`${A0.name} and ${B0.name} are one part already (a boolean merged them) — join separate parts`);
+  /* weld metal already joining these two parts is not in the torch's way (it is this joint's own) */
+  const own = (ctx.doc.objects || []).filter(o => o.meta && o.meta.joint && Array.isArray(o.meta.joins) && o.meta.joins.includes(ba.id) && o.meta.joins.includes(bb.id) && !o.into), skip = new Set(own.map(o => o.id));
   const groups = contacts(api, ba.solid, bb.solid, args.max_gap == null ? 6 : +args.max_gap).flatMap(g => splitContact(Vv, g));
   if (!groups.length) throw new Error(`${ctx.get(ba.id).name} and ${ctx.get(bb.id).name} do not touch or face each other within 6 mm — mate them together first`);
   const joints = [];
@@ -180,15 +182,17 @@ function analyze(ctx, args) {
       else { if (aExt < tol && bExt > tol) { kind = 'inside'; y = Vv.neg(c); onto = 'b'; } else if (bExt < tol && aExt > tol) { kind = 'inside'; y = c; onto = 'a'; } else kind = 'flush'; }
       const approach = kind === 'inside' ? Vv.norm(Vv.add(s, y)) : s;
       const seam = { side, s, y, kind, onto, e1, L: P.u1 - P.u0, O: at(P.u0, v), approach };
-      seam.access = accessOf(ctx, seam); seam.position = positionOf(seam, kind === 'inside');
+      seam.access = accessOf(ctx, seam, 80, skip); seam.position = positionOf(seam, kind === 'inside');
       seams.push(seam);
     }
     if (type === 'tee' && seams.some(x => x.kind === 'flush')) type = 'corner';
-    joints.push({ type, c, e1, e2, origin, rect: P, sep: r2(g.sep), stem, base, tA: r2(tA), tB: r2(tB), length: r1(P.u1 - P.u0), width: r1(P.v1 - P.v0), area: r1(patch), seams, mid, a: ba.id, b: bb.id });
+    /* a joint built here before: its weld metal lies along this patch */
+    const welded = [...new Set(own.filter(o => { const bd = ctx.bodyOf(o.id); if (!bd) return false; const bx = bd.solid.bbox(), u = (p) => Vv.dot(p, e1), lo = Math.min(u(bx.min), u(bx.max)), hi = Math.max(u(bx.min), u(bx.max)); return hi > P.u0 + 0.5 && lo < P.u1 - 0.5 && Math.abs(Vv.dot(Vv.sub(Vv.lerp(bx.min, bx.max, 0.5), mid), c)) < 3 * Math.max(P.v1 - P.v0, 10); }).map(o => o.meta.joint))];
+    joints.push({ type, c, e1, e2, origin, rect: P, sep: r2(g.sep), stem, base, tA: r2(tA), tB: r2(tB), length: r1(P.u1 - P.u0), width: r1(P.v1 - P.v0), area: r1(patch), seams, mid, a: ba.id, b: bb.id, welded });
   }
   if (!joints.length) throw new Error('the parts only touch along a line or a point — no face to join');
   let j = joints.reduce((x, y) => (y.area > x.area ? y : x));
-  if (args.near) { const n = args.near; j = joints.reduce((x, y) => (Vv.len(Vv.sub(y.mid, n)) < Vv.len(Vv.sub(x.mid, n)) ? y : x)); }
+  if (args.near) { const n = ctx.worldPoint ? ctx.worldPoint(args.near) : args.near; j = joints.reduce((x, y) => (Vv.len(Vv.sub(y.mid, n)) < Vv.len(Vv.sub(x.mid, n)) ? y : x)); }
   j.others = joints.length - 1;
   return j;
 }
@@ -306,7 +310,10 @@ function weldOption(j, m, duty, args, meth) {
   let o = { duty, method: 'weld', joint: j.type, beads: [], cuts: [], gap: 0 };
   const tS = j.type === 'butt' ? Math.min(j.tA, j.tB) : j.stem ? j[j.stem === 'a' ? 'tA' : 'tB'] : Math.min(j.tA, j.tB);
   const tBase = j.type === 'butt' ? Math.max(j.tA, j.tB) : j.base ? j[j.base === 'a' ? 'tA' : 'tB'] : Math.max(j.tA, j.tB);
-  const tmin = Math.min(tS, tBase), tmax = Math.max(tS, tBase), aLo = aMin(tmax), aHi = Math.max(aLo, Math.floor(0.7 * tmin * 2) / 2);
+  /* the throat: at least the minimum for the thicker part, at most 0.7 × the thinner one — on thin parts the cap wins (a
+     fillet bigger than the plate burns through and pulls it out of shape; AWS D1.1: leg ≤ t along edges under ¼") */
+  const tmin = Math.min(tS, tBase), tmax = Math.max(tS, tBase), aCap = Math.max(1.5, Math.floor(0.7 * tmin * 2) / 2), aLo = Math.min(aMin(tmax), aCap), aHi = Math.max(aLo, aCap);
+  const thinNote = aMin(tmax) > aCap ? `the ${r1(tmin)} mm part is thin: the throat is held to 0.7 × t = a${aCap} (a bigger fillet burns through it and pulls it out of shape — AWS D1.1: leg no more than t along edges under ¼")` : null;
   const angle = mat.vAngle || 60, al = cls === 'aluminium';
   const quality = { light: 'ISO 5817-D', regular: 'ISO 5817-C', heavy: 'ISO 5817-B' }[duty];
   if (!seams.length) return { duty, method: 'weld', impossible: true, title: 'No torch access', why: [`neither side of the joint can be reached (blocked by ${[...new Set(j.seams.flatMap(s => s.access.blockers))].join(', ') || 'the parts'}) — weld it before the closing part goes on, add an access hole, or bond it`] };
@@ -324,20 +331,24 @@ function weldOption(j, m, duty, args, meth) {
   if (j.type === 'tee' || j.type === 'lap' || j.type === 'corner') {
     const inside = open('inside');
     if (j.type === 'lap') {
-      const ta = Math.min(j.tA, j.tB), a = clamp(half(duty === 'light' ? 0.3 * ta : 0.5 * ta + (al ? 0.5 : 0)), aLo, Math.max(aLo, half(ta * 0.7)));
+      const ta = Math.min(j.tA, j.tB), a = clamp(half(duty === 'light' ? 0.3 * ta : 0.5 * ta + (al ? 0.5 : 0)), aLo, aHi);
+      if (thinNote) why.push(thinNote);
       if (!inside.length) return { duty, method: 'weld', impossible: true, title: 'No reachable lap edge', why: ['both lap edges are blocked'] };
       fillets(duty === 'light' ? [inside[0]] : inside, a, duty === 'light' && L >= 150);
       why.push(`lap: fillet${inside.length > 1 && duty !== 'light' ? 's on both edges' : ''} a${a} (≈ ${duty === 'light' ? '0.3' : '0.5'} × the ${ta} mm plate, at least a${aLo} for its thickness)`);
       const ov = j.width; if (ov < Math.max(25, 5 * ta)) notes.push(`overlap is ${r1(ov)} mm: AWS D1.1 wants at least 5 × t = ${Math.max(25, 5 * ta)} mm`);
       if (duty === 'heavy') notes.push('lap joints are poor in fatigue (the eccentric load bends the plates) — a butt joint or a double lap is better for dynamic loads');
       o.prep = { shape: 'none', text: 'none (sheared or sawn edges, deburred)' };
-    } else if (duty === 'light' || (duty === 'regular' && tS <= 25)) {
+    } else if (duty === 'light' || (duty === 'regular' && tS <= 25) || (duty === 'heavy' && tS <= 6 && open('inside').length > 1)) {
       if (!inside.length) {
         /* corner, flush both sides (rare): a bevel groove from outside */
         o = Object.assign(o, bevelTee(j, seams.slice(0, 1), tS, duty, angle, false)); why.push('no inside corner to fillet: a partial-penetration bevel groove from outside');
       } else {
-        const both = duty === 'regular' && inside.length > 1;
-        const a = clamp(half((duty === 'light' ? 0.3 : both ? 0.5 : 0.7) * tS + (al ? 0.5 : 0)), aLo, aHi);
+        /* heavy duty on a thin stem (≤ 6 mm): fillets both sides at 0.7 t carry its full strength — no bevel needed */
+        const both = (duty === 'regular' || duty === 'heavy') && inside.length > 1;
+        const a = clamp(half((duty === 'light' ? 0.3 : duty === 'heavy' ? 0.7 : both ? 0.5 : 0.7) * tS + (al ? 0.5 : 0)), aLo, aHi);
+        if (duty === 'heavy') why.push(`a ${r1(tS)} mm stem: fillets both sides at a${a} (≈ 0.7 × t) carry its full strength, toes ground for fatigue (IIW) — a K preparation is for stems over 6 mm`);
+        if (thinNote) why.push(thinNote);
         fillets(duty === 'light' ? [inside.slice().sort((x, y) => POSF[y.position] - POSF[x.position])[0]] : (both ? inside : [inside[0]]), a, duty === 'light' && L >= 200);
         why.push(duty === 'light' ? `light duty: one fillet a${a} (0.3 × t = ${r1(0.3 * tS)}, at least a${aLo} for a ${tmax} mm part)${L >= 200 ? ', intermittent' : ''}` : both ? `fillets both sides a${a}: ≈ 0.5 × t gives about the stem's full strength in S235 (EN 1993-1-8)` : `only one side can be reached: one fillet a${a} ≈ 0.7 × t — keep it out of bending about its root`);
         if (al) why.push('aluminium: +0.5 mm on the throat for the softened heat-affected zone');
@@ -577,7 +588,7 @@ function jointSummary(ctx, j, m) {
   return {
     joint: j.type, parts: [name(j.a), name(j.b)], materials: [m.A ? m.A.label : m.ka || 'not set', m.B ? m.B.label : m.kb || 'not set'],
     thickness_mm: j.type === 'butt' ? { a: j.tA, b: j.tB } : j.stem ? { stem: j[j.stem === 'a' ? 'tA' : 'tB'], base: j[j.base === 'a' ? 'tA' : 'tB'] } : { a: j.tA, b: j.tB },
-    length_mm: j.length, contact_mm2: j.area, existing_gap_mm: j.sep || 0, other_contacts: j.others || 0,
+    length_mm: j.length, contact_mm2: j.area, existing_gap_mm: j.sep || 0, other_contacts: j.others || 0, already_welded: j.welded && j.welded.length ? j.welded : undefined,
     sides: j.seams.map(s => ({ side: s.side === 'v1' ? 1 : 2, kind: s.kind === 'inside' ? 'inside corner' : 'flush / open', access: s.access.level, blocked_by: s.access.blockers.length ? s.access.blockers : undefined, position: `${s.position} (${POSNAME[s.position]})` }))
   };
 }
@@ -667,7 +678,7 @@ function applyOps(ctx, args, adv, duty) {
   });
   /* 4. the callout: the weld symbol at the middle of the first seam, its leader pointing out of the joint */
   const s0 = (opt.beads[0] || opt.cuts[0] || { seam: j.seams[0] }).seam, at = Vv.add(Vv.add(s0.O, Vv.mul(s0.e1, s0.L / 2)), Vv.mul(s0.approach, 0.5));
-  ops.push({ op: 'callout', id: `${tag}c`, name: `${tag} ${opt.method === 'weld' ? 'weld symbol' : 'joint note'}`, on: fixed, at: ctx.opPoint(at), dir: s0.approach, along: j.e1, kind: opt.method === 'weld' ? 'weld' : opt.method, symbol: Object.assign({ ref: tag }, opt.symbol), lines: [`${tag} ${opt.title}: ${opt.weld}`, opt.method === 'weld' ? `${opt.process.code} ${opt.process.name} · ${opt.process.filler} · ${opt.quality}` : `${opt.process.name} · ${opt.materialText || ''}`, `prep: ${opt.prep ? opt.prep.text : 'none'}`] });
+  ops.push({ op: 'callout', id: `${tag}c`, name: `${tag} ${opt.method === 'weld' ? 'weld symbol' : 'joint note'}`, on: fixed, at: ctx.opPoint(at), dir: s0.approach, along: j.e1, kind: opt.method === 'weld' ? 'weld' : opt.method, symbol: Object.assign({ ref: tag }, opt.symbol), joint: { a: args.a, b: args.b, duty, method: args.method || 'auto', process: args.process || 'auto', labor_rate: +args.labor_rate || 60 }, lines: [`${tag} ${opt.title}: ${opt.weld}`, opt.method === 'weld' ? `${opt.process.code} ${opt.process.name} · ${opt.process.filler} · ${opt.quality}` : `${opt.process.name} · ${opt.materialText || ''}`, `prep: ${opt.prep ? opt.prep.text : 'none'}`] });
   return { ops, gapNote, tag, mover, fixed };
 }
 
@@ -795,6 +806,22 @@ export default {
       query: true, doc: `Three suggestions for the joint between a and b — ${DUTY_DOC} — each with the joint and its preparation (square, V, X, bevel, K, J, U), root gap and face, process, filler, sizes, passes, weld metal, welding position, time (fit-up, prep, welding, finishing, inspection), cost, ease (1–5) and the reasons. method: ${METHOD_DOC}.`,
       args: ARGS,
       run(args, ctx) { const a = advise(ctx, args); return { info: { summary: a.summary, method: a.method, method_auto: a.auto, options: Object.fromEntries(Object.entries(a.options).map(([k, o]) => [k, publicOption(o)])) } }; }
+    },
+    redo: {
+      doc: 'Build a joint again for the parts as they are now (after a size or thickness change): its weld metal, preparation and symbol are replaced, with the same parts, duty, method and process, in one undoable step. id: the joint (W1, W2…).',
+      args: { id: { default: null, doc: 'the joint to redo, e.g. W1' } },
+      run(args, ctx) {
+        const tag = String(args.id || ''), objs = ctx.doc.objects, sym = objs.find(o => o.type === 'callout' && o.params && o.params.symbol && o.params.symbol.ref === tag);
+        const parts = objs.filter(o => o.meta && o.meta.joint === tag);
+        if (!sym && !parts.length) throw new Error(`no joint ${tag || '(give id)'} — the joints are ${[...new Set(objs.filter(o => o.meta && o.meta.joint).map(o => o.meta.joint))].join(', ') || 'none yet'}`);
+        /* what it was built with: stored on its symbol (or, for an older joint, on its parts) */
+        const meta = (parts[0] || {}).meta || {}, set = Object.assign({ a: (meta.joins || [])[0], b: (meta.joins || [])[1], duty: meta.duty || 'regular', method: 'auto', process: 'auto' }, (sym && sym.params.joint) || {});
+        if (!set.a || !set.b || !ctx.get(set.a) || !ctx.get(set.b)) throw new Error(`joint ${tag}: the parts it joined are gone`);
+        /* the seam it was on: where its symbol points (it moves with the part it labels) */
+        const near = sym && ctx.world(sym.on) ? ctx.api.M4.point(ctx.world(sym.on), sym.params.at) : null;
+        const ids = parts.map(o => o.id).concat(objs.filter(o => o.type === 'callout' && o.params && o.params.symbol && o.params.symbol.ref === tag).map(o => o.id));
+        return { ops: ids.map(id => ({ op: 'delete', id })).concat([{ op: 'addon', addon: 'welding', action: 'apply', args: Object.assign({}, set, { id: tag }, near ? { near: ctx.opPoint(near) } : {}) }]), label: `${tag}: built again for the sizes as they are`, info: { id: tag, replaced: ids.length, settings: set } };
+      }
     },
     apply: {
       doc: `Build one suggestion between a and b: cut the edge preparation out of the parts, open the root gap (bond line), place the weld metal (adhesive, filler, laminate, straps) as parts attached to a, and add the ISO 2553 weld symbol callout. duty: ${DUTY_DOC}.`,

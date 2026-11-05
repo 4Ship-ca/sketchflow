@@ -782,6 +782,13 @@ function deleteJoint(tag) {
   apply(ids.map(id => ({ op: 'delete', id })), `Delete joint ${tag}`); select(null);
   toast(`Joint ${tag} removed (its weld metal, cuts and symbol). A root gap it opened stays — undo to put the parts back.`, 3600);
 }
+/* build a joint again for the parts as they are now (a thickness or size changed): same parts, duty, method, process */
+function redoJoint(tag) {
+  let r; try { r = apply([{ op: 'addon', addon: 'welding', action: 'redo', args: { id: tag } }], `${tag}: built again for the new sizes`)[0]; } catch (e) { return; }
+  const inner = [...(r.results || [])].reverse().find(x => x && x.info) || {}, info = inner.info || {};
+  const c = model.get(tag + 'c'); if (c) select(c.id);
+  toast(`${tag} rebuilt for the parts as they are now: ${info.weld || 'done'}${info.iso ? ' (' + info.iso + ')' : ''}`, 4200);
+}
 function applyWeldDuty(duty) {
   const w = weldWiz; if (!w || !w.adv) return;
   const o = w.adv.options[duty], nm = (id) => (model.get(id) || {}).name || id;
@@ -812,6 +819,7 @@ function renderWeldWizard() {
     el('span', { class: 'wwchip' }, th.stem != null ? `stem ${fmt(th.stem)} mm on ${fmt(th.base)} mm` : `${fmt(th.a)} mm + ${fmt(th.b)} mm`),
     el('span', { class: 'wwchip' }, `seam ${fmt(S.length_mm)} mm`),
     S.existing_gap_mm ? el('span', { class: 'wwchip' }, `gap now ${fmt(S.existing_gap_mm)} mm`) : null,
+    S.already_welded ? el('span', { class: 'wwchip bad', title: 'Building again adds a second weld on top. To fit it to new sizes, select its weld symbol and use Redo for new sizes.' }, `already welded here: ${S.already_welded.join(', ')}`) : null,
     S.other_contacts ? el('span', { class: 'wwchip bad', title: 'The parts meet in more than one place: this is the largest. Pick again and click nearer the one you mean.' }, `${S.other_contacts} more place${S.other_contacts > 1 ? 's' : ''} where they meet`) : null,
     ...S.sides.map(sd => el('span', { class: 'wwchip' + (sd.access === 'blocked' ? ' bad' : ''), title: sd.blocked_by ? 'in the way: ' + sd.blocked_by.join(', ') : 'torch access checked with rays from along the seam' }, `side ${sd.side}: ${sd.kind} · torch ${sd.access}${sd.blocked_by ? ' (' + sd.blocked_by.slice(0, 2).join(', ') + ')' : ''} · ${sd.position}`)));
   box.append(chips);
@@ -887,7 +895,7 @@ function calloutSection(o, s1) {
   const parts = tag ? model.doc.objects.filter(x => x.meta && x.meta.joint === tag) : [], links = [];
   parts.forEach((x, i) => { if (i) links.push(', '); links.push(el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(x.id); } }, x.name)); });
   if (parts.length) s1.append(el('div', { class: 'f' }, 'joint', el('span', null, ...links)));
-  s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show symbol' : 'Hide symbol'), tag && parts.length ? el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint') : null));
+  s1.append(el('div', { class: 'btns' }, tag && parts.length ? el('button', { class: 'btn pri', title: 'After changing a thickness or size: build this joint again (weld metal, preparation, symbol) for the parts as they are now', onclick: () => redoJoint(tag) }, 'Redo for new sizes') : null, el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, hidden: !o.hidden }]) }, o.hidden ? 'Show symbol' : 'Hide symbol'), tag && parts.length ? el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint') : null));
   s1.append(el('div', { class: 'note' }, 'ISO 2553 (system A): a symbol on the solid reference line is on the arrow side, on the dashed line the other side; the tail carries process, quality level and inspection. It moves with the part it labels.'));
 }
 /* Properties for a joint's weld metal, adhesive, laminate, strap or preparation cut */
@@ -897,7 +905,7 @@ function jointPartSection(o, s1) {
   if (joins.length) { kids.push(' · '); joins.forEach((id, i) => { if (i) kids.push(' + '); kids.push(el('a', { href: '#', onclick: (e) => { e.preventDefault(); select(id); } }, model.get(id).name)); }); }
   s1.append(el('div', { class: 'f' }, 'joint', el('span', null, ...kids)));
   if (o.meta.notes) s1.append(el('div', { class: 'note' }, o.meta.notes));
-  s1.append(el('div', { class: 'btns' }, c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
+  s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', title: 'After changing a thickness or size: build this joint again for the parts as they are now', onclick: () => redoJoint(tag) }, 'Redo for new sizes'), c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
 }
 /* ---------- add-on action forms (right panel) ---------- */
 let addonForm = null;

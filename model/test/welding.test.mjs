@@ -153,5 +153,22 @@ ok('…16" × 14" outside, 1" wide', near(cbb.max[2] - cbb.min[2], 406.4, 1e-6) 
 ok('…two welded joints, each with its symbol, and no overlaps', cb.callouts().length === 2 && new Set(cb.doc.objects.filter(o => o.meta && o.meta.joint).map(o => o.meta.joint)).size === 2 && !interference(cb).filter(c => c.volume > 1).length);
 ok('…about 3 kg of steel', near(massReport(cb.doc, cb.result).total_mass_g, 2977, 30), massReport(cb.doc, cb.result).total_mass_g);
 
+/* change the crow to ⅛" plate, then redo the joints: thin-plate advice, weld metal on the new faces, one undo step each */
+const th = new Model(exampleDoc('crow-shelf-bracket')); th.apply([{ op: 'set', id: 'crow', params: { length: '=1/8*25.4' } }]);
+ok('a size can be typed as a formula: =1/8*25.4 → 3.175', near(th.get('crow').params.length, 3.175, 1e-9));
+const r1j = run(th, 'redo', { id: 'W1' }), r1in = r1j.results[r1j.results.length - 1].info;
+ok('redo rebuilds the joint for the new thickness, same tag and duty', r1in.id === 'W1' && /double fillet a2/.test(r1in.weld) && r1in.title === 'Regular service', r1in.weld);
+ok('…a thin part caps the throat at 0.7 t, and says why', r1in.why.some(w => /thin/.test(w) && /0\.7/.test(w)));
+run(th, 'redo', { id: 'W2' });
+const tb = th.doc.objects.filter(o => o.meta && o.meta.joint && !o.into).map(o => th.result.bodies.find(b => b.id === o.id).solid.bbox());
+ok('…the fillets sit on the ⅛" plate faces, the symbols say a2, nothing overlaps', tb.length === 4 && tb.every(bb => Math.min(Math.abs(bb.min[1]), Math.abs(bb.max[1])) < 1.7) && th.callouts().every(c => c.symbol.size === 'a2') && !interference(th).filter(c => c.volume > 1).length, tb.map(bb => [bb.min[1].toFixed(2), bb.max[1].toFixed(2)]));
+th.undo();
+ok('…each redo is one undo step', th.callouts().find(c => c.id === 'W2c').symbol.size === 'a3' && th.callouts().find(c => c.id === 'W1c').symbol.size === 'a2');
+const tw = query(th, 'advise', { a: 'bar', b: 'crow', near: [180, 0, 400.05] });
+ok('advising a seam that is already welded says so (its own weld metal is not in the way)', tw.summary.already_welded && tw.summary.already_welded.includes('W1') && !tw.options.regular.impossible, tw.summary.already_welded);
+const tn = new Model(exampleDoc('crow-shelf-bracket')); tn.apply([{ op: 'set', id: 'crow', params: { length: 3.175 } }]); tn.apply(tn.doc.objects.filter(o => (o.meta && o.meta.joint) || o.type === 'callout').map(o => ({ op: 'delete', id: o.id })));
+const tq = query(tn, 'advise', { a: 'bar', b: 'crow', near: [180, 0, 400.05] }).options;
+ok('heavy duty on a ⅛" stem: fillets both sides with the toes ground, not a K preparation', /double fillet a2/.test(tq.heavy.weld) && tq.heavy.symbol.toes && !tq.heavy.prep.machined && tq.heavy.time_min.prep === 0, tq.heavy.weld);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

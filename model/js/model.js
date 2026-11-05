@@ -39,7 +39,7 @@ export const TYPES = {
   plane: { label: 'Plane', params: { size: 60 } },
   /* an annotation on a part (a weld symbol, a joint note): `on` = the part; at / dir / along in that part's own coordinates, so it
      moves with it; symbol = what the weld-symbol drawer needs (ISO 2553); lines = the note's text */
-  callout: { label: 'Callout', params: { at: [0, 0, 0], dir: [0, 0, 1], along: [1, 0, 0], symbol: null, lines: [], kind: 'note' } },
+  callout: { label: 'Callout', params: { at: [0, 0, 0], dir: [0, 0, 1], along: [1, 0, 0], symbol: null, lines: [], kind: 'note', joint: null } },
   /* everything on one side of a plane (a big block): the tool a split uses */
   halfspace: { label: 'Half-space', params: { size: 4000 } },
   edge: { label: 'Edge treatment', params: { style: 'fillet', size: 4, mode: 'auto' } },
@@ -1595,7 +1595,7 @@ export class Model {
         /* {on: part, at:[x,y,z] (world, origin-relative with relative ops), dir (leader direction), along (the joint's direction), symbol, lines, kind} */
         const t = need(o.on), M = this.result.world.get(t.id); if (!M) throw new Error(`${t.name} has no position`);
         const Mi = M4.inv(M), id = o.id && !this.get(o.id) ? String(o.id) : uid('cal');
-        const params = defaultParams('callout', { at: M4.point(Mi, W(o.at) || [0, 0, 0]).map(r6), dir: V.norm(M4.dir(Mi, o.dir || [0, 0, 1])).map(r6), along: V.norm(M4.dir(Mi, o.along || [1, 0, 0])).map(r6), symbol: o.symbol || null, lines: (o.lines || []).map(String), kind: o.kind || 'note' });
+        const params = defaultParams('callout', { at: M4.point(Mi, W(o.at) || [0, 0, 0]).map(r6), dir: V.norm(M4.dir(Mi, o.dir || [0, 0, 1])).map(r6), along: V.norm(M4.dir(Mi, o.along || [1, 0, 0])).map(r6), symbol: o.symbol || null, lines: (o.lines || []).map(String), kind: o.kind || 'note', joint: o.joint || null });
         this.insert({ id, name: o.name || (o.kind === 'weld' ? 'Weld symbol' : 'Callout') + ' ' + (d.objects.filter(x => x.type === 'callout').length + 1), type: 'callout', on: t.id, params, mate: null, pose: null, into: null, op: null, color: null });
         return { label: 'Label ' + t.name, id };
       }
@@ -1975,6 +1975,7 @@ export class Model {
       materials: MATERIALS,
       /* a world point as the ops in this batch expect it (origin-relative when the batch is) */
       opPoint: (p) => (self.rel ? V.sub(p, self.result.originPoint) : p),
+      worldPoint: (p) => (Array.isArray(p) && self.rel ? V.add(p.map(Number), self.result.originPoint) : p),
       newId: (prefix) => { let i = 1; while (self.get(prefix + i)) i++; return prefix + i; } };
   }
   /* summary for the AI and the tree */
