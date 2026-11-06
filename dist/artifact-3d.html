@@ -2198,6 +2198,45 @@ function followAnchorsOf(R, o, missing, notes) {
   }
   return changed;
 }
+/* upTo {param, obj, mode, gap}: a size measured from the part's base (local z = 0) straight up its own z to another part —
+   a bar whose height reaches the inclined plate above it, a post up to a beam. The part keeps its shape (a box stays a
+   box, its top flat): the size is the distance along its axis from its base footprint to the first face of the target.
+     touch  — the lowest of those distances: its top just meets the target, nowhere through it (default)
+     centre — the distance at its middle          cover — the highest: it reaches the target everywhere
+   gap mm is left between them (negative: it goes into the target by that much). */
+const UPTO_PARAMS = { box: ['height'], cylinder: ['height'], cone: ['height'], extrude: ['length'] };
+function footprint(o) {
+  const p = o.params, pts = [];
+  if (o.type === 'box') { const w = p.width / 2, d = p.depth / 2; pts.push([0, 0]); for (const x of [-w, 0, w]) for (const y of [-d, 0, d]) if (x || y) pts.push([x, y]); }   /* the middle first (centre mode reads it) */
+  else if (o.type === 'cylinder' || o.type === 'cone') { const r = p.diameter / 2; pts.push([0, 0]); for (let k = 0; k < 16; k++) pts.push([r * Math.cos(k * Math.PI / 8), r * Math.sin(k * Math.PI / 8)]); }
+  else if (o.type === 'extrude') { const prof = p.shape && p.shape !== 'points' ? shapeProfile(p) : p.profile; const c = centroid2(prof); pts.push(c); for (let i = 0; i < prof.length; i++) { const a = prof[i], b = prof[(i + 1) % prof.length]; pts.push(a, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]); } }
+  return pts;
+}
+function rayInto(sol, o, d) {
+  let best = Infinity;
+  for (const q of sol.polys) {
+    const dn = V.dot(q.plane.n, d); if (Math.abs(dn) < 1e-12) continue;
+    const t = (q.plane.w - V.dot(q.plane.n, o)) / dn; if (!(t > 1e-6) || t >= best) continue;
+    const x = V.add(o, V.mul(d, t)), n = q.plane.n; let sg = 0, inside = true;
+    for (let i = 0; i < q.v.length && inside; i++) { const a = q.v[i].p, b = q.v[(i + 1) % q.v.length].p, c = V.dot(V.cross(V.sub(b, a), V.sub(x, a)), n); if (Math.abs(c) < 1e-9) continue; const s = c > 0 ? 1 : -1; if (!sg) sg = s; else if (s !== sg) inside = false; }
+    if (inside) best = t;
+  }
+  return best;
+}
+function followUpTo(R, o, missing, notes) {
+  const u = o.upTo, p = o.params, M = R.world.get(o.id); if (!u || !M || !p) return false;
+  if (!(UPTO_PARAMS[o.type] || []).includes(u.param)) { notes.push({ o, text: `its ${u.param} can't extend to a part (heights of boxes, cylinders and cones, and the length of a blind extrude can)` }); return false; }
+  if (o.type === 'extrude' && p.end && p.end !== 'blind') { notes.push({ o, text: 'only a blind extrude can extend to a part (this one is ' + p.end + ')' }); return false; }
+  if (o.mate && o.mate.b && !['bottom', 'start'].includes(o.mate.b)) { notes.push({ o, text: `it is placed by its ${o.mate.b}, so a longer ${u.param} would move its base — mate it by its bottom to extend it` }); return false; }
+  const T = R.bodies.find(b => b.id === u.obj); if (!T) { missing.push({ o, a: { obj: u.obj, conn: 'part' } }); return false; }
+  const d = V.norm(M4.dir(M, [0, 0, 1])), hits = footprint(o).map(([x, y]) => rayInto(T.solid, M4.point(M, [x, y, 1e-3]), d)), got = hits.filter(Number.isFinite);
+  if (!got.length) { notes.push({ o, text: `${T.name} is not above it along its ${u.param} — it keeps ${p[u.param]}` }); return false; }
+  const val = (u.mode === 'cover' ? Math.max(...got) : u.mode === 'centre' ? (Number.isFinite(hits[0]) ? hits[0] : Math.min(...got)) : Math.min(...got)) + 1e-3 - (+u.gap || 0);
+  if (got.length < hits.length && u.mode !== 'centre') notes.push({ o, text: `part of it is not under ${T.name}: it reaches it where it is` });
+  if (!(val > 1e-3)) { notes.push({ o, text: `${T.name} is already at its base — it keeps ${p[u.param]}` }); return false; }
+  const r = Math.round(val * 1e6) / 1e6; if (Math.abs(r - p[u.param]) <= 1e-6) return false;
+  p[u.param] = r; return true;
+}
 const cleanAnchors = (list) => {
   if (list == null || list === false) return null;
   if (!Array.isArray(list)) throw new Error('anchors: give a list of {obj, conn} (and i, the point, for a drawn outline)');
@@ -3402,19 +3441,19 @@ class Model {
   /* sketch anchors: points of a face sketch held on other parts' connectors (a corner, a face centre) follow them — after
      every evaluation the anchored sizes and places are brought up to date, and the model evaluated again (a few passes) */
   followAnchors() {
-    const list = this.doc.objects.filter(o => Array.isArray(o.anchors) && o.anchors.length);
+    const list = this.doc.objects.filter(o => (Array.isArray(o.anchors) && o.anchors.length) || o.upTo);
     if (!list.length) return;
     let missing = [], notes = [];
     for (let pass = 0; pass < 6; pass++) {
       missing = []; notes = []; let moved = false;
       for (const o of list) {
         if (this.result.off && this.result.off.has(o.id)) continue;
-        try { if (followAnchorsOf(this.result, o, missing, notes)) moved = true; } catch (e) { notes.push({ o, text: e.message }); }
+        try { if (o.anchors && o.anchors.length && followAnchorsOf(this.result, o, missing, notes)) moved = true; if (o.upTo && followUpTo(this.result, o, missing, notes)) moved = true; } catch (e) { notes.push({ o, text: e.message }); }
       }
       if (!moved) break;
       this.result = evaluate(this.doc);
     }
-    for (const { o, a } of missing) this.result.warnings.push({ kind: 'anchor', id: o.id, text: `${o.name}: the ${a.conn} it follows on ${(this.get(a.obj) || {}).name || a.obj} is gone — it stays where it is (Properties → Follows to change it)` });
+    for (const { o, a } of missing) this.result.warnings.push({ kind: 'anchor', id: o.id, text: a.conn === 'part' ? `${o.name}: the part its ${o.upTo ? o.upTo.param : 'size'} extends to is gone — it keeps its size` : `${o.name}: the ${a.conn} it follows on ${(this.get(a.obj) || {}).name || a.obj} is gone — it stays where it is (Properties → Follows to change it)` });
     for (const { o, text } of notes) this.result.warnings.push({ kind: 'anchor', id: o.id, text: `${o.name}: ${text}` });
   }
   /* the face connector of a part at a point (the face's normal there narrows it down), and that point as a slide on the
@@ -3579,6 +3618,11 @@ class Model {
           if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
           if (x.expr && !Object.keys(x.expr).length) delete x.expr;
         }
+        if (o.upTo !== undefined) {
+          if (o.upTo && typeof o.upTo === 'object') { const u = o.upTo; if (!(UPTO_PARAMS[x.type] || []).includes(u.param)) throw new Error(`${x.name}: ${u.param} can't extend to a part — try ${(UPTO_PARAMS[x.type] || []).join(', ') || 'a box, cylinder or cone height, or an extrude length'}`); if (!u.obj || !(this.get(u.obj) || (this.result.virtual && this.result.virtual.has(u.obj))) || u.obj === x.id) throw new Error('extend to: give obj, another part'); x.upTo = { param: u.param, obj: u.obj, mode: ['touch', 'centre', 'cover'].includes(u.mode) ? u.mode : 'touch', gap: +u.gap || 0 }; if (x.expr) delete x.expr[u.param]; }
+          else delete x.upTo;
+        }
+        else if (x.upTo && o.params && typeof o.params === 'object' && o.params[x.upTo.param] !== undefined) delete x.upTo;   /* a size typed over it is the user's */
         if (o.also !== undefined) { if (o.also === 'crossed') x.also = this.partsCrossedBy(x.id); else if (Array.isArray(o.also) && o.also.length) x.also = o.also.filter(v => typeof v === 'string' && v !== x.into); else delete x.also; if (x.also && !x.also.length) delete x.also; }
         if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; if (o.held === undefined) delete x.held; }
         /* a size typed on a shape that follows anchors is the user's from now on: the anchors stop driving it */
@@ -4008,7 +4052,7 @@ class Model {
         const sub = []; const walk = (id) => { for (const y of d.objects) if (y.into === id && !sub.includes(y)) { sub.push(y); walk(y.id); } }; walk(x.id);
         const map = new Map([[x.id, uid(x.type.slice(0, 3))], ...sub.map(y => [y.id, uid(y.type.slice(0, 3))])]);
         const copy = (y) => {
-          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved; delete c.anchors; delete c.held;   /* a copy beside it does not follow the original's corners */
+          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved; delete c.anchors; delete c.held; delete c.upTo;   /* a copy beside it does not follow the original's corners */
           if (y === x) { c.name = (o.name || y.name + ' copy'); c.into = x.into; }
           else { c.name = y.name; c.into = map.get(y.into) || y.into; }
           if (c.mate && map.has(c.mate.to)) c.mate.to = map.get(c.mate.to);
@@ -4086,7 +4130,7 @@ class Model {
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
-          of: o.of, joins: o.joins, also: o.also && o.also.length ? o.also : undefined, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
+          of: o.of, joins: o.joins, upTo: o.upTo || undefined, also: o.also && o.also.length ? o.also : undefined, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
@@ -4113,7 +4157,7 @@ function poseFromMatrix(M) {
   return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
 }
 
-return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, anchorWorld, anchorDriven, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, threadPitchOf, cosmeticThreads, loftStations, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, carrySplines, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
+return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, anchorWorld, anchorDriven, UPTO_PARAMS, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, threadPitchOf, cosmeticThreads, loftStations, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, carrySplines, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
 })();
 
 __sf3.views = (() => {
@@ -7286,7 +7330,7 @@ return { default: __default };
 __sf3.app = (() => {
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-const { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven } = __sf3.model;
+const { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven , UPTO_PARAMS } = __sf3.model;
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
 const welding = __sf3.welding.default;
@@ -7540,7 +7584,7 @@ function renderTree() {
   };
   const rows = treeOrder();
   rows.forEach(({ o, depth }, k) => {
-    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.upTo ? ` · ${o.upTo.param} ↥ ${partName(o.upTo.obj)}` : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
@@ -7608,6 +7652,7 @@ function setParam(ob, prm, raw) {
 }
 /* number field that also takes =formulas, with a link button */
 function paramInput(ob, prm) {
+  if (ob.upTo && ob.upTo.param === prm) return upToInput(ob, prm);
   const linked = ob.expr && ob.expr[prm], wrap = el('span', { class: 'pin' });
   const i = el('input', { value: linked ? linked : fmt(ob.params[prm]), inputmode: 'decimal', class: linked ? 'linked' : '', title: linked ? `follows ${linked.slice(1)} = ${fmt(ob.params[prm])} · type a number to unlink` : 'a number, or =formula e.g. =plate.depth - 10' });
   i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); });
@@ -7615,9 +7660,28 @@ function paramInput(ob, prm) {
   const b = el('button', { class: 'chain' + (linked ? ' on' : ''), title: linked ? 'Unlink (keep the value)' : 'Follow another part’s dimension…', onclick: (e) => { e.preventDefault(); if (linked) apply([{ op: 'unlink', id: ob.id, param: prm }]); else leaderMenu(ob, prm, b); } }, icon('link'));
   wrap.append(i, b); if (linked) wrap.append(el('span', { class: 'val' }, '= ' + fmt(ob.params[prm]))); return wrap;
 }
+/* a size that extends to another part: shown as linked, with how it meets it and the gap */
+const partName = (id) => { const R = model.result, v = R.virtual && R.virtual.get(id), o = model.get(v ? v.source : id); return o ? o.name + (v ? ' ·' + (v.index + 1) : '') : id; };
+function upToInput(ob, prm) {
+  const u = ob.upTo, wrap = el('span', { class: 'pin' });
+  const i = el('input', { value: `↥ ${partName(u.obj)}`, class: 'linked', title: `extends to ${partName(u.obj)} = ${fmt(ob.params[prm])} · type a number to set it yourself` });
+  i.addEventListener('focus', () => { i.value = fmt(ob.params[prm]); i.select(); });
+  i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.value = `↥ ${partName(u.obj)}`; i.blur(); } });
+  i.addEventListener('change', () => { const v = parseFloat(String(i.value).replace(',', '.')); if (Number.isFinite(v) && v > 0 && Math.abs(v - ob.params[prm]) > 1e-9) apply([{ op: 'set', id: ob.id, params: { [prm]: v } }], `${ob.name}: ${prm} ${fmt(v)}`); else i.value = `↥ ${partName(u.obj)}`; });
+  const off = el('button', { class: 'chain on', title: 'Stop extending (keep the size it has)', onclick: (e) => { e.preventDefault(); apply([{ op: 'set', id: ob.id, upTo: null }], `${ob.name}: ${prm} no longer extends`); } }, icon('link'));
+  const mode = el('select', { title: 'touch: its top just meets it (nowhere through it) · centre: its middle meets it · cover: it reaches it everywhere' }, ...[['touch', 'touch'], ['centre', 'centre'], ['cover', 'cover']].map(([v, t]) => el('option', { value: v, selected: u.mode === v }, t)));
+  mode.onchange = () => apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { mode: mode.value }) }], `${ob.name}: ${prm} meets ${partName(u.obj)} at its ${mode.value}`);
+  const gap = el('input', { value: fmt(u.gap || 0), inputmode: 'decimal', title: 'gap mm left under it (negative: into it)', style: 'width:54px;flex:none' });
+  gap.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') gap.blur(); });
+  gap.addEventListener('change', () => { const v = parseFloat(String(gap.value).replace(',', '.')); if (Number.isFinite(v)) apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { gap: v }) }], `${ob.name}: ${fmt(v)} mm gap to ${partName(u.obj)}`); });
+  wrap.append(i, off, el('span', { class: 'val' }, `= ${fmt(ob.params[prm])} · meets it at its `, mode, ' gap ', gap));
+  return wrap;
+}
 function leaderMenu(ob, prm, anchor) {
   const r = anchor.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${Math.max(8, r.right - 260)}px;top:${r.bottom + 4}px;max-height:60vh;overflow:auto;width:260px` });
   m.append(el('div', { class: 'mh' }, `${ob.name} · ${prm} follows…`));
+  if ((UPTO_PARAMS[ob.type] || []).includes(prm) && !(ob.type === 'extrude' && ob.params.end && ob.params.end !== 'blind'))
+    m.append(el('button', { title: 'Measure it from its base, straight up its own axis, to a part you click: it keeps its shape and follows that part', onclick: () => { m.remove(); setTool('upto', { id: ob.id, param: prm }); } }, `↥ Extend to a part (up to the one above it)…`));
   const rows = [];
   for (const o of model.doc.objects) { if (o.id === ob.id || ['edge', 'pattern'].includes(o.type)) continue; for (const [k, v] of Object.entries(o.params || {})) if (typeof v === 'number') rows.push({ o, k, v, score: (Math.abs(v - ob.params[prm]) < 1e-9 ? 0 : 2) + (k === prm ? 0 : 1) }); }
   rows.sort((a, b) => a.score - b.score);
@@ -8585,6 +8649,7 @@ function setTool(name, arg) {
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
   else if (name === 'weld-wiz') { tool.data.a = typeof arg === 'string' ? arg : null; weldWizHint(); }
+  else if (name === 'upto') { Object.assign(tool.data, arg); hint(`Extend ${model.get(arg.id).name}'s ${arg.param}: click the part it should reach (straight up its own axis)`, [['Cancel', () => setTool(null)]]); }
   else if (name === 'anchor') { tool.data.id = arg; views.connectorsFor = 'all'; views.connectorKinds = new Set(['corner', 'center', 'face']); views.connectorsSkip = arg; anchorHint(); }
   else if (name === 'edge-weld') {
     hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [['Done', () => setTool(null)]], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
@@ -9057,6 +9122,16 @@ function clickTool(pane, x, y, hit, e) {
   }
   if (t.name === 'weld-wiz') { weldWizClick(views.pick(pane, x, y)); return; }
   if (t.name === 'anchor') { anchorClick(hit); return; }
+  if (t.name === 'upto') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click the part it should reach'); return; }
+    const body = R.bodies.find(b => b.id === pk.id) || model.bodyContaining(pk.id), me = model.bodyContaining(t.data.id);
+    if (!body || (me && body.id === me.id)) { toast('Click another part'); return; }
+    const { id, param } = t.data; setTool(null);
+    try { apply([{ op: 'set', id, upTo: { param, obj: body.id, mode: 'touch', gap: 0 } }], `${model.get(id).name}: ${param} extends to ${partName(body.id)}`); } catch (e) { return; }
+    const o = model.get(id), w = model.result.warnings.find(q => q.kind === 'anchor' && q.id === id);
+    select(id); toast(w ? w.text : `${o.name}: ${param} ${fmt(o.params[param])} — it reaches ${partName(body.id)} and follows it`, 3200);
+    return;
+  }
   if (t.name === 'pick') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part'); return; }
     const id = model.resolveId(pk.id), then = t.data.then; setTool(null); if (id) then(id); return;

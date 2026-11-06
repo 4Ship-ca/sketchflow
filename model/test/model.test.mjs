@@ -635,6 +635,23 @@ ok('…and still cuts it when the deck moves', dk0 - av('deck') > Math.PI * 100 
 Ac.apply([{ op: 'separate', id: 'cut2' }]);
 ok('separating the cut stops it cutting either', !Ac.get('cut2').also && Math.abs(av('plate') - pl0) < 1e-6);
 
+/* a size that extends to another part: a bar's height up to the inclined deck above it, keeping its box shape */
+const Ut = new Model();
+Ut.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'wedge', id: 'w1', params: { width: 120, depth: 6, height: 25 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [0, 47] } }, { op: 'pattern', id: 'mir', of: 'w1', kind: 'mirror', plane: 'xz' },
+  { op: 'extrude', id: 'deck', shape: 'rect', x: 0, y: 0, width: 100, height: Math.hypot(120, 25), length: 6, mate: { to: 'w1', a: 'slope', b: 'start', flip: true, slide: [-47, 0] } }, { op: 'add', type: 'box', id: 'bar', params: { width: 6, depth: 80, height: 10 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [-54, 0] } }]);
+const under = (x) => 6 + Ut.get('w1').params.height * (60 - x) / 120, barTop = () => Ut.result.bodies.find(b => b.id === 'bar').solid.bbox().max[2];
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'height', obj: 'deck' } }]);
+ok('a bar extended to the inclined deck: its flat top just meets the deck where it is lowest over it', Math.abs(barTop() - under(-51)) < 2e-3 && Ut.result.bodies.find(b => b.id === 'bar').solid.polys.every(q => Math.abs(q.plane.n[2]) < 1e-9 || Math.abs(Math.abs(q.plane.n[2]) - 1) < 1e-9), [barTop(), under(-51)]);
+ok('…and it does not go into the deck', interference(Ut).filter(c => c.volume > 0.01).length === 0);
+Ut.apply([{ op: 'set', id: 'w1', params: { height: 35 } }]);
+ok('…the deck rises: the bar follows', Math.abs(barTop() - under(-51)) < 2e-3, [barTop(), under(-51)]);
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'height', obj: 'deck', mode: 'centre', gap: 0.5 } }]);
+ok('…centre mode with a 0.5 gap: its middle is 0.5 under the deck', Math.abs(barTop() - (under(-54) - 0.5)) < 2e-3, [barTop(), under(-54) - 0.5]);
+Ut.apply([{ op: 'set', id: 'bar', params: { height: 12 } }]);
+ok('…a height typed over it is yours: it no longer extends', Ut.get('bar').params.height === 12 && !Ut.get('bar').upTo);
+let upErr = ''; try { Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: 'deck' } }]); } catch (e) { upErr = e.message; }
+ok('…a size that cannot extend says which can', /height/.test(upErr), upErr);
+
 /* model coordinates stay the board's when the first part is placed by coordinates (an extrude's bottom is mid start face) */
 const Or = new Model(); Or.apply([{ op: 'extrude', id: 'l', profile: [[0, 0], [100, 0], [100, 10], [0, 10]], length: 20, at: [0, 0, 0], rot: [90, 0, 0], fixed: true }], 'L', { relative: true });
 Or.apply([{ op: 'add', type: 'box', id: 'k', params: { width: 10, depth: 10, height: 10 }, at: [50, 0, 10], fixed: true }], 'K', { relative: true });

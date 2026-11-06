@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven } from './model.js';
+import { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven , UPTO_PARAMS } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 import welding from '../addons/welding.js';
@@ -254,7 +254,7 @@ function renderTree() {
   };
   const rows = treeOrder();
   rows.forEach(({ o, depth }, k) => {
-    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.upTo ? ` · ${o.upTo.param} ↥ ${partName(o.upTo.obj)}` : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
@@ -322,6 +322,7 @@ function setParam(ob, prm, raw) {
 }
 /* number field that also takes =formulas, with a link button */
 function paramInput(ob, prm) {
+  if (ob.upTo && ob.upTo.param === prm) return upToInput(ob, prm);
   const linked = ob.expr && ob.expr[prm], wrap = el('span', { class: 'pin' });
   const i = el('input', { value: linked ? linked : fmt(ob.params[prm]), inputmode: 'decimal', class: linked ? 'linked' : '', title: linked ? `follows ${linked.slice(1)} = ${fmt(ob.params[prm])} · type a number to unlink` : 'a number, or =formula e.g. =plate.depth - 10' });
   i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); });
@@ -329,9 +330,28 @@ function paramInput(ob, prm) {
   const b = el('button', { class: 'chain' + (linked ? ' on' : ''), title: linked ? 'Unlink (keep the value)' : 'Follow another part’s dimension…', onclick: (e) => { e.preventDefault(); if (linked) apply([{ op: 'unlink', id: ob.id, param: prm }]); else leaderMenu(ob, prm, b); } }, icon('link'));
   wrap.append(i, b); if (linked) wrap.append(el('span', { class: 'val' }, '= ' + fmt(ob.params[prm]))); return wrap;
 }
+/* a size that extends to another part: shown as linked, with how it meets it and the gap */
+const partName = (id) => { const R = model.result, v = R.virtual && R.virtual.get(id), o = model.get(v ? v.source : id); return o ? o.name + (v ? ' ·' + (v.index + 1) : '') : id; };
+function upToInput(ob, prm) {
+  const u = ob.upTo, wrap = el('span', { class: 'pin' });
+  const i = el('input', { value: `↥ ${partName(u.obj)}`, class: 'linked', title: `extends to ${partName(u.obj)} = ${fmt(ob.params[prm])} · type a number to set it yourself` });
+  i.addEventListener('focus', () => { i.value = fmt(ob.params[prm]); i.select(); });
+  i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.value = `↥ ${partName(u.obj)}`; i.blur(); } });
+  i.addEventListener('change', () => { const v = parseFloat(String(i.value).replace(',', '.')); if (Number.isFinite(v) && v > 0 && Math.abs(v - ob.params[prm]) > 1e-9) apply([{ op: 'set', id: ob.id, params: { [prm]: v } }], `${ob.name}: ${prm} ${fmt(v)}`); else i.value = `↥ ${partName(u.obj)}`; });
+  const off = el('button', { class: 'chain on', title: 'Stop extending (keep the size it has)', onclick: (e) => { e.preventDefault(); apply([{ op: 'set', id: ob.id, upTo: null }], `${ob.name}: ${prm} no longer extends`); } }, icon('link'));
+  const mode = el('select', { title: 'touch: its top just meets it (nowhere through it) · centre: its middle meets it · cover: it reaches it everywhere' }, ...[['touch', 'touch'], ['centre', 'centre'], ['cover', 'cover']].map(([v, t]) => el('option', { value: v, selected: u.mode === v }, t)));
+  mode.onchange = () => apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { mode: mode.value }) }], `${ob.name}: ${prm} meets ${partName(u.obj)} at its ${mode.value}`);
+  const gap = el('input', { value: fmt(u.gap || 0), inputmode: 'decimal', title: 'gap mm left under it (negative: into it)', style: 'width:54px;flex:none' });
+  gap.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') gap.blur(); });
+  gap.addEventListener('change', () => { const v = parseFloat(String(gap.value).replace(',', '.')); if (Number.isFinite(v)) apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { gap: v }) }], `${ob.name}: ${fmt(v)} mm gap to ${partName(u.obj)}`); });
+  wrap.append(i, off, el('span', { class: 'val' }, `= ${fmt(ob.params[prm])} · meets it at its `, mode, ' gap ', gap));
+  return wrap;
+}
 function leaderMenu(ob, prm, anchor) {
   const r = anchor.getBoundingClientRect(), m = el('div', { class: 'menu', style: `left:${Math.max(8, r.right - 260)}px;top:${r.bottom + 4}px;max-height:60vh;overflow:auto;width:260px` });
   m.append(el('div', { class: 'mh' }, `${ob.name} · ${prm} follows…`));
+  if ((UPTO_PARAMS[ob.type] || []).includes(prm) && !(ob.type === 'extrude' && ob.params.end && ob.params.end !== 'blind'))
+    m.append(el('button', { title: 'Measure it from its base, straight up its own axis, to a part you click: it keeps its shape and follows that part', onclick: () => { m.remove(); setTool('upto', { id: ob.id, param: prm }); } }, `↥ Extend to a part (up to the one above it)…`));
   const rows = [];
   for (const o of model.doc.objects) { if (o.id === ob.id || ['edge', 'pattern'].includes(o.type)) continue; for (const [k, v] of Object.entries(o.params || {})) if (typeof v === 'number') rows.push({ o, k, v, score: (Math.abs(v - ob.params[prm]) < 1e-9 ? 0 : 2) + (k === prm ? 0 : 1) }); }
   rows.sort((a, b) => a.score - b.score);
@@ -1299,6 +1319,7 @@ function setTool(name, arg) {
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
   else if (name === 'weld-wiz') { tool.data.a = typeof arg === 'string' ? arg : null; weldWizHint(); }
+  else if (name === 'upto') { Object.assign(tool.data, arg); hint(`Extend ${model.get(arg.id).name}'s ${arg.param}: click the part it should reach (straight up its own axis)`, [['Cancel', () => setTool(null)]]); }
   else if (name === 'anchor') { tool.data.id = arg; views.connectorsFor = 'all'; views.connectorKinds = new Set(['corner', 'center', 'face']); views.connectorsSkip = arg; anchorHint(); }
   else if (name === 'edge-weld') {
     hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [['Done', () => setTool(null)]], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
@@ -1771,6 +1792,16 @@ function clickTool(pane, x, y, hit, e) {
   }
   if (t.name === 'weld-wiz') { weldWizClick(views.pick(pane, x, y)); return; }
   if (t.name === 'anchor') { anchorClick(hit); return; }
+  if (t.name === 'upto') {
+    const pk = views.pick(pane, x, y); if (!pk) { toast('Click the part it should reach'); return; }
+    const body = R.bodies.find(b => b.id === pk.id) || model.bodyContaining(pk.id), me = model.bodyContaining(t.data.id);
+    if (!body || (me && body.id === me.id)) { toast('Click another part'); return; }
+    const { id, param } = t.data; setTool(null);
+    try { apply([{ op: 'set', id, upTo: { param, obj: body.id, mode: 'touch', gap: 0 } }], `${model.get(id).name}: ${param} extends to ${partName(body.id)}`); } catch (e) { return; }
+    const o = model.get(id), w = model.result.warnings.find(q => q.kind === 'anchor' && q.id === id);
+    select(id); toast(w ? w.text : `${o.name}: ${param} ${fmt(o.params[param])} — it reaches ${partName(body.id)} and follows it`, 3200);
+    return;
+  }
   if (t.name === 'pick') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part'); return; }
     const id = model.resolveId(pk.id), then = t.data.then; setTool(null); if (id) then(id); return;
