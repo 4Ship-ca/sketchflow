@@ -224,7 +224,9 @@ async function publish() {
   const branches = git(['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], { capture: true }).out.split(/\r?\n/).filter(Boolean);
   let main = head;
   if (head !== 'main' && branches.includes('main')) {
-    if (git(['merge-base', '--is-ancestor', 'main', 'HEAD'], { allowFail: true, capture: true }).ok) { git(['fetch', '-q', '.', `${head}:main`], { capture: true }); main = 'main'; note('ok', `main brought up to ${head}`); }
+    const same = git(['rev-parse', 'main'], { capture: true }).out === git(['rev-parse', 'HEAD'], { capture: true }).out;
+    if (same) { main = 'main'; note('ok', `main is the same as ${head}`); }
+    else if (git(['merge-base', '--is-ancestor', 'main', 'HEAD'], { allowFail: true, capture: true }).ok) { git(['fetch', '-q', '.', `${head}:main`], { capture: true }); main = 'main'; note('ok', `main brought up to ${head}`); }
     else note('warn', `main has commits ${head} does not — releasing from ${head}`, 'main is left as it is');
   } else if (head === 'main') note('ok', 'on main');
   if (E.DO_PUBLISH === 'prep') { note('ok', 'ready to publish', 'look with git log; set DO_PUBLISH=1 and run again to upload'); return; }
@@ -246,7 +248,9 @@ async function publish() {
   if (!origin.ok) git(['remote', 'add', 'origin', remoteUrl]);
   else if (origin.out.replace(/\.git$/, '').toLowerCase() !== remoteUrl.replace(/\.git$/, '').toLowerCase()) throw new Stop(`this folder's remote "origin" is ${origin.out}, not ${remoteUrl} — change it (git remote set-url origin ${remoteUrl}) or GITHUB_USER / GITHUB_REPO`);
   const toPush = ['main', 'v1', 'v2', head].filter((b, i, a) => branches.includes(b) && a.indexOf(b) === i);
-  await outward(`push ${toPush.join(', ')} and the existing tags to github.com/${repo}`, () => {
+  const remoteHeads = Object.fromEntries(git(['ls-remote', '--heads', 'origin'], { capture: true, allowFail: true }).out.split(/\r?\n/).filter(Boolean).map(l => { const [sha, ref] = l.split(/\s+/); return [ref.replace('refs/heads/', ''), sha]; }));
+  if (toPush.every(b => remoteHeads[b] === git(['rev-parse', b], { capture: true }).out)) note('ok', `${toPush.join(', ')} are already on GitHub`);
+  else await outward(`push ${toPush.join(', ')} and the existing tags to github.com/${repo}`, () => {
     git(['push', '-u', 'origin', ...toPush]); git(['push', 'origin', '--tags']);
     note('ok', `pushed ${toPush.join(', ')}`);
     if (main === 'main' && !DRY) gh(['repo', 'edit', repo, '--default-branch', 'main'], { capture: true, allowFail: true });
