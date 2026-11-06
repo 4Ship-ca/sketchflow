@@ -649,8 +649,60 @@ Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'height', obj: 'deck', mode: 'c
 ok('…centre mode with a 0.5 gap: its middle is 0.5 under the deck', Math.abs(barTop() - (under(-54) - 0.5)) < 2e-3, [barTop(), under(-54) - 0.5]);
 Ut.apply([{ op: 'set', id: 'bar', params: { height: 12 } }]);
 ok('…a height typed over it is yours: it no longer extends', Ut.get('bar').params.height === 12 && !Ut.get('bar').upTo);
-let upErr = ''; try { Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: 'deck' } }]); } catch (e) { upErr = e.message; }
-ok('…a size that cannot extend says which can', /height/.test(upErr), upErr);
+let upErr = ''; try { Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'diameter', obj: 'deck' } }]); } catch (e) { upErr = e.message; }
+ok('…a size that cannot extend says which can', /height/.test(upErr) && /width/.test(upErr), upErr);
+
+/* sideways: a box's width / depth reaches a part beside it — the face away from it stays where it is */
+Ut.apply([{ op: 'add', type: 'box', id: 'wall', params: { width: 10, depth: 100, height: 12 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [20, 0] } }]);
+const ubb = (id) => Ut.result.bodies.find(b => b.id === id).solid.bbox();
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: 'wall' } }]);
+ok("a bar's width extended to the wall beside it: its far face stays, its near face meets the wall (side found: +)", Math.abs(ubb('bar').min[0] + 57) < 1e-6 && Math.abs(ubb('bar').max[0] - 15) < 2e-3 && Ut.get('bar').upTo.side === '+', [ubb('bar').min[0], ubb('bar').max[0], Ut.get('bar').upTo]);
+ok('…it keeps its box shape and its own height', Ut.get('bar').params.height === 12 && Ut.result.bodies.find(b => b.id === 'bar').solid.polys.length === 6 && !interference(Ut).some(c => [c.a, c.b].includes('bar') && [c.a, c.b].includes('wall')));
+Ut.apply([{ op: 'mate', id: 'wall', to: 'plate', a: 'top', b: 'bottom', slide: [35, 0] }]);
+ok('…the wall moves: the bar follows it, its far face still where it was', Math.abs(ubb('bar').min[0] + 57) < 1e-6 && Math.abs(ubb('bar').max[0] - 30) < 2e-3, [ubb('bar').min[0], ubb('bar').max[0]]);
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'height', obj: 'deck' } }]);
+ok('…its height to the deck as well: both sizes extend (a list, one per size)', Array.isArray(Ut.get('bar').upTo) && Ut.get('bar').upTo.length === 2 && Math.abs(barTop() - under(30)) < 2e-3 && Math.abs(ubb('bar').max[0] - 30) < 2e-3, [barTop(), under(30), Ut.get('bar').upTo]);
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'depth', obj: 'w1', gap: 1 } }]);
+ok('…and its depth to the wedge: grows toward +y, 1 mm short of it, its -y face stays', Math.abs(ubb('bar').max[1] - 43) < 2e-3 && Math.abs(ubb('bar').min[1] + 40) < 1e-6 && Ut.get('bar').upTo.length === 3, [ubb('bar').min[1], ubb('bar').max[1]]);
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: null } }]);
+ok('…obj null stops one size extending; the others still do', Ut.get('bar').upTo.length === 2 && !Ut.get('bar').upTo.some(u => u.param === 'width') && Math.abs(ubb('bar').max[0] - 30) < 2e-3);
+Ut.apply([{ op: 'set', id: 'bar', params: { height: 9, depth: 50 } }]);
+ok('…sizes typed over them are yours: those stop extending', !Ut.get('bar').upTo && Ut.get('bar').params.depth === 50);
+Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: 'wall', side: '-' } }]);
+ok("…side '-' grows it the other way: nothing there, so it keeps its size and says so", Math.abs(ubb('bar').max[0] - 30) < 2e-3 && Ut.result.warnings.some(w => w.id === 'bar' && /not beside it/.test(w.text)), Ut.result.warnings.map(w => w.text));
+let sideErr = ''; try { Ut.apply([{ op: 'set', id: 'bar', upTo: { param: 'width', obj: 'wall', side: 'x' } }]); } catch (e) { sideErr = e.message; } ok("…a side that is not '+' or '-' is refused", /side/.test(sideErr));
+/* a rectangle sketched on the plate (anchored to the plate corner) whose width reaches the wall: the anchored face stays on its anchor */
+const Ur = new Model();
+Ur.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'box', id: 'wall', params: { width: 10, depth: 100, height: 12 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [20, 0] } },
+  { op: 'extrude', id: 'rib', shape: 'rect', x: 0, y: 0, width: 10, height: 8, length: 5, mate: { to: 'plate', a: 'top', b: 'start', slide: [-55, -46] }, anchors: [{ obj: 'plate', conn: 'corner-x-y+z' }] }]);
+const rbb = () => Ur.result.bodies.find(b => b.id === 'rib').solid.bbox();
+Ur.apply([{ op: 'set', id: 'rib', upTo: { param: 'width', obj: 'wall' } }]);
+ok("a rectangle extrude's width extends to the wall: its anchored face stays on the plate's corner", Math.abs(rbb().min[0] + 60) < 1e-6 && Math.abs(rbb().max[0] - 15) < 2e-3 && Math.abs(rbb().min[1] + 50) < 1e-6, [rbb().min, rbb().max]);
+Ur.apply([{ op: 'set', id: 'plate', params: { width: 140 } }]);
+ok('…the plate grows: its corner moves, the rectangle follows it and still reaches the wall', Math.abs(rbb().min[0] + 70) < 1e-6 && Math.abs(rbb().max[0] - 15) < 2e-3, [rbb().min, rbb().max]);
+Ur.apply([{ op: 'set', id: 'rib', upTo: { param: 'height', obj: 'wall' } }]);
+ok("…its height (along y) can't reach the wall beside it: it keeps its size and says so", Ur.get('rib').upTo.length === 2 && Ur.result.warnings.some(w => w.id === 'rib' && /not beside it/.test(w.text)));
+/* square stock locked to the plate's outside corner, its length running out to the inclined deck: the leading face's top
+   edge meets the deck first, so the length is a function of the stock's thickness and the deck's angle */
+const Us = new Model();
+Us.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'wedge', id: 'w1', params: { width: 120, depth: 6, height: 25 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [0, 47] } }, { op: 'pattern', id: 'mir', of: 'w1', kind: 'mirror', plane: 'xz' },
+  { op: 'extrude', id: 'deck', shape: 'rect', x: 0, y: 0, width: 100, height: Math.hypot(120, 25), length: 6, mate: { to: 'w1', a: 'slope', b: 'start', flip: true, slide: [-47, 0] } },
+  { op: 'add', type: 'box', id: 'stock', params: { width: 6, depth: 10, height: 10 }, mate: { to: 'plate', a: 'corner-x-y+z', b: 'corner-x-y-z', slide: [0, 10] } }]);
+const sbb = () => Us.result.bodies.find(b => b.id === 'stock').solid.bbox(), deckAt = (t, h) => 60 - 120 * t / h;   /* where the deck's underside is t above the plate */
+Us.apply([{ op: 'set', id: 'stock', upTo: { param: 'width', obj: 'deck' } }]);
+ok('square stock run out to the inclined deck: its top leading edge meets it first, its end stays on the plate corner', Math.abs(sbb().max[0] - deckAt(10, 25)) < 1e-3 && Math.abs(sbb().min[0] + 60) < 1e-6 && Math.abs(sbb().min[1] + 40) < 1e-6 && !interference(Us).some(c => [c.a, c.b].includes('stock')), [sbb().min, sbb().max, deckAt(10, 25), interference(Us).map(c => c.a + '/' + c.b + ' ' + c.volume)]);
+Us.apply([{ op: 'set', id: 'stock', params: { height: 12, depth: 12 } }]);
+ok('…thicker stock: it meets the deck sooner (the length follows the thickness)', Math.abs(sbb().max[0] - deckAt(12, 25)) < 1e-3, [sbb().max[0], deckAt(12, 25)]);
+Us.apply([{ op: 'set', id: 'w1', params: { height: 35 } }]);
+ok('…a steeper deck: the length follows its angle', Math.abs(sbb().max[0] - deckAt(12, 35)) < 1e-3, [sbb().max[0], deckAt(12, 35)]);
+Us.apply([{ op: 'set', id: 'plate', params: { width: 140 } }]);
+ok('…a wider plate: the locked end follows the plate corner, the other still meets the deck', Math.abs(sbb().min[0] + 70) < 1e-6 && Math.abs(sbb().max[0] - deckAt(12, 35)) < 1e-3, [sbb().min[0], sbb().max[0]]);
+/* placed by coordinates: the pose shifts */
+const Up = new Model();
+Up.apply([{ op: 'add', type: 'box', id: 'a', params: { width: 10, depth: 10, height: 10 }, at: [0, 0, 0], fixed: true }, { op: 'add', type: 'box', id: 'b', params: { width: 10, depth: 10, height: 10 }, at: [0, 40, 0], fixed: true }]);
+Up.apply([{ op: 'set', id: 'a', upTo: { param: 'depth', obj: 'b', mode: 'cover', gap: -2 } }]);
+const abb = Up.result.bodies.find(b => b.id === 'a').solid.bbox();
+ok('a box placed by coordinates: its depth reaches 2 mm into the box beside it, its far face stays', Math.abs(abb.min[1] + 5) < 1e-6 && Math.abs(abb.max[1] - 37) < 2e-3, [abb.min, abb.max]);
 
 /* model coordinates stay the board's when the first part is placed by coordinates (an extrude's bottom is mid start face) */
 const Or = new Model(); Or.apply([{ op: 'extrude', id: 'l', profile: [[0, 0], [100, 0], [100, 10], [0, 10]], length: 20, at: [0, 0, 0], rot: [90, 0, 0], fixed: true }], 'L', { relative: true });
