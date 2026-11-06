@@ -2120,35 +2120,54 @@ function connectorsOf(o, solid) {
   }
 }
 const centroid2 = (pts) => { let x = 0, y = 0; for (const p of pts) { x += p[0]; y += p[1]; } return [x / pts.length, y / pts.length]; };
-/* anchors [{obj, conn, i?}]: a part sketched on a face (mated to it by its start / end) whose points follow other parts'
-   connectors. A shaped rectangle takes its size along each of its own axes from the spread of its anchors, and its place
-   on the face (the mate's slide) from where they are; one anchor on a side moves it without resizing. A drawn outline
-   (profile points) holds each anchored point (i) with a fix constraint that moves with its target; the rest of the
-   outline stays where it is, re-solved with its own constraints. Returns true when it changed anything. */
+/* anchors [{obj, conn, i?, role?}]: a sketched part whose points follow other parts' connectors (corners, face centres,
+   pattern and mirror copies). It is placed either on a face (mated by its start / end: the anchors set the mate's slide)
+   or by coordinates (sketched in a view: the anchors set its pose). Per shape:
+     rect     — its size along each of its own axes from the spread of its anchors (two opposite corners span it), its place
+                from where they are; one anchor on a side moves it without resizing
+     circle / polygon — the centre anchor places it, a rim anchor sets its diameter
+     slot     — its two end anchors set its length and place
+     outline  — each anchored point i is held by a fix constraint that moves with it; the rest stays where it is
+   A size the user set (held: ['width', …], or a formula) is theirs: the anchors still place the shape, lined up on the
+   first anchor, but do not resize it. held 'place' (a driving dimension moves it) leaves the place to the dimension.
+   Returns true when it changed anything. */
 const anchorWorld = (R, a) => { const c = worldConnectors(R, a.obj).find(x => x.name === a.conn); return c ? c.o : null; };
+const anchorDriven = (o) => { const s = o && o.params && o.params.shape; return s === 'rect' ? ['width', 'height'] : s === 'circle' || s === 'polygon' ? ['diameter'] : s === 'slot' ? ['width'] : []; };
 function followAnchorsOf(R, o, missing, notes) {
   const m = o.mate, M = R.world.get(o.id), p = o.params;
   if (!M || !p) return false;
-  if (!m || !m.to || m.kind || m.frame || !['start', 'end'].includes(m.b)) { notes.push({ o, text: 'anchors only work on a part sketched on a face (mated to it by its start or end) — it stays where it is' }); return false; }
-  const tc = worldConnectors(R, m.to).find(c => c.name === m.a); if (!tc) return false;
+  const onFace = m && m.to && !m.kind && !m.frame && ['start', 'end'].includes(m.b), posed = !m && o.pose;
+  if (!onFace && !posed) { notes.push({ o, text: 'anchors work on a part sketched on a face (mated by its start or end) or placed by coordinates — it stays where it is' }); return false; }
+  const xw = V.norm(M4.dir(M, [1, 0, 0])), yw = V.norm(M4.dir(M, [0, 1, 0])), zw = V.norm(M4.dir(M, [0, 0, 1])), Ol = M4.point(M, [0, 0, 0]);
+  const tc = onFace ? worldConnectors(R, m.to).find(c => c.name === m.a) : { o: Ol, n: zw, u: xw }; if (!tc) return false;
   const pts = []; for (const a of o.anchors) { const w = anchorWorld(R, a); if (w) pts.push(Object.assign({ w }, a)); else missing.push({ o, a }); }
   if (!pts.length) return false;
-  const xw = V.norm(M4.dir(M, [1, 0, 0])), yw = V.norm(M4.dir(M, [0, 1, 0])), zw = V.norm(M4.dir(M, [0, 0, 1])), u = tc.u, v = V.cross(tc.n, tc.u);
-  const Ol = M4.point(M, [0, 0, 0]), rel = (w) => V.sub(w, tc.o), r6a = (x) => Math.round(x * 1e6) / 1e6, ex = o.expr || {}, mx = o.mexpr || {};
-  let changed = false, at = null;   /* at: where the mate's connector (the profile's centre) now belongs, in world */
-  if (p.shape === 'rect') {
-    const Cw = V.add(V.add(Ol, V.mul(xw, +p.x || 0)), V.mul(yw, +p.y || 0)), axes = [xw, yw], keys = ['width', 'height'], cen = [0, 0];
+  const u = tc.u, v = V.cross(tc.n, tc.u), rel = (w) => V.sub(w, tc.o), r6a = (x) => Math.round(x * 1e6) / 1e6, ex = o.expr || {}, held = new Set(o.held || []);
+  const mine = (k) => held.has(k) || !!ex[k], sgn = (x) => Math.sign(Math.round(x * 1e6));
+  let changed = false, at = null, cl = [0, 0];   /* at: where the profile's centre (cl, in its own coordinates) now belongs */
+  const setSize = (k, val) => { if (!mine(k) && Math.abs(val - p[k]) > 1e-6) { p[k] = r6a(val); changed = true; } };
+  const shapeCentre = () => V.add(V.add(Ol, V.mul(xw, +p.x || 0)), V.mul(yw, +p.y || 0));
+  if (p.shape === 'rect' || p.shape === 'slot') {
+    const Cw = shapeCentre(), axes = [xw, yw], cen = [0, 0], slot = p.shape === 'slot';
     for (let k = 0; k < 2; k++) {
-      const c0 = V.dot(rel(Cw), axes[k]), vals = pts.map(q => V.dot(rel(q.w), axes[k])), lo = Math.min(...vals), hi = Math.max(...vals);
-      let size = +p[keys[k]];
+      const key = slot ? (k === 0 ? 'width' : null) : ['width', 'height'][k], c0 = V.dot(rel(Cw), axes[k]), vals = pts.map(q => V.dot(rel(q.w), axes[k])), lo = Math.min(...vals), hi = Math.max(...vals);
+      if (slot && k === 1) { cen[1] = vals.reduce((x, y) => x + y, 0) / vals.length; continue; }   /* a slot's ends sit on its centre line */
+      const ends = slot ? +p.height : 0, span = (x) => x - ends;   /* a slot is anchored by its end centres: its length is their distance plus its width */
+      let size = +p[key];
       if (hi - lo > 1e-6) {
-        if (ex[keys[k]]) notes.push({ o, text: `its ${keys[k]} follows a formula (${ex[keys[k]]}), so its anchors don't resize it — unlink it to let them` });
-        else size = hi - lo;
-        cen[k] = (hi + lo) / 2;
-      } else { const s = Math.sign(Math.round((lo - c0) * 1e6)); cen[k] = s ? lo - s * size / 2 : lo; }
-      if (Math.abs(size - p[keys[k]]) > 1e-6) { p[keys[k]] = r6a(size); changed = true; }
+        if (!mine(key)) { size = hi - lo + ends; cen[k] = (hi + lo) / 2; }
+        else { const base = vals[0], other = vals.find((x, j) => j > 0 && Math.abs(x - base) > 1e-6), s = sgn(other - base); cen[k] = base + s * span(size) / 2; }
+      } else { const s = sgn(lo - c0); cen[k] = s ? lo - s * span(size) / 2 : lo; }
+      setSize(key, size);
     }
     at = V.add(V.add(V.add(tc.o, V.mul(xw, cen[0])), V.mul(yw, cen[1])), V.mul(zw, V.dot(rel(Cw), zw)));
+    cl = [+p.x || 0, +p.y || 0];
+  } else if (p.shape === 'circle' || p.shape === 'polygon') {
+    const Cw = shapeCentre(), flat = (w) => V.sub(w, V.mul(zw, V.dot(V.sub(w, Cw), zw)));
+    const cA = pts.find(q => q.role === 'centre') || (!pts[0].role ? pts[0] : null), rA = pts.find(q => q.role === 'rim') || (pts[1] && !pts[1].role ? pts[1] : null);
+    at = cA ? flat(cA.w) : Cw;
+    if (rA) setSize('diameter', 2 * V.len(V.sub(flat(rA.w), at)));
+    cl = [+p.x || 0, +p.y || 0];
   } else if (Array.isArray(p.profile) && (!p.shape || p.shape === 'points')) {
     if (!Array.isArray(p.constraints)) p.constraints = [];
     const cons = p.constraints;
@@ -2162,20 +2181,27 @@ function followAnchorsOf(R, o, missing, notes) {
       const cur = p.profile[q.i];
       if (Math.hypot(fx.at[0] - L[0], fx.at[1] - L[1]) > 1e-6 || Math.hypot(cur[0] - L[0], cur[1] - L[1]) > 1e-6) { fx.at = L; p.profile[q.i] = L.slice(); changed = true; }
     }
-    const c = centroid2(p.profile); at = V.add(V.add(Ol, V.mul(xw, c[0])), V.mul(yw, c[1]));
-  } else { notes.push({ o, text: `anchors move a rectangle or a drawn outline, not a ${p.shape}` }); return false; }
-  /* the slide that puts the profile's centre there (the rest of the part keeps its place on the face) */
-  const sl = m.slide || [0, 0], ns = [r6a(V.dot(rel(at), u)), r6a(V.dot(rel(at), v))];
-  if (Math.abs(ns[0] - (+sl[0] || 0)) > 1e-6 || Math.abs(ns[1] - (+sl[1] || 0)) > 1e-6) {
-    if (mx['slide.0'] || mx['slide.1']) notes.push({ o, text: 'its slide follows a formula, so its anchors don\'t move it — unlink it to let them' });
-    else { o.mate = Object.assign({}, m, { slide: ns }); changed = true; }
+    cl = centroid2(p.profile); at = V.add(V.add(Ol, V.mul(xw, cl[0])), V.mul(yw, cl[1]));
+  } else { notes.push({ o, text: `anchors move rectangles, slots, circles, polygons and drawn outlines, not a ${p.shape}` }); return false; }
+  if (held.has('place')) return changed;   /* a driving dimension places it */
+  if (onFace) {
+    /* the slide that puts the profile's centre there (the rest of the part keeps its place on the face) */
+    const sl = m.slide || [0, 0], ns = [r6a(V.dot(rel(at), u)), r6a(V.dot(rel(at), v))], mx = o.mexpr || {};
+    if (Math.abs(ns[0] - (+sl[0] || 0)) > 1e-6 || Math.abs(ns[1] - (+sl[1] || 0)) > 1e-6) {
+      if (mx['slide.0'] || mx['slide.1']) notes.push({ o, text: 'its slide follows a formula, so its anchors don\'t move it — unlink it to let them' });
+      else { o.mate = Object.assign({}, m, { slide: ns }); changed = true; }
+    }
+  } else {
+    /* placed by coordinates: the pose that puts the profile's centre there */
+    const nO = V.sub(at, V.add(V.mul(xw, cl[0]), V.mul(yw, cl[1]))).map(r6a), cur = o.pose.at || [0, 0, 0];
+    if (V.len(V.sub(nO, cur)) > 1e-6) { o.pose = Object.assign({}, o.pose, { at: nO }); changed = true; }
   }
   return changed;
 }
 const cleanAnchors = (list) => {
   if (list == null || list === false) return null;
   if (!Array.isArray(list)) throw new Error('anchors: give a list of {obj, conn} (and i, the point, for a drawn outline)');
-  const out = list.filter(Boolean).map(a => { if (typeof a.obj !== 'string' || typeof a.conn !== 'string') throw new Error('each anchor needs obj (a part id) and conn (one of its connectors, e.g. corner+x-y-z)'); return Object.assign({ obj: a.obj, conn: a.conn }, Number.isInteger(a.i) ? { i: a.i } : {}); });
+  const out = list.filter(Boolean).map(a => { if (typeof a.obj !== 'string' || typeof a.conn !== 'string') throw new Error('each anchor needs obj (a part id) and conn (one of its connectors, e.g. corner+x-y-z)'); return Object.assign({ obj: a.obj, conn: a.conn }, Number.isInteger(a.i) ? { i: a.i } : {}, ['centre', 'rim', 'end'].includes(a.role) ? { role: a.role } : {}); });
   return out.length ? out : null;
 };
 const ORIGIN_CONNS = [conn('origin', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center'), conn('xy', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('xz', [0, 0, 0], [0, -1, 0], [1, 0, 0]), conn('yz', [0, 0, 0], [1, 0, 0], [0, 1, 0])];
@@ -3439,6 +3465,11 @@ class Model {
     }
   }
   /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
+  /* anchored parts whose place a driving dimension held, when no driving dimension moves them any more: the anchors place them again */
+  releasePlace() {
+    const moved = new Set((this.doc.dims || []).filter(md => md.drive != null).map(md => (this.dimMover(md) || {}).id));
+    for (const o of this.doc.objects) if (o.held && o.held.includes('place') && !moved.has(o.id)) { o.held = o.held.filter(k => k !== 'place'); if (!o.held.length) delete o.held; }
+  }
   dimMover(md) {
     const A = this.get(md.a.obj), B = this.get(md.b.obj); if (!A || !B) return null;
     const hangs = (x, y) => { let c = x; const seen = new Set(); while (c && c.mate && !seen.has(c.id)) { if (c.mate.to === y.id) return true; seen.add(c.id); c = this.get(c.mate.to); } return false; };
@@ -3453,6 +3484,7 @@ class Model {
       for (const md of dims) {
         const cur = measureDim(this.result, md); if (!cur || Math.abs(cur.value - md.drive) < 1e-6) continue;
         const mover = this.dimMover(md); if (!mover || (mover.mate && mover.mate.kind)) continue;
+        if (mover.anchors && mover.anchors.length && !(mover.held || []).includes('place')) mover.held = [...new Set([...(mover.held || []), 'place'])];
         if (mover.mexpr && ['offset', 'slide.0', 'slide.1'].some(k => mover.mexpr[k])) { if (!this.result.warnings.some(w => w.kind === 'dim' && w.id === mover.id)) this.result.warnings.push({ kind: 'dim', id: mover.id, text: `${mover.name} is placed by a formula (${Object.entries(mover.mexpr).map(([k, e]) => k + ' ' + e).join(', ')}), so the driving dimension can't move it — unlink the formula or make the dimension a reference` }); continue; }
         const pm = mover.id === md.b.obj ? cur.endB : cur.endA, other = mover.id === md.b.obj ? cur.endA : cur.endB;
         const sign = Math.sign(V.dot(V.sub(pm, other), cur.dir)) || 1, move = V.mul(cur.dir, sign * (md.drive - cur.value));
@@ -3526,7 +3558,10 @@ class Model {
           if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
           if (x.expr && !Object.keys(x.expr).length) delete x.expr;
         }
-        if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; }
+        if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; if (o.held === undefined) delete x.held; }
+        /* a size typed on a shape that follows anchors is the user's from now on: the anchors stop driving it */
+        if (x.anchors && o.params && typeof o.params === 'object') { const drv = anchorDriven(x), mineNow = Object.keys(o.params).filter(k => drv.includes(k)); if (mineNow.length) x.held = [...new Set([...(x.held || []), ...mineNow])]; }
+        if (o.held !== undefined) { const h = Array.isArray(o.held) ? o.held.filter(k => typeof k === 'string') : []; if (h.length) x.held = [...new Set(h)]; else delete x.held; }
         if (o.name) x.name = String(o.name); if (o.color !== undefined) x.color = o.color; if (o.hidden !== undefined) x.hidden = !!o.hidden;
         if (o.meta || o.material !== undefined) { const mm = Object.assign({}, x.meta || {}, o.meta || {}, o.material !== undefined ? { material: o.material } : {}); for (const k of Object.keys(mm)) if (mm[k] === null || mm[k] === '') delete mm[k]; x.meta = cleanMeta(mm); }
         if (o.at || o.rot) { x.pose = { at: W(o.at) || (x.pose || {}).at || [0, 0, 0], rot: o.rot || (x.pose || {}).rot || [0, 0, 0] }; }
@@ -3685,9 +3720,10 @@ class Model {
       case 'setdim': {
         /* a driving dimension: it keeps the part that hangs off the other at this distance, from now on */
         const md = (d.dims || []).find(x => x.id === o.id); if (!md) throw new Error('No dimension ' + o.id);
-        if (o.value === null) { delete md.drive; return { label: 'Dimension is a reference again', id: o.id }; }
+        if (o.value === null) { delete md.drive; this.releasePlace(); return { label: 'Dimension is a reference again', id: o.id }; }
         const value = +o.value; if (!(value >= 0)) throw new Error('A distance must be 0 or more');
         const mover = this.dimMover(md); if (!mover) throw new Error('Neither end can move (both are fixed, the ground, or pattern copies)');
+        if (mover.anchors && mover.anchors.length) mover.held = [...new Set([...(mover.held || []), 'place'])];   /* the dimension places it now; its anchors still size it */
         if (mover.mate && mover.mate.kind) throw new Error(`${mover.name} is placed by a ${mover.mate.kind} mate — change that instead`);
         md.drive = value; this.recompute();
         const after = measureDim(this.result, md), other = this.get(mover.id === md.b.obj ? md.a.obj : md.b.obj);
@@ -3950,7 +3986,7 @@ class Model {
         const sub = []; const walk = (id) => { for (const y of d.objects) if (y.into === id && !sub.includes(y)) { sub.push(y); walk(y.id); } }; walk(x.id);
         const map = new Map([[x.id, uid(x.type.slice(0, 3))], ...sub.map(y => [y.id, uid(y.type.slice(0, 3))])]);
         const copy = (y) => {
-          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved; delete c.anchors;   /* a copy beside it does not follow the original's corners */
+          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved; delete c.anchors; delete c.held;   /* a copy beside it does not follow the original's corners */
           if (y === x) { c.name = (o.name || y.name + ' copy'); c.into = x.into; }
           else { c.name = y.name; c.into = map.get(y.into) || y.into; }
           if (c.mate && map.has(c.mate.to)) c.mate.to = map.get(c.mate.to);
@@ -3979,7 +4015,7 @@ class Model {
         return this.op({ op: 'set', id: x.id, params: { [o.param]: ex } }) && { label: `${x.name}.${o.param} follows ${ex.slice(1)}`, id: x.id, expr: ex };
       }
       case 'unlink': { const x = need(o.id); if (/^mate\./.test(o.param || '')) { unlinkMateField(x, o.param.slice(5)); this.recompute(); return { label: `${x.name} ${o.param} unlinked`, id: x.id }; } if (x.expr) { delete x.expr[o.param]; if (!Object.keys(x.expr).length) delete x.expr; } this.recompute(); return { label: `${x.name}.${o.param} unlinked`, id: x.id }; }
-      case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); return { label: 'Remove dimension', id: o.id }; }
+      case 'undim': { d.dims = d.dims.filter(x => x.id !== o.id); this.releasePlace(); return { label: 'Remove dimension', id: o.id }; }
       case 'rename': { d.name = String(o.name || d.name); return { label: 'Rename model', name: d.name }; }
       case 'material': {   /* the model's default material, used by parts that have none of their own */
         if (o.material && !MATERIALS[o.material]) throw new Error(`Unknown material “${o.material}”. Try: ${Object.keys(MATERIALS).join(', ')}`);
@@ -4028,7 +4064,7 @@ class Model {
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
-          of: o.of, joins: o.joins, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
+          of: o.of, joins: o.joins, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
@@ -4055,7 +4091,7 @@ function poseFromMatrix(M) {
   return { at: [M[12], M[13], M[14]], rot: [d(rx), d(ry), d(rz)] };
 }
 
-return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, anchorWorld, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, threadPitchOf, cosmeticThreads, loftStations, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, carrySplines, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
+return { SKETCH_KINDS, TEXT_PATHS, TEXT_ALIGN, layoutText, K, TYPES, MATERIALS, SHAPES, anchorWorld, anchorDriven, ADDONS, addonApi, registerAddon, listAddons, HOLES, holeSpec, encodeTriangles, parseMesh, SKETCH_SHAPES, shapeProfile, THREADS, threadPitchOf, cosmeticThreads, loftStations, dimsOf, newDoc, parseExpr, resolveLinks, measureDim, carrySplines, JOINTS, jointsOf, posedDoc, evaluate, findSeams, weldAdvice, worldConnectors, findEdge, massReport, bom, Model, poseFromMatrix };
 })();
 
 __sf3.views = (() => {
@@ -7228,7 +7264,7 @@ return { default: __default };
 __sf3.app = (() => {
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-const { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } = __sf3.model;
+const { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven } = __sf3.model;
 const { Views, fmt } = __sf3.views;
 const gears = __sf3.gears.default;
 const welding = __sf3.welding.default;
@@ -7482,7 +7518,7 @@ function renderTree() {
   };
   const rows = treeOrder();
   rows.forEach(({ o, depth }, k) => {
-    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length} corner${o.anchors.length > 1 ? 's' : ''}` : '');
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
@@ -8137,27 +8173,45 @@ function jointPartSection(o, s1) {
   s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', title: 'After changing a thickness or size: build this joint again for the parts as they are now', onclick: () => redoJoint(tag) }, 'Redo for new sizes'), c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
 }
 /* ---------- sketch anchors: a shape sketched on a face that follows other parts' corners ---------- */
-const canFollow = (o) => o && o.type === 'extrude' && o.mate && o.mate.to && !o.mate.kind && ['start', 'end'].includes(o.mate.b) && (o.params.shape === 'rect' || !o.params.shape || o.params.shape === 'points');
+const FOLLOW_SHAPES = new Set(['rect', 'circle', 'polygon', 'slot', 'points']);
+const canFollow = (o) => o && o.type === 'extrude' && FOLLOW_SHAPES.has(o.params.shape || 'points') && ((o.mate && o.mate.to && !o.mate.kind && !o.mate.frame && ['start', 'end'].includes(o.mate.b)) || (!o.mate && o.pose));
 const connName = (a) => { const R = model.result, v = R.virtual && R.virtual.get(a.obj), base = model.get(v ? v.source : a.obj); return `${a.conn} of ${base ? base.name : a.obj}${v ? ' (copy ' + (v.index + 1) + ')' : ''}`; };
+const followWhat = (o) => { const sh = o.params.shape || 'points'; return sh === 'rect' ? 'corners' : sh === 'slot' ? 'ends' : sh === 'circle' || sh === 'polygon' ? 'a centre' : 'corners'; };
 function followSection(o, s1) {
-  const an = o.anchors || [], rect = o.params.shape === 'rect';
+  const an = o.anchors || [], sh = o.params.shape || 'points', held = o.held || [], drv = anchorDriven(o);
   const box = el('div', { class: 'subsec' }, el('b', null, 'Follows'));
-  if (!an.length) box.append(el('div', { class: 'note' }, rect ? 'Make it follow two opposite corners of other parts — its size and its place on the face then come from them, whenever they change.' : 'Make points of this outline follow other parts\' corners: each corner you pick holds the nearest point, and the outline keeps its other constraints.'));
-  an.forEach((a, k) => box.append(el('div', { class: 'f' }, rect ? `corner ${k + 1}` : `point ${a.i + 1}`, el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k) }], `${o.name}: stop following ${a.conn}`) }, '×')))));
-  box.append(el('div', { class: 'btns' }, el('button', { class: 'btn' + (an.length ? '' : ' pri'), title: 'Click the corners (or centres) it should follow, in any view', onclick: () => setTool('anchor', o.id) }, an.length ? 'Follow more…' : 'Follow corners…'), an.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, anchors: null }], `${o.name}: stop following`) }, 'Stop following') : null));
+  if (!an.length) box.append(el('div', { class: 'note' }, {
+    rect: 'Make it follow two opposite corners of other parts: its size and its place then come from them, whenever they change.',
+    slot: 'Make its two ends follow two points of other parts (hole centres, corners): its length and place come from them.',
+    circle: 'Make it follow a centre (and, if you like, a point its rim goes through) on other parts.', polygon: 'Make it follow a centre (and a point for its size) on other parts.',
+    points: 'Make points of this outline follow other parts\' corners: each one you pick holds the nearest point, and the outline keeps its other constraints.'
+  }[sh]));
+  const role = (a, k) => (sh === 'points' ? `point ${a.i + 1}` : a.role ? a.role : sh === 'rect' ? `corner ${k + 1}` : k ? 'rim' : 'centre');
+  an.forEach((a, k) => box.append(el('div', { class: 'f' }, role(a, k), el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k), held: held }], `${o.name}: stop following ${a.conn}`) }, '×')))));
+  /* sizes the user set: theirs, until they hand them back */
+  for (const k of held.filter(x => drv.includes(x) || x === 'place')) box.append(el('div', { class: 'f' }, k === 'place' ? 'place' : label(k), el('span', { class: 'pin' }, el('span', { class: 'note' }, k === 'place' ? 'set by a driving dimension' : `yours (${fmt(o.params[k])}) — the ${followWhat(o)} still place it`), k === 'place' ? null : el('button', { class: 'btn', title: `Let the ${followWhat(o)} set the ${label(k)} again`, onclick: () => apply([{ op: 'set', id: o.id, held: held.filter(x => x !== k) }], `${o.name}: ${label(k)} follows again`) }, 'Follow again'))));
+  if (an.length && drv.some(k => o.expr && o.expr[k])) box.append(el('div', { class: 'note' }, 'A size given by a formula is yours too: unlink it to let them set it.'));
+  if (an.length && !held.length) box.append(el('div', { class: 'note' }, 'Type a size to keep it: that size is then yours, and the anchors still place it.'));
+  box.append(el('div', { class: 'btns' }, el('button', { class: 'btn' + (an.length ? '' : ' pri'), title: 'Click the corners (or centres) it should follow, in any view', onclick: () => setTool('anchor', o.id) }, an.length ? 'Follow more…' : `Follow ${followWhat(o)}…`), an.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, anchors: null }], `${o.name}: stop following`) }, 'Stop following') : null));
   s1.append(box);
 }
 function anchorHint() {
-  const o = model.get(tool.data.id), n = (o.anchors || []).length, rect = o.params.shape === 'rect';
-  hint(`Follow: click the ${rect ? (n ? 'opposite corner' : 'corners') : 'corners'} ${o.name} should follow (the square dots)${n ? ` — ${n} so far` : ''}`, [['Done', () => setTool(null)]]);
+  const o = model.get(tool.data.id), n = (o.anchors || []).length, sh = o.params.shape || 'points';
+  const what = sh === 'rect' ? (n ? 'the opposite corner' : 'the corners') : sh === 'slot' ? (n ? 'the other end' : 'the two end points (a hole centre, a corner)') : sh === 'circle' || sh === 'polygon' ? (n ? 'a point its rim should go through (or Done)' : 'its centre (a centre dot or a corner)') : 'the corners';
+  hint(`Follow: click ${what} ${o.name} should follow${n ? ` — ${n} so far` : ''}`, [['Done', () => setTool(null)]]);
 }
 function anchorClick(hit) {
   const o = tool && model.get(tool.data.id); if (!o) { setTool(null); return; }
   if (!hit || hit.kind !== 'conn') { toast('Click one of the dots: a corner (square), or a face or centre'); return; }
   if (hit.conn.id === o.id) return;
   const a = { obj: hit.conn.id, conn: hit.conn.name }, an = (o.anchors || []).slice();
-  if (o.params.shape === 'rect') { if (an.some(x => x.obj === a.obj && x.conn === a.conn)) { toast('It follows that one already'); return; } an.push(a); }
-  else {
+  const sh = o.params.shape || 'points';
+  if (sh === 'rect' || sh === 'slot' || sh === 'circle' || sh === 'polygon') {
+    if (an.some(x => x.obj === a.obj && x.conn === a.conn)) { toast('It follows that one already'); return; }
+    if (an.length >= 2) an.splice(0, an.length);
+    if (sh === 'slot') a.role = 'end'; else if (sh !== 'rect') a.role = an.length ? 'rim' : 'centre';
+    an.push(a);
+  } else {
     /* an outline: the corner holds the nearest of its points */
     const R = model.result, M = R.world.get(o.id), c = worldConnectors(R, a.obj).find(x => x.name === a.conn); if (!M || !c) return;
     const q = M4.point(M4.inv(M), c.o); let best = 0, bd = Infinity;
@@ -8167,8 +8221,12 @@ function anchorClick(hit) {
   }
   try { apply([{ op: 'set', id: o.id, anchors: an }], `${o.name}: follow ${a.conn}`); } catch (e) { return; }
   const w = model.result.warnings.find(x => x.kind === 'anchor' && x.id === o.id);
-  toast(w ? w.text : o.params.shape === 'rect' ? (an.length >= 2 ? `${o.name} now spans ${an.length} corners: ${fmt(o.params.width)} × ${fmt(o.params.height)}, and follows them` : 'Now click the opposite corner') : `Point ${an[an.length - 1].i + 1} now follows ${connName(a)}`, 3000);
-  if (o.params.shape === 'rect' && an.length >= 2) setTool(null); else anchorHint();
+  const P = model.get(o.id).params;
+  toast(w ? w.text : sh === 'rect' ? (an.length >= 2 ? `${o.name} now spans the 2 corners: ${fmt(P.width)} × ${fmt(P.height)}, and follows them` : 'Now click the opposite corner')
+    : sh === 'slot' ? (an.length >= 2 ? `${o.name} now runs between them: ${fmt(P.width)} long, and follows them` : 'Now click the other end')
+    : sh === 'circle' || sh === 'polygon' ? (an.length >= 2 ? `Its rim now goes through ${connName(a)}: Ø${fmt(P.diameter)}` : `Centred on ${connName(a)} — click a point for its rim, or Done`)
+    : `Point ${an[an.length - 1].i + 1} now follows ${connName(a)}`, 3000);
+  if (sh !== 'points' && an.length >= 2) setTool(null); else anchorHint();
 }
 /* ---------- add-on action forms (right panel) ---------- */
 let addonForm = null;
@@ -8611,11 +8669,12 @@ function snapTargets(paneId) {
   const R = model.result; if (snapCache && snapCache.R === R && snapCache.pane === paneId) return snapCache.list;
   const B = BASISof(paneId), O = R.originPoint, list = [], seen = new Set();
   const put = (w, kind, label, ref) => { const q = V.sub(w, O), x = V.dot(q, B.r), y = V.dot(q, B.u), k = Math.round(x * 1e3) + ',' + Math.round(y * 1e3) + kind; if (seen.has(k) || list.length > 40000) return; seen.add(k); list.push({ x, y, kind, label, ref }); };
-  put(O, 'point', 'origin');
-  /* named corners and centres first: a sketch point snapped to one follows it (pattern and mirror copies included) */
+  /* named corners and centres first: a sketch point snapped to one follows it (pattern and mirror copies included); where
+     one sits on the origin, the part's wins */
   const owner = (id) => (model.get(id) || model.get((R.virtual.get(id) || {}).source) || {}).name || id;
   const ids = model.doc.objects.filter(o => R.world.has(o.id) && !META.has(o.type)).map(o => o.id).concat([...(R.virtual || new Map()).keys()].filter(id => R.world.has(id)));
   for (const id of ids) for (const c of worldConnectors(R, id)) if (c.kind === 'corner' || c.kind === 'center' || c.kind === 'face') put(c.o, 'point', `${owner(id)} · ${c.kind === 'corner' ? 'corner' : c.kind === 'center' ? 'centre' : c.name + ' centre'}`, { obj: id, conn: c.name });
+  put(O, 'point', 'origin');
   for (const b of R.bodies) { if (b.hidden || b.solid.isEmpty()) continue; for (const [a, c] of K.creaseEdges(b.solid)) { put(a, 'point', 'corner'); put(c, 'point', 'corner'); put(V.lerp(a, c, 0.5), 'mid', 'midpoint'); } }
   snapCache = { R, pane: paneId, list }; return list;
 }
@@ -8632,7 +8691,7 @@ function snapSketch(pane, pp, straight) {
     const cand = o.points ? pts.map((p, i) => ({ x: V.dot(p, B.r), y: V.dot(p, B.u), kind: 'point', label: i === 0 ? 'start' : 'point' })) : [];
     for (const t of snapTargets(pane.id)) if (t.kind === 'mid' ? o.mids : o.points) cand.push(t);
     for (const t of cand) { const dd = Math.hypot(t.x - x, t.y - y); if (dd < bd) { bd = dd; best = t; } }
-    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label + (best.ref && d.on ? ' — follows it' : ''), ref: d.on ? best.ref : undefined }; }
+    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label + (best.ref ? ' — follows it' : ''), ref: best.ref }; }
   }
   if (!snap && last && !d.arcEnd && (straight || o.hv || o.angle)) {
     const dx = x - last[0], dy = y - last[1], g = (v) => (o.grid ? Math.round(v / o.step) * o.step : v);
@@ -8728,6 +8787,14 @@ function shapeFrom(mode, a, b) {
   if (mode === 'slot') { const h = prefs.slotW || 10; return { shape: 'slot', x: (a[0] + b[0]) / 2, y: a[1], width: Math.abs(b[0] - a[0]) + h, height: h }; }
   return null;
 }
+function shapeAnchors(d, spec) {
+  const r = [d.points[0], d.lastP].map(q => (q && d.refAt ? d.refAt.get(refKey(q)) : null));
+  const roles = spec.shape === 'rect' ? [null, null] : spec.shape === 'circle' || spec.shape === 'polygon' ? ['centre', 'rim'] : spec.shape === 'slot' ? ['end', 'end'] : null;
+  if (!roles) return [];
+  return r.map((x, k) => (x ? Object.assign({ obj: x.obj, conn: x.conn }, roles[k] ? { role: roles[k] } : {}) : null)).filter(Boolean);
+}
+const followText = (an, shape) => { const n = an.length; if (!n) return ''; const roles = an.map(a => a.role);
+  return ` — follows ${shape === 'circle' || shape === 'polygon' ? (n > 1 ? 'its centre and rim' : roles[0] === 'rim' ? 'a point on its rim' : 'a centre') : shape === 'slot' ? (n > 1 ? 'both ends' : 'an end') : n > 1 ? n + ' corners' : 'a corner'}`; };
 function shapePoints3(spec, B) { try { return shapeProfile(spec).map(([x, y]) => V.add(V.mul(B.r, x), V.mul(B.u, y))); } catch (e) { return []; } }
 function finishShape(spec) {
   const d = tool.data, B = d.basis, pts2 = shapeProfile(spec);
@@ -8739,21 +8806,22 @@ function finishShape(spec) {
   if (d.on) {
     /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
     const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
-    const anchors = spec.shape === 'rect' ? [d.points[0], d.lastP].map(q => q && d.refAt && d.refAt.get(refKey(q))).filter(Boolean).map(r => ({ obj: r.obj, conn: r.conn })) : [];
-    hint(`${sizeText} on ${d.on.name} (${d.on.faceName})${anchors.length ? ` — follows ${anchors.length === 1 ? 'a corner' : anchors.length + ' corners'}` : ''} — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local, anchors.length ? { anchors } : {}) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
+    const anchors = shapeAnchors(d, spec);
+    hint(`${sizeText} on ${d.on.name} (${d.on.faceName})${followText(anchors, spec.shape)} — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local, anchors.length ? { anchors } : {}) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
     tool.step = 9; return;
   }
   /* the part under the shape (for Cut): pick through the shape's centre in that view */
   const pane = views.panes().find(q => q.id === d.pane), cs = views.project(pane, V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y))), under = views.pick(pane, cs.x, cs.y), target = under && model.resolveId(under.id);
-  const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, end: v.end === 'symmetric' ? 'symmetric' : 'blind', draft: ok(v.draft, 0), profile: pts2 }, spec)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
+  const anc = shapeAnchors(d, spec), withAnc = anc.length ? { anchors: anc } : {};
+  const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, end: v.end === 'symmetric' ? 'symmetric' : 'blind', draft: ok(v.draft, 0), profile: pts2 }, spec, withAnc)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
   if (target && !(R.virtual && R.virtual.has(under.id))) actions.push(['Cut through ' + (model.get(target) || {}).name, () => {
     const body = model.bodyContaining(target), bb = body.solid.bbox(), corners = []; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) corners.push(V.dot(V.sub([x, y, z], R.originPoint), B.f));
     const f0 = Math.min(...corners) - 1, f1 = Math.max(...corners) + 1, at = V.add(pose.at, V.mul(B.f, f0));
-    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
   }]);
   actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
   actions.push(['Back', () => { tool.step = 0; d.points = []; views.preview = null; sketchHint(); views.draw(); }]);
-  hint(`${sizeText} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['end', 'direction', 'blind', ['blind', 'symmetric']], ['draft', 'draft °', 0], ['degrees', 'revolve °', 360]]);
+  hint(`${sizeText}${followText(anc, spec.shape)} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['end', 'direction', 'blind', ['blind', 'symmetric']], ['draft', 'draft °', 0], ['degrees', 'revolve °', 360]]);
   tool.step = 9;
 }
 /* the sketch's points and arcs in the view's 2D coordinates, and the constraints a fresh sketch gets */
@@ -8770,7 +8838,7 @@ function finishSketch() {
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
   /* a fresh sketch gets horizontal / vertical constraints where it nearly is (not on its arcs), its first point fixed, and its tangent arcs tangent (edit them in Properties → Sketch) */
-  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, splines: spl2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2, an = op === 'extrude' && !(extra && extra.profile) ? pointAnchors(d) : undefined; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, splines: spl2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, an ? { anchors: an } : {}, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
   if (pendingLoft) {
     if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');

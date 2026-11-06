@@ -566,6 +566,48 @@ An.apply([{ op: 'delete', id: 'mir' }]);
 ok('a corner that is gone: it stays where it is and says so', An.result.warnings.some(w => w.kind === 'anchor' && /is gone/.test(w.text)) && Math.abs(dk().width - 100) < 1e-6);
 An.undo(); An.apply([{ op: 'set', id: 'deck', anchors: null }, { op: 'set', id: 'w1', params: { width: 120 } }]);
 ok('…and with no anchors it keeps its own size', Math.abs(dk().height - Math.hypot(90, 40)) < 1e-5 && !An.get('deck').anchors);
+/* a size the user types is theirs: the anchors stop driving it, and still place it (from the first anchor) */
+An.apply([{ op: 'set', id: 'deck', anchors: [{ obj: 'w1', conn: 'corner+x+y-z' }, { obj: 'w1@mir.1', conn: 'corner-x+y+z' }] }]);
+const slopeLen = () => Math.hypot(An.get('w1').params.width, An.get('w1').params.height);
+ok('anchored again: it spans the slope', Math.abs(dk().height - slopeLen()) < 1e-5, [dk().height, slopeLen()]);
+An.apply([{ op: 'set', id: 'deck', params: { height: 80 } }]);
+const lowEnd = () => An.result.bodies.find(b => b.id === 'deck').solid.bbox().max[0];
+ok('typing a height makes it yours: it stays 80', Math.abs(dk().height - 80) < 1e-9 && JSON.stringify(An.get('deck').held) === '["height"]', An.get('deck').held);
+ok('…it still starts at the first corner (the thin end) and still spans across both wedges', Math.abs(lowEnd() - (An.get('w1').params.width / 2 + 6 * Math.sin(Math.atan2(An.get('w1').params.height, An.get('w1').params.width)))) < 0.05 && Math.abs(dk().width - 100) < 1e-6, [lowEnd(), dk().width]);
+An.apply([{ op: 'set', id: 'w1', params: { width: 150 } }]);
+ok('…the wedge changes: the height stays yours, the width still follows', Math.abs(dk().height - 80) < 1e-9 && Math.abs(dk().width - 100) < 1e-6);
+An.apply([{ op: 'set', id: 'deck', held: null }]);
+ok('let the corners set it again', Math.abs(dk().height - slopeLen()) < 1e-5 && !An.get('deck').held, dk().height);
+/* a driving dimension on an anchored part places it; its size still follows */
+const Dd = new Model();
+Dd.apply([{ op: 'add', type: 'box', id: 'base', params: { width: 200, depth: 100, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'box', id: 'p1', params: { width: 10, depth: 10, height: 10 }, mate: { to: 'base', a: 'top', b: 'bottom', slide: [-50, 0] } }, { op: 'add', type: 'box', id: 'p2', params: { width: 10, depth: 10, height: 10 }, mate: { to: 'base', a: 'top', b: 'bottom', slide: [50, 20] } }]);
+Dd.apply([{ op: 'extrude', id: 'pad', shape: 'rect', x: 0, y: 0, width: 20, height: 20, length: 2, mate: { to: 'base', a: 'top', b: 'start', flip: true }, anchors: [{ obj: 'p1', conn: 'corner-x-y-z' }, { obj: 'p2', conn: 'corner+x+y-z' }] }]);
+ok('a rectangle between two blocks spans their outer corners', Math.abs(Dd.get('pad').params.width - 110) < 1e-6 && Math.abs(Dd.get('pad').params.height - 30) < 1e-6, [Dd.get('pad').params.width, Dd.get('pad').params.height]);
+const [pd] = Dd.apply([{ op: 'dim', a: { obj: 'base', conn: 'left' }, b: { obj: 'pad', conn: 'start' }, view: 'top' }]);
+Dd.apply([{ op: 'setdim', id: pd.id, value: 130 }]);
+const padX = () => { const bb = Dd.result.bodies.find(b => b.id === 'pad').solid.bbox(); return (bb.min[0] + bb.max[0]) / 2; };
+ok('a driving dimension on it places it (130 from the left edge); its size still follows the corners', Math.abs(padX() - 30) < 1e-4 && (Dd.get('pad').held || []).includes('place') && Math.abs(Dd.get('pad').params.width - 110) < 1e-6, [padX(), Dd.get('pad').held]);
+Dd.apply([{ op: 'mate', id: 'p2', to: 'base', a: 'top', b: 'bottom', slide: [70, 20] }]);
+ok('…the corners move: it resizes, the dimension still holds its place', Math.abs(Dd.get('pad').params.width - 130) < 1e-6 && Math.abs(padX() - 30) < 1e-4, [Dd.get('pad').params.width, padX()]);
+Dd.apply([{ op: 'setdim', id: pd.id, value: null }]);
+ok('…the dimension made a reference again: the corners place it again', !(Dd.get('pad').held || []).includes('place') && Math.abs(padX() - 10) < 1e-4, padX());
+
+/* outline / circle / slot and a sketch placed by coordinates */
+const Cs = new Model();
+Cs.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 100, depth: 60, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'cylinder', id: 'peg', params: { diameter: 8, height: 15 }, mate: { to: 'b', a: 'top', b: 'bottom', slide: [20, 10] } }, { op: 'add', type: 'box', id: 'k', params: { width: 6, depth: 6, height: 6 }, mate: { to: 'b', a: 'top', b: 'bottom', slide: [-30, -15] } }]);
+Cs.apply([{ op: 'extrude', id: 'ring', shape: 'circle', x: 0, y: 0, diameter: 10, length: 1, mate: { to: 'b', a: 'top', b: 'start', flip: true }, anchors: [{ role: 'centre', obj: 'peg', conn: 'bottom' }, { role: 'rim', obj: 'k', conn: 'corner+x+y-z' }] }]);
+const ringC = () => { const bb = Cs.result.bodies.find(x => x.id === 'ring').solid.bbox(); return [(bb.min[0] + bb.max[0]) / 2, (bb.min[1] + bb.max[1]) / 2]; };
+ok('a circle centred on a connector, its rim through another', Math.abs(ringC()[0] - 20) < 0.05 && Math.abs(ringC()[1] - 10) < 0.05 && Math.abs(Cs.get('ring').params.diameter - 2 * Math.hypot(47, 22)) < 1e-4, [ringC(), Cs.get('ring').params.diameter]);
+Cs.apply([{ op: 'mate', id: 'peg', to: 'b', a: 'top', b: 'bottom', slide: [0, 0] }]);
+ok('…it moves and resizes with them', Math.abs(ringC()[0]) < 0.05 && Math.abs(Cs.get('ring').params.diameter - 2 * Math.hypot(27, 12)) < 1e-4, Cs.get('ring').params.diameter);
+Cs.apply([{ op: 'extrude', id: 'sl', shape: 'slot', x: 0, y: 0, width: 30, height: 6, length: 1, mate: { to: 'b', a: 'top', b: 'start', flip: true }, anchors: [{ role: 'end', obj: 'peg', conn: 'bottom' }, { role: 'end', obj: 'k', conn: 'bottom' }] }]);
+ok('a slot between two connectors: its length is their distance plus its width', Math.abs(Cs.get('sl').params.width - (Math.hypot(30, 15) + 6)) < 0.5 || Math.abs(Cs.get('sl').params.width - (30 + 6)) < 1e-6, Cs.get('sl').params.width);
+Cs.apply([{ op: 'extrude', id: 'v', shape: 'rect', x: 0, y: 0, width: 5, height: 5, length: 2, at: [0, -40, 0], rot: [90, 0, 0], fixed: true, anchors: [{ obj: 'b', conn: 'corner-x-y-z' }, { obj: 'b', conn: 'corner+x-y+z' }] }]);
+const vbb = Cs.result.bodies.find(x => x.id === 'v').solid.bbox();
+ok('a sketch placed by coordinates (drawn in a view) follows too', Math.abs(Cs.get('v').params.width - 100) < 1e-6 && Math.abs(Cs.get('v').params.height - 10) < 1e-6 && Math.abs(vbb.min[0] + 50) < 1e-6 && Math.abs(vbb.max[2] - 10) < 1e-6, [Cs.get('v').params.width, Cs.get('v').params.height, vbb.min[0], vbb.max[2]]);
+Cs.apply([{ op: 'set', id: 'b', params: { width: 140 } }]);
+ok('…and when the part it follows grows', Math.abs(Cs.get('v').params.width - 140) < 1e-6);
+
 /* an outline: the anchored point follows, the rest of the outline stays where it is */
 const Ao = new Model();
 Ao.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 100, depth: 60, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'box', id: 'post', params: { width: 10, depth: 10, height: 20 }, mate: { to: 'b', a: 'top', b: 'bottom', slide: [30, 0] } }]);

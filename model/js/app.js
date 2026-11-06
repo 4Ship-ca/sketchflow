@@ -1,6 +1,6 @@
 /* SketchFlow 3D workspace: feature tree, properties, tools (add · sketch→extrude/revolve/loft · mate · booleans ·
    edge treatments · measure), editable carried dimensions, autosave, export, and the AI (MCP) bridge. */
-import { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES } from './model.js';
+import { THREADS, Model, TYPES, worldConnectors, newDoc, poseFromMatrix, K, MATERIALS, massReport, bom, registerAddon, listAddons, ADDONS, findSeams, dimsOf, measureDim, parseExpr, JOINTS, jointsOf, posedDoc, evaluate, HOLES, holeSpec, parseMesh, encodeTriangles, shapeProfile, SKETCH_SHAPES , anchorDriven } from './model.js';
 import { Views, fmt } from './views.js';
 import gears from '../addons/gears.js';
 import welding from '../addons/welding.js';
@@ -254,7 +254,7 @@ function renderTree() {
   };
   const rows = treeOrder();
   rows.forEach(({ o, depth }, k) => {
-    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length} corner${o.anchors.length > 1 ? 's' : ''}` : '');
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length}${o.held && o.held.length ? ' · ' + o.held.map(k => (k === 'place' ? 'placed by a dim' : k + ' yours')).join(', ') : ''}` : '');
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
@@ -909,27 +909,45 @@ function jointPartSection(o, s1) {
   s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', title: 'After changing a thickness or size: build this joint again for the parts as they are now', onclick: () => redoJoint(tag) }, 'Redo for new sizes'), c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
 }
 /* ---------- sketch anchors: a shape sketched on a face that follows other parts' corners ---------- */
-const canFollow = (o) => o && o.type === 'extrude' && o.mate && o.mate.to && !o.mate.kind && ['start', 'end'].includes(o.mate.b) && (o.params.shape === 'rect' || !o.params.shape || o.params.shape === 'points');
+const FOLLOW_SHAPES = new Set(['rect', 'circle', 'polygon', 'slot', 'points']);
+const canFollow = (o) => o && o.type === 'extrude' && FOLLOW_SHAPES.has(o.params.shape || 'points') && ((o.mate && o.mate.to && !o.mate.kind && !o.mate.frame && ['start', 'end'].includes(o.mate.b)) || (!o.mate && o.pose));
 const connName = (a) => { const R = model.result, v = R.virtual && R.virtual.get(a.obj), base = model.get(v ? v.source : a.obj); return `${a.conn} of ${base ? base.name : a.obj}${v ? ' (copy ' + (v.index + 1) + ')' : ''}`; };
+const followWhat = (o) => { const sh = o.params.shape || 'points'; return sh === 'rect' ? 'corners' : sh === 'slot' ? 'ends' : sh === 'circle' || sh === 'polygon' ? 'a centre' : 'corners'; };
 function followSection(o, s1) {
-  const an = o.anchors || [], rect = o.params.shape === 'rect';
+  const an = o.anchors || [], sh = o.params.shape || 'points', held = o.held || [], drv = anchorDriven(o);
   const box = el('div', { class: 'subsec' }, el('b', null, 'Follows'));
-  if (!an.length) box.append(el('div', { class: 'note' }, rect ? 'Make it follow two opposite corners of other parts — its size and its place on the face then come from them, whenever they change.' : 'Make points of this outline follow other parts\' corners: each corner you pick holds the nearest point, and the outline keeps its other constraints.'));
-  an.forEach((a, k) => box.append(el('div', { class: 'f' }, rect ? `corner ${k + 1}` : `point ${a.i + 1}`, el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k) }], `${o.name}: stop following ${a.conn}`) }, '×')))));
-  box.append(el('div', { class: 'btns' }, el('button', { class: 'btn' + (an.length ? '' : ' pri'), title: 'Click the corners (or centres) it should follow, in any view', onclick: () => setTool('anchor', o.id) }, an.length ? 'Follow more…' : 'Follow corners…'), an.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, anchors: null }], `${o.name}: stop following`) }, 'Stop following') : null));
+  if (!an.length) box.append(el('div', { class: 'note' }, {
+    rect: 'Make it follow two opposite corners of other parts: its size and its place then come from them, whenever they change.',
+    slot: 'Make its two ends follow two points of other parts (hole centres, corners): its length and place come from them.',
+    circle: 'Make it follow a centre (and, if you like, a point its rim goes through) on other parts.', polygon: 'Make it follow a centre (and a point for its size) on other parts.',
+    points: 'Make points of this outline follow other parts\' corners: each one you pick holds the nearest point, and the outline keeps its other constraints.'
+  }[sh]));
+  const role = (a, k) => (sh === 'points' ? `point ${a.i + 1}` : a.role ? a.role : sh === 'rect' ? `corner ${k + 1}` : k ? 'rim' : 'centre');
+  an.forEach((a, k) => box.append(el('div', { class: 'f' }, role(a, k), el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k), held: held }], `${o.name}: stop following ${a.conn}`) }, '×')))));
+  /* sizes the user set: theirs, until they hand them back */
+  for (const k of held.filter(x => drv.includes(x) || x === 'place')) box.append(el('div', { class: 'f' }, k === 'place' ? 'place' : label(k), el('span', { class: 'pin' }, el('span', { class: 'note' }, k === 'place' ? 'set by a driving dimension' : `yours (${fmt(o.params[k])}) — the ${followWhat(o)} still place it`), k === 'place' ? null : el('button', { class: 'btn', title: `Let the ${followWhat(o)} set the ${label(k)} again`, onclick: () => apply([{ op: 'set', id: o.id, held: held.filter(x => x !== k) }], `${o.name}: ${label(k)} follows again`) }, 'Follow again'))));
+  if (an.length && drv.some(k => o.expr && o.expr[k])) box.append(el('div', { class: 'note' }, 'A size given by a formula is yours too: unlink it to let them set it.'));
+  if (an.length && !held.length) box.append(el('div', { class: 'note' }, 'Type a size to keep it: that size is then yours, and the anchors still place it.'));
+  box.append(el('div', { class: 'btns' }, el('button', { class: 'btn' + (an.length ? '' : ' pri'), title: 'Click the corners (or centres) it should follow, in any view', onclick: () => setTool('anchor', o.id) }, an.length ? 'Follow more…' : `Follow ${followWhat(o)}…`), an.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, anchors: null }], `${o.name}: stop following`) }, 'Stop following') : null));
   s1.append(box);
 }
 function anchorHint() {
-  const o = model.get(tool.data.id), n = (o.anchors || []).length, rect = o.params.shape === 'rect';
-  hint(`Follow: click the ${rect ? (n ? 'opposite corner' : 'corners') : 'corners'} ${o.name} should follow (the square dots)${n ? ` — ${n} so far` : ''}`, [['Done', () => setTool(null)]]);
+  const o = model.get(tool.data.id), n = (o.anchors || []).length, sh = o.params.shape || 'points';
+  const what = sh === 'rect' ? (n ? 'the opposite corner' : 'the corners') : sh === 'slot' ? (n ? 'the other end' : 'the two end points (a hole centre, a corner)') : sh === 'circle' || sh === 'polygon' ? (n ? 'a point its rim should go through (or Done)' : 'its centre (a centre dot or a corner)') : 'the corners';
+  hint(`Follow: click ${what} ${o.name} should follow${n ? ` — ${n} so far` : ''}`, [['Done', () => setTool(null)]]);
 }
 function anchorClick(hit) {
   const o = tool && model.get(tool.data.id); if (!o) { setTool(null); return; }
   if (!hit || hit.kind !== 'conn') { toast('Click one of the dots: a corner (square), or a face or centre'); return; }
   if (hit.conn.id === o.id) return;
   const a = { obj: hit.conn.id, conn: hit.conn.name }, an = (o.anchors || []).slice();
-  if (o.params.shape === 'rect') { if (an.some(x => x.obj === a.obj && x.conn === a.conn)) { toast('It follows that one already'); return; } an.push(a); }
-  else {
+  const sh = o.params.shape || 'points';
+  if (sh === 'rect' || sh === 'slot' || sh === 'circle' || sh === 'polygon') {
+    if (an.some(x => x.obj === a.obj && x.conn === a.conn)) { toast('It follows that one already'); return; }
+    if (an.length >= 2) an.splice(0, an.length);
+    if (sh === 'slot') a.role = 'end'; else if (sh !== 'rect') a.role = an.length ? 'rim' : 'centre';
+    an.push(a);
+  } else {
     /* an outline: the corner holds the nearest of its points */
     const R = model.result, M = R.world.get(o.id), c = worldConnectors(R, a.obj).find(x => x.name === a.conn); if (!M || !c) return;
     const q = M4.point(M4.inv(M), c.o); let best = 0, bd = Infinity;
@@ -939,8 +957,12 @@ function anchorClick(hit) {
   }
   try { apply([{ op: 'set', id: o.id, anchors: an }], `${o.name}: follow ${a.conn}`); } catch (e) { return; }
   const w = model.result.warnings.find(x => x.kind === 'anchor' && x.id === o.id);
-  toast(w ? w.text : o.params.shape === 'rect' ? (an.length >= 2 ? `${o.name} now spans ${an.length} corners: ${fmt(o.params.width)} × ${fmt(o.params.height)}, and follows them` : 'Now click the opposite corner') : `Point ${an[an.length - 1].i + 1} now follows ${connName(a)}`, 3000);
-  if (o.params.shape === 'rect' && an.length >= 2) setTool(null); else anchorHint();
+  const P = model.get(o.id).params;
+  toast(w ? w.text : sh === 'rect' ? (an.length >= 2 ? `${o.name} now spans the 2 corners: ${fmt(P.width)} × ${fmt(P.height)}, and follows them` : 'Now click the opposite corner')
+    : sh === 'slot' ? (an.length >= 2 ? `${o.name} now runs between them: ${fmt(P.width)} long, and follows them` : 'Now click the other end')
+    : sh === 'circle' || sh === 'polygon' ? (an.length >= 2 ? `Its rim now goes through ${connName(a)}: Ø${fmt(P.diameter)}` : `Centred on ${connName(a)} — click a point for its rim, or Done`)
+    : `Point ${an[an.length - 1].i + 1} now follows ${connName(a)}`, 3000);
+  if (sh !== 'points' && an.length >= 2) setTool(null); else anchorHint();
 }
 /* ---------- add-on action forms (right panel) ---------- */
 let addonForm = null;
@@ -1383,11 +1405,12 @@ function snapTargets(paneId) {
   const R = model.result; if (snapCache && snapCache.R === R && snapCache.pane === paneId) return snapCache.list;
   const B = BASISof(paneId), O = R.originPoint, list = [], seen = new Set();
   const put = (w, kind, label, ref) => { const q = V.sub(w, O), x = V.dot(q, B.r), y = V.dot(q, B.u), k = Math.round(x * 1e3) + ',' + Math.round(y * 1e3) + kind; if (seen.has(k) || list.length > 40000) return; seen.add(k); list.push({ x, y, kind, label, ref }); };
-  put(O, 'point', 'origin');
-  /* named corners and centres first: a sketch point snapped to one follows it (pattern and mirror copies included) */
+  /* named corners and centres first: a sketch point snapped to one follows it (pattern and mirror copies included); where
+     one sits on the origin, the part's wins */
   const owner = (id) => (model.get(id) || model.get((R.virtual.get(id) || {}).source) || {}).name || id;
   const ids = model.doc.objects.filter(o => R.world.has(o.id) && !META.has(o.type)).map(o => o.id).concat([...(R.virtual || new Map()).keys()].filter(id => R.world.has(id)));
   for (const id of ids) for (const c of worldConnectors(R, id)) if (c.kind === 'corner' || c.kind === 'center' || c.kind === 'face') put(c.o, 'point', `${owner(id)} · ${c.kind === 'corner' ? 'corner' : c.kind === 'center' ? 'centre' : c.name + ' centre'}`, { obj: id, conn: c.name });
+  put(O, 'point', 'origin');
   for (const b of R.bodies) { if (b.hidden || b.solid.isEmpty()) continue; for (const [a, c] of K.creaseEdges(b.solid)) { put(a, 'point', 'corner'); put(c, 'point', 'corner'); put(V.lerp(a, c, 0.5), 'mid', 'midpoint'); } }
   snapCache = { R, pane: paneId, list }; return list;
 }
@@ -1404,7 +1427,7 @@ function snapSketch(pane, pp, straight) {
     const cand = o.points ? pts.map((p, i) => ({ x: V.dot(p, B.r), y: V.dot(p, B.u), kind: 'point', label: i === 0 ? 'start' : 'point' })) : [];
     for (const t of snapTargets(pane.id)) if (t.kind === 'mid' ? o.mids : o.points) cand.push(t);
     for (const t of cand) { const dd = Math.hypot(t.x - x, t.y - y); if (dd < bd) { bd = dd; best = t; } }
-    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label + (best.ref && d.on ? ' — follows it' : ''), ref: d.on ? best.ref : undefined }; }
+    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label + (best.ref ? ' — follows it' : ''), ref: best.ref }; }
   }
   if (!snap && last && !d.arcEnd && (straight || o.hv || o.angle)) {
     const dx = x - last[0], dy = y - last[1], g = (v) => (o.grid ? Math.round(v / o.step) * o.step : v);
@@ -1500,6 +1523,14 @@ function shapeFrom(mode, a, b) {
   if (mode === 'slot') { const h = prefs.slotW || 10; return { shape: 'slot', x: (a[0] + b[0]) / 2, y: a[1], width: Math.abs(b[0] - a[0]) + h, height: h }; }
   return null;
 }
+function shapeAnchors(d, spec) {
+  const r = [d.points[0], d.lastP].map(q => (q && d.refAt ? d.refAt.get(refKey(q)) : null));
+  const roles = spec.shape === 'rect' ? [null, null] : spec.shape === 'circle' || spec.shape === 'polygon' ? ['centre', 'rim'] : spec.shape === 'slot' ? ['end', 'end'] : null;
+  if (!roles) return [];
+  return r.map((x, k) => (x ? Object.assign({ obj: x.obj, conn: x.conn }, roles[k] ? { role: roles[k] } : {}) : null)).filter(Boolean);
+}
+const followText = (an, shape) => { const n = an.length; if (!n) return ''; const roles = an.map(a => a.role);
+  return ` — follows ${shape === 'circle' || shape === 'polygon' ? (n > 1 ? 'its centre and rim' : roles[0] === 'rim' ? 'a point on its rim' : 'a centre') : shape === 'slot' ? (n > 1 ? 'both ends' : 'an end') : n > 1 ? n + ' corners' : 'a corner'}`; };
 function shapePoints3(spec, B) { try { return shapeProfile(spec).map(([x, y]) => V.add(V.mul(B.r, x), V.mul(B.u, y))); } catch (e) { return []; } }
 function finishShape(spec) {
   const d = tool.data, B = d.basis, pts2 = shapeProfile(spec);
@@ -1511,21 +1542,22 @@ function finishShape(spec) {
   if (d.on) {
     /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
     const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
-    const anchors = spec.shape === 'rect' ? [d.points[0], d.lastP].map(q => q && d.refAt && d.refAt.get(refKey(q))).filter(Boolean).map(r => ({ obj: r.obj, conn: r.conn })) : [];
-    hint(`${sizeText} on ${d.on.name} (${d.on.faceName})${anchors.length ? ` — follows ${anchors.length === 1 ? 'a corner' : anchors.length + ' corners'}` : ''} — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local, anchors.length ? { anchors } : {}) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
+    const anchors = shapeAnchors(d, spec);
+    hint(`${sizeText} on ${d.on.name} (${d.on.faceName})${followText(anchors, spec.shape)} — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local, anchors.length ? { anchors } : {}) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
     tool.step = 9; return;
   }
   /* the part under the shape (for Cut): pick through the shape's centre in that view */
   const pane = views.panes().find(q => q.id === d.pane), cs = views.project(pane, V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y))), under = views.pick(pane, cs.x, cs.y), target = under && model.resolveId(under.id);
-  const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, end: v.end === 'symmetric' ? 'symmetric' : 'blind', draft: ok(v.draft, 0), profile: pts2 }, spec)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
+  const anc = shapeAnchors(d, spec), withAnc = anc.length ? { anchors: anc } : {};
+  const actions = [['Extrude', (v) => { const L = ok(v.length, 10); const r = apply([Object.assign({ op: 'extrude', at: pose.at, rot: pose.rot, fixed: true, length: L, end: v.end === 'symmetric' ? 'symmetric' : 'blind', draft: ok(v.draft, 0), profile: pts2 }, spec, withAnc)], `${name} extrude`)[0]; select(r.id); setTool(null); }]];
   if (target && !(R.virtual && R.virtual.has(under.id))) actions.push(['Cut through ' + (model.get(target) || {}).name, () => {
     const body = model.bodyContaining(target), bb = body.solid.bbox(), corners = []; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) corners.push(V.dot(V.sub([x, y, z], R.originPoint), B.f));
     const f0 = Math.min(...corners) - 1, f1 = Math.max(...corners) + 1, at = V.add(pose.at, V.mul(B.f, f0));
-    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
   }]);
   actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
   actions.push(['Back', () => { tool.step = 0; d.points = []; views.preview = null; sketchHint(); views.draw(); }]);
-  hint(`${sizeText} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['end', 'direction', 'blind', ['blind', 'symmetric']], ['draft', 'draft °', 0], ['degrees', 'revolve °', 360]]);
+  hint(`${sizeText}${followText(anc, spec.shape)} — its sizes stay editable dimensions:`, actions, [['length', 'length', 10], ['end', 'direction', 'blind', ['blind', 'symmetric']], ['draft', 'draft °', 0], ['degrees', 'revolve °', 360]]);
   tool.step = 9;
 }
 /* the sketch's points and arcs in the view's 2D coordinates, and the constraints a fresh sketch gets */
@@ -1542,7 +1574,7 @@ function finishSketch() {
   const R = model.result, frame = M4.mul(M4.translate(R.originPoint), [B.r[0], B.r[1], B.r[2], 0, B.u[0], B.u[1], B.u[2], 0, B.f[0], B.f[1], B.f[2], 0, 0, 0, 0, 1]);
   const pose = poseFromMatrix(frame), revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), revPose = poseFromMatrix(revFrame);
   /* a fresh sketch gets horizontal / vertical constraints where it nearly is (not on its arcs), its first point fixed, and its tangent arcs tangent (edit them in Properties → Sketch) */
-  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, splines: spl2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
+  const make = (op, extra) => { const prof = (extra && extra.profile) || pts2, an = op === 'extrude' && !(extra && extra.profile) ? pointAnchors(d) : undefined; const r = apply([Object.assign({ op, profile: prof, arcs: (extra && extra.arcs) || arcs2, splines: spl2, constraints: cons, at: (op === 'revolve' ? revPose : pose).at, rot: (op === 'revolve' ? revPose : pose).rot, fixed: true }, an ? { anchors: an } : {}, extra)])[0]; pendingLoft = null; select(r.id); setTool(null); };
   const ok = (v, dflt) => (Number.isFinite(v) ? v : dflt);
   if (pendingLoft) {
     if (pendingLoft.pane !== d.pane) toast('End profile was drawn in another view — it is used flat in the ' + pendingLoft.pane.toUpperCase() + ' view');

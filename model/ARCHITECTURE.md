@@ -151,7 +151,7 @@ How a joint is made decides how it is modelled:
 
 ### Sketch anchors: following other parts without a solver over the whole assembly
 
-A part sketched on a face can carry `anchors`: connectors of other parts (corners, face centres, pattern and mirror copies) that its points follow. Its own placement stays an ordinary mate, the profile's centre pinned to the face at a slide. After every evaluation, `followAnchors` works out where the anchors are, in the part's own in-plane axes:
+A sketched part (on a face, or placed by coordinates in a view) can carry `anchors`: connectors of other parts (corners, face centres, pattern and mirror copies) that its points follow. Rectangles follow by corners, circles and polygons by centre and rim, slots by their ends, outlines by points. Sizes the user typed, or gave a formula, are `held` as the user's: the anchors place the shape but don't resize it. A driving dimension holds `place`. Its own placement stays an ordinary mate, the profile's centre pinned to the face at a slide. After every evaluation, `followAnchors` works out where the anchors are, in the part's own in-plane axes:
 
 - **A rectangle** takes its size along each axis from the anchors' spread, and its slide from their middle.
 - **A drawn outline** holds each anchored point with a `fix` constraint that moves with it. The slide is corrected so the rest of the outline stays where it is.
