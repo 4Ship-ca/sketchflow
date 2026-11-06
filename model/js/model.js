@@ -179,7 +179,7 @@ function followAnchorsOf(R, o, missing, notes) {
   if (!onFace && !posed) { notes.push({ o, text: 'anchors work on a part sketched on a face (mated by its start or end) or placed by coordinates — it stays where it is' }); return false; }
   const xw = V.norm(M4.dir(M, [1, 0, 0])), yw = V.norm(M4.dir(M, [0, 1, 0])), zw = V.norm(M4.dir(M, [0, 0, 1])), Ol = M4.point(M, [0, 0, 0]);
   const tc = onFace ? worldConnectors(R, m.to).find(c => c.name === m.a) : { o: Ol, n: zw, u: xw }; if (!tc) return false;
-  const pts = []; for (const a of o.anchors) { const w = anchorWorld(R, a); if (w) pts.push(Object.assign({ w }, a)); else missing.push({ o, a }); }
+  const pts = []; for (const a of o.anchors) { const w = anchorWorld(R, a); if (w) pts.push(Object.assign({ w, src: a }, a)); else missing.push({ o, a }); }
   if (!pts.length) return false;
   const u = tc.u, v = V.cross(tc.n, tc.u), rel = (w) => V.sub(w, tc.o), r6a = (x) => Math.round(x * 1e6) / 1e6, ex = o.expr || {}, held = new Set(o.held || []);
   const ups = upToList(o), upOf = (k) => ups.find(q => q.param === k && upToSideways(o.type, k)) || null;
@@ -199,7 +199,15 @@ function followAnchorsOf(R, o, missing, notes) {
       if (hi - lo > 1e-6) {
         if (!mine(key)) { size = hi - lo + ends; cen[k] = (hi + lo) / 2; }
         else { const base = vals[0], other = vals.find((x, j) => j > 0 && Math.abs(x - base) > 1e-6), s = sgn(other - base); cen[k] = base + s * span(size) / 2; }
-      } else { const s = sgn(lo - c0); cen[k] = s ? lo - s * span(size) / 2 : lo; }
+      } else {
+        /* the anchors sit on one line across this axis: the face of the shape on them (f: -1 its low face, +1 its high
+           face, 0 its middle) is kept from the first time it follows — so a part that grows or jumps a long way never
+           flips the shape over to the anchor's other side */
+        const src = pts[0].src, fk = Array.isArray(src.f) ? src.f[k] : null;
+        let f = Number.isFinite(fk) ? fk : null;
+        if (f == null) { f = sgn(lo - c0); const nf = Array.isArray(src.f) ? src.f.slice() : [null, null]; nf[k] = f; src.f = nf; }
+        cen[k] = lo - f * span(size) / 2;
+      }
       setSize(key, size);
     }
     at = V.add(V.add(V.add(tc.o, V.mul(xw, cen[0])), V.mul(yw, cen[1])), V.mul(zw, V.dot(rel(Cw), zw)));
@@ -306,11 +314,15 @@ function rayInto(sol, o, d) {
     const dn = V.dot(q.plane.n, d); if (Math.abs(dn) < 1e-12) continue;
     const t = (q.plane.w - V.dot(q.plane.n, o)) / dn; if (!(t > 1e-6) || t >= best) continue;
     const x = V.add(o, V.mul(d, t)), n = q.plane.n; let sg = 0, inside = true;
-    for (let i = 0; i < q.v.length && inside; i++) { const a = q.v[i].p, b = q.v[(i + 1) % q.v.length].p, c = V.dot(V.cross(V.sub(b, a), V.sub(x, a)), n); if (Math.abs(c) < 1e-9) continue; const s = c > 0 ? 1 : -1; if (!sg) sg = s; else if (s !== sg) inside = false; }
+    /* a point within 1e-5 mm of the face's edge is on it (placements are rounded to 1e-6: a part whose edge lies right over
+       another's must not count as missing it) */
+    for (let i = 0; i < q.v.length && inside; i++) { const a = q.v[i].p, b = q.v[(i + 1) % q.v.length].p, e = V.sub(b, a), el = V.len(e); if (el < 1e-12) continue; const c = V.dot(V.cross(e, V.sub(x, a)), n) / el; if (Math.abs(c) < 1e-5) continue; const s = c > 0 ? 1 : -1; if (!sg) sg = s; else if (s !== sg) inside = false; }
     if (inside) best = t;
   }
   return best;
 }
+/* for the panel: whether only part of it is under (or facing) the part it reaches — touch and cover then measure only there */
+const reachInfo = (R, o, u, hits) => { (R.reach || (R.reach = new Map())).set(o.id + '|' + u.param, { partial: hits.some(h => !Number.isFinite(h)), hits: hits.filter(Number.isFinite).length, of: hits.length }); };
 /* the distance it reaches, by mode, from the rays' hits (null when none hit) */
 const reach = (u, hits) => {
   const got = hits.filter(Number.isFinite); if (!got.length) return null;
@@ -328,7 +340,7 @@ function followUpToOne(R, o, u, missing, notes) {
   if (o.mate && o.mate.b && !['bottom', 'start'].includes(o.mate.b)) { notes.push({ o, text: `it is placed by its ${o.mate.b}, so a longer ${u.param} would move its base — mate it by its bottom to extend it` }); return false; }
   const d = V.norm(M4.dir(M, [0, 0, 1])), hits = footprint(o).map(([x, y]) => rayInto(T.solid, M4.point(M, [x, y, 1e-3]), d)), val = reach(u, hits);
   if (val == null) { notes.push({ o, text: `${T.name} is not above it along its ${u.param} — it keeps ${p[u.param]}` }); return false; }
-  if (hits.some(h => !Number.isFinite(h)) && u.mode !== 'centre') notes.push({ o, text: `part of it is not under ${T.name}: it reaches it where it is` });
+  reachInfo(R, o, u, hits);
   if (!(val > 1e-3)) { notes.push({ o, text: `${T.name} is already at its base — it keeps ${p[u.param]}` }); return false; }
   const r = Math.round(val * 1e6) / 1e6; if (Math.abs(r - p[u.param]) <= 1e-6) return false;
   p[u.param] = r; return true;
@@ -355,6 +367,7 @@ function followSideways(R, o, u, T, M, notes) {
   const s = u.side === '-' ? -1 : 1, g = sideRays(o, u.param, s), axis = (g.k ? 'y' : 'x');
   const d = V.norm(M4.dir(M, g.d)), hits = g.pts.map(P => rayInto(T.solid, M4.point(M, P), d)), val = reach(u, hits);
   if (val == null) { notes.push({ o, text: `${T.name} is not beside it on its ${u.side}${axis} side — it keeps its ${u.param} ${p[u.param]}` }); return false; }
+  reachInfo(R, o, u, hits);
   if (!(val > 1e-3)) { notes.push({ o, text: `${T.name} is already at its ${u.side === '-' ? '+' : '-'}${axis} face — it keeps its ${u.param} ${p[u.param]}` }); return false; }
   const r = Math.round(val * 1e6) / 1e6; if (Math.abs(r - p[u.param]) <= 1e-6) return false;
   const q = Object.assign({}, p, { [u.param]: r });
@@ -395,7 +408,7 @@ function shiftPlace(R, o, move, what, notes) {
 const cleanAnchors = (list) => {
   if (list == null || list === false) return null;
   if (!Array.isArray(list)) throw new Error('anchors: give a list of {obj, conn} (and i, the point, for a drawn outline)');
-  const out = list.filter(Boolean).map(a => { if (typeof a.obj !== 'string' || typeof a.conn !== 'string') throw new Error('each anchor needs obj (a part id) and conn (one of its connectors, e.g. corner+x-y-z)'); return Object.assign({ obj: a.obj, conn: a.conn }, Number.isInteger(a.i) ? { i: a.i } : {}, ['centre', 'rim', 'end'].includes(a.role) ? { role: a.role } : {}); });
+  const out = list.filter(Boolean).map(a => { if (typeof a.obj !== 'string' || typeof a.conn !== 'string') throw new Error('each anchor needs obj (a part id) and conn (one of its connectors, e.g. corner+x-y-z)'); return Object.assign({ obj: a.obj, conn: a.conn }, Number.isInteger(a.i) ? { i: a.i } : {}, ['centre', 'rim', 'end'].includes(a.role) ? { role: a.role } : {}, Array.isArray(a.f) && a.f.length === 2 && a.f.some(v => [-1, 0, 1].includes(v)) ? { f: a.f.map(v => [-1, 0, 1].includes(v) ? v : null) } : {}); });
   return out.length ? out : null;
 };
 const ORIGIN_CONNS = [conn('origin', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center'), conn('xy', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('xz', [0, 0, 0], [0, -1, 0], [1, 0, 0]), conn('yz', [0, 0, 0], [1, 0, 0], [0, 1, 0])];

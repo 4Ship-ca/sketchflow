@@ -283,8 +283,12 @@ function renderTree() {
   box.hidden = !w.length; box.innerHTML = '';
   if (w.length) {
     box.append(el('b', null, w.length + (w.length === 1 ? ' thing needs attention' : ' things need attention')));
-    w.slice(0, 8).forEach(x => box.append(el('div', { style: 'cursor:pointer', onclick: () => select(x.id) }, '• ' + x.text)));
-    box.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: false }]) }, 'Fix orphans'), el('button', { class: 'btn', onclick: () => apply([{ op: 'cleanup', fixFloating: true }]) }, 'Fix all in place')));
+    w.slice(0, 8).forEach(x => box.append(el('div', { style: 'cursor:pointer', title: 'Select it', onclick: () => select(x.id) }, '• ' + x.text)));
+    /* the clean-up buttons only where they fix something: mates / cuts / dims left pointing at deleted parts, and floating parts */
+    const orphans = w.some(x => x.kind === 'orphan'), floating = w.some(x => x.kind === 'floating'), btns = el('div', { class: 'btns' });
+    if (orphans) btns.append(el('button', { class: 'btn', title: 'Drop what points at deleted parts; parts mated to one stay where they are', onclick: () => apply([{ op: 'cleanup', fixFloating: false }]) }, 'Fix orphans'));
+    if (orphans || floating) btns.append(el('button', { class: 'btn', title: 'Also fix floating parts where they are', onclick: () => apply([{ op: 'cleanup', fixFloating: true }]) }, 'Fix all in place'));
+    if (btns.childNodes.length) box.append(btns); else box.append(el('div', { class: 'note' }, 'Click one to select the part — its Properties show how to change it.'));
   }
   try { if (collab.room) paintPeers(); } catch (e) { /* shared editing not set up yet */ }
 }
@@ -346,7 +350,8 @@ function upToInput(ob, prm, u) {
   const gap = el('input', { value: fmt(u.gap || 0), inputmode: 'decimal', title: side ? 'gap mm left before it (negative: into it)' : 'gap mm left under it (negative: into it)', style: 'width:54px;flex:none' });
   gap.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') gap.blur(); });
   gap.addEventListener('change', () => { const v = parseFloat(String(gap.value).replace(',', '.')); if (Number.isFinite(v)) apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { gap: v }) }], `${ob.name}: ${fmt(v)} mm gap to ${partName(u.obj)}`); });
-  const tail = [`= ${fmt(ob.params[prm])} · meets it at its `, mode, ' gap ', gap];
+  const info = model.result.reach && model.result.reach.get(ob.id + '|' + prm);
+  const tail = [`= ${fmt(ob.params[prm])}${info && info.partial ? (side ? ' (part of its face is not facing it)' : ' (part of it is not under it)') : ''} · meets it at its `, mode, ' gap ', gap];
   if (side) {
     const ax = upToAxis(ob, prm), sel = el('select', { title: `the face that grows to reach ${partName(u.obj)} — the opposite one stays where it is` }, ...['+', '-'].map(v => el('option', { value: v, selected: (u.side || '+') === v }, `${v === '+' ? '+' : '−'}${ax} face`)));
     sel.onchange = () => apply([{ op: 'set', id: ob.id, upTo: Object.assign({}, u, { side: sel.value }) }], `${ob.name}: its ${sel.value === '+' ? '+' : '−'}${ax} face reaches ${partName(u.obj)}`);
@@ -975,6 +980,18 @@ function followSection(o, s1) {
   }[sh]));
   const role = (a, k) => (sh === 'points' ? `point ${a.i + 1}` : a.role ? a.role : sh === 'rect' ? `corner ${k + 1}` : k ? 'rim' : 'centre');
   an.forEach((a, k) => box.append(el('div', { class: 'f' }, role(a, k), el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k), held: held }], `${o.name}: stop following ${a.conn}`) }, '×')))));
+  /* which edge of the rectangle sits on the corner it follows (kept, so a big change never flips it to the corner's other side) */
+  const f0 = sh === 'rect' && an[0] && Array.isArray(an[0].f) ? an[0].f : null;
+  if (f0 && [0, 1].some(k => Number.isFinite(f0[k]))) {
+    const row = el('span', { class: 'pin' });
+    [0, 1].forEach(k => {
+      if (!Number.isFinite(f0[k])) return;
+      const ax = k ? 'y' : 'x', sel = el('select', { title: `which edge of it along its ${ax} sits on the corner` }, ...[[-1, `its −${ax} edge`], [0, `its middle`], [1, `its +${ax} edge`]].map(([v, t]) => el('option', { value: v, selected: f0[k] === v }, t)));
+      sel.onchange = () => { const nf = f0.slice(); nf[k] = +sel.value; apply([{ op: 'set', id: o.id, anchors: an.map((x, j) => (j ? x : Object.assign({}, x, { f: nf }))), held }], `${o.name}: ${sel.options[sel.selectedIndex].text} on the corner`); };
+      row.append(sel);
+    });
+    box.append(el('div', { class: 'f' }, 'on the corner', row));
+  }
   /* sizes the user set: theirs, until they hand them back */
   for (const k of held.filter(x => drv.includes(x) || x === 'place')) box.append(el('div', { class: 'f' }, k === 'place' ? 'place' : label(k), el('span', { class: 'pin' }, el('span', { class: 'note' }, k === 'place' ? 'set by a driving dimension' : `yours (${fmt(o.params[k])}) — the ${followWhat(o)} still place it`), k === 'place' ? null : el('button', { class: 'btn', title: `Let the ${followWhat(o)} set the ${label(k)} again`, onclick: () => apply([{ op: 'set', id: o.id, held: held.filter(x => x !== k) }], `${o.name}: ${label(k)} follows again`) }, 'Follow again'))));
   if (an.length && drv.some(k => o.expr && o.expr[k])) box.append(el('div', { class: 'note' }, 'A size given by a formula is yours too: unlink it to let them set it.'));

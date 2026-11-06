@@ -697,6 +697,25 @@ Us.apply([{ op: 'set', id: 'w1', params: { height: 35 } }]);
 ok('…a steeper deck: the length follows its angle', Math.abs(sbb().max[0] - deckAt(12, 35)) < 1e-3, [sbb().max[0], deckAt(12, 35)]);
 Us.apply([{ op: 'set', id: 'plate', params: { width: 140 } }]);
 ok('…a wider plate: the locked end follows the plate corner, the other still meets the deck', Math.abs(sbb().min[0] + 70) < 1e-6 && Math.abs(sbb().max[0] - deckAt(12, 35)) < 1e-3, [sbb().min[0], sbb().max[0]]);
+/* a bar sketched on the base plate, its outer face on the plate's corner, its length up to the deck on the wedges whose
+   width follows the plate: a much narrower or wider plate must not flip the bar to the corner's other side */
+const Uf = new Model();
+Uf.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } },
+  { op: 'add', type: 'wedge', id: 'w1', params: { width: '=plate.width', depth: 6, height: 25 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [0, 47] } }, { op: 'pattern', id: 'mir', of: 'w1', kind: 'mirror', plane: 'xz' }]);
+Uf.apply([{ op: 'extrude', id: 'deck', shape: 'rect', x: 0, y: 0, width: 100, height: 122.58, length: 6, mate: { to: 'w1', a: 'slope', b: 'start', flip: true, slide: [-47, 0] }, anchors: [{ obj: 'w1', conn: 'corner-x+y+z' }, { obj: 'w1@mir.1', conn: 'corner+x+y-z' }] },
+  { op: 'extrude', id: 'bar', shape: 'rect', x: 0, y: 0, width: 6, height: 88, length: 10, mate: { to: 'plate', a: 'top', b: 'start', slide: [-57, -6] }, anchors: [{ obj: 'plate', conn: 'corner-x-y+z' }] }]);
+Uf.apply([{ op: 'set', id: 'bar', upTo: { param: 'length', obj: 'deck' } }]);
+const fbb = () => Uf.result.bodies.find(b => b.id === 'bar').solid.bbox();
+let flipOk = true, flipLog = [];
+for (const W of [75, 240, 120, 60, 300]) {
+  Uf.apply([{ op: 'set', id: 'plate', params: { width: W } }]);
+  const b = fbb(), L = Uf.get('bar').params.length, want = 25 - 6 * 25 / W, quiet = !Uf.result.warnings.length;
+  flipLog.push([W, +b.min[0].toFixed(4), L, +want.toFixed(4), quiet]);
+  if (!(Math.abs(b.min[0] + W / 2) < 1e-6 && Math.abs(L - want) < 2e-3 && quiet)) flipOk = false;
+}
+ok("a bar following the plate's corner keeps its outer face on it through big width changes; its length is 25 − 6·25/W (thickness and angle), with no warnings", flipOk, flipLog);
+ok('…the face it keeps on the corner is remembered on the anchor (f)', JSON.stringify(Uf.get('bar').anchors[0].f) === '[-1,-1]', Uf.get('bar').anchors[0]);
+ok('…its edge right under the deck\'s corner counts as under it (no "part of it" note)', Uf.result.reach && Uf.result.reach.get('bar|length') && !Uf.result.reach.get('bar|length').partial, Uf.result.reach && Uf.result.reach.get('bar|length'));
 /* placed by coordinates: the pose shifts */
 const Up = new Model();
 Up.apply([{ op: 'add', type: 'box', id: 'a', params: { width: 10, depth: 10, height: 10 }, at: [0, 0, 0], fixed: true }, { op: 'add', type: 'box', id: 'b', params: { width: 10, depth: 10, height: 10 }, at: [0, 40, 0], fixed: true }]);
