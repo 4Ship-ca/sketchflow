@@ -4,3 +4,8 @@ node_modules/
 .smoke-rooms/
 release/
 *.tgz
+SF3d_setup.env
+SF3d_setup.log
+sketchflow-servers.json
+SF3d_ollama.bat
+SF3d_ollama.sh

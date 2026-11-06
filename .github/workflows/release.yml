@@ -41,8 +41,15 @@ jobs:
       - name: MCP smoke test
         run: npm run smoke
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public --tag "$NPM_TAG"
+      - name: Publish to npm (skipped when this version is already there, e.g. published by SF3d_setup.bat)
+        shell: bash
+        run: |
+          name=$(node -p "require('./package.json').name")
+          if [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "$name@$VERSION is already on npm"
+          else
+            npm publish --provenance --access public --tag "$NPM_TAG"
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -56,8 +63,12 @@ jobs:
         run: |
           set -euo pipefail
           awk -v v="## $VERSION" 'index($0, v) == 1 { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > release-notes.md
-          gh release create "$GITHUB_REF_NAME" $PRERELEASE --title "SketchFlow $VERSION" --notes-file release-notes.md \
-            "release/sketchflow-$VERSION.mcpb" dist/sketchflow.html dist/sketchflow-3d.html
+          files=("release/sketchflow-$VERSION.mcpb" dist/sketchflow.html dist/sketchflow-3d.html)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" $PRERELEASE --title "SketchFlow $VERSION" --notes-file release-notes.md "${files[@]}"
+          fi
 
       - name: Install mcp-publisher (verified)
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2

@@ -7,7 +7,7 @@
  *   npx -y sketchflow-mcp@beta                       (an MCP client starts it; see INSTALL.md)
  *   claude mcp add sketchflow -- npx -y sketchflow-mcp@beta
  *   sketchflow-mcp --serve        (just host the board, no MCP)     sketchflow-mcp --help
- * Flags: --serve  --no-open  --lan  --tools=all|3d|2d  --brief  --port=N  --version  --help
+ * Flags: --serve  --no-open  --lan  --tools=all|3d|2d  --brief  --port=N  --export-dir=PATH  --version  --help
  * Env:
  *   SKETCHFLOW_PORT=7777   first port to try (walks up if busy)
  *   SKETCHFLOW_NO_OPEN=1   never auto-open a browser
@@ -47,6 +47,7 @@ It serves the app on http://localhost:7777 (the next free port) and opens it in 
   --tools=3d|2d    only the 3D model tools, or only the sketch board tools (default: all)
   --brief          short server instructions, for models with small context windows
   --port=N         first port to try (default 7777)
+  --export-dir=P   folder for exports (default ~/Pictures/SketchFlow)
   --version        print the version
 
 Env: SKETCHFLOW_PORT, SKETCHFLOW_NO_OPEN=1, SKETCHFLOW_LAN=1, SKETCHFLOW_TOOLS, SKETCHFLOW_BRIEF=1,
@@ -433,7 +434,8 @@ function sketchResult(s) {
 }
 const mimeOf = (p) => ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.svg': 'image/svg+xml', '.avif': 'image/avif' })[path.extname(String(p).split('?')[0]).toLowerCase()] || 'image/png';
 function defaultExportDir() {
-  if (envVal('SKETCHFLOW_EXPORT_DIR')) return envVal('SKETCHFLOW_EXPORT_DIR').replace(/^~(?=$|\/|\\)/, os.homedir());
+  const want = (typeof flag('export-dir') === 'string' && flag('export-dir')) || envVal('SKETCHFLOW_EXPORT_DIR');
+  if (want) return want.replace(/^~(?=$|\/|\\)/, os.homedir());
   const pics = path.join(os.homedir(), 'Pictures');
   return fs.existsSync(pics) ? path.join(pics, 'SketchFlow') : path.join(os.homedir(), 'SketchFlow');
 }

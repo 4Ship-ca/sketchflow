@@ -101,7 +101,7 @@ Pass these as flags in `args`, or as environment variables in the client's `env`
 | `--no-open` | `SKETCHFLOW_NO_OPEN=1` | never open a browser; open the URL from the server log yourself |
 | `--lan` | `SKETCHFLOW_LAN=1` | also serve on your network, so a tablet or phone can draw (it asks for a pairing code) |
 | `--port=7777` | `SKETCHFLOW_PORT` | first port to try (it moves to the next free one) |
-| | `SKETCHFLOW_EXPORT_DIR` | where exports go (default `~/Pictures/SketchFlow`, else `~/SketchFlow`) |
+| `--export-dir=PATH` | `SKETCHFLOW_EXPORT_DIR` | where exports go (default `~/Pictures/SketchFlow`, else `~/SketchFlow`) |
 | | `SKETCHFLOW_ADDONS` | an extra folder of 3D add-ons (`*.js`, see `model/ADDONS.md`) |
 | | `SKETCHFLOW_ROOMS` | where shared-editing rooms are kept (default `~/.sketchflow/rooms`) |
 
