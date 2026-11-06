@@ -1,0 +1,83 @@
+name: Release
+
+# Push a tag like v2.0.0-beta.1 (it must match package.json "version"):
+#   npm (sketchflow-mcp; a version with a "-" goes out under the "beta" tag), a GitHub release with the Claude Desktop
+#   bundle (.mcpb) and the offline single-file apps, then the MCP Registry listing (server.json).
+# Needs the repository secret NPM_TOKEN (an npm automation / granular token that can publish sketchflow-mcp).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # the GitHub release
+  id-token: write   # npm provenance and the MCP Registry login (OIDC)
+
+env:
+  MCP_PUBLISHER_VERSION: v1.8.1
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Tag matches package.json
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME does not match package.json version $v"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          case "$v" in *-*) echo "NPM_TAG=beta" >> "$GITHUB_ENV"; echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV";; *) echo "NPM_TAG=latest" >> "$GITHUB_ENV"; echo "PRERELEASE=" >> "$GITHUB_ENV";; esac
+
+      - name: Ready to release (mcpName, server.json, changelog)
+        run: node scripts/release-prep.mjs --check
+      - name: Test suites
+        run: npm test
+      - name: MCP smoke test
+        run: npm run smoke
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public --tag "$NPM_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build the Claude Desktop bundle
+        run: npm run bundle
+
+      - name: GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          awk -v v="## $VERSION" 'index($0, v) == 1 { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > release-notes.md
+          gh release create "$GITHUB_REF_NAME" $PRERELEASE --title "SketchFlow $VERSION" --notes-file release-notes.md \
+            "release/sketchflow-$VERSION.mcpb" dist/sketchflow.html dist/sketchflow-3d.html
+
+      - name: Install mcp-publisher (verified)
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          os=$(uname -s | tr '[:upper:]' '[:lower:]')
+          arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+          archive="mcp-publisher_${os}_${arch}.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error -o "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error -o "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+
+      - name: Publish to the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

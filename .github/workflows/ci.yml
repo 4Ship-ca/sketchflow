@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Test suites
+        run: npm test
+      - name: MCP smoke test (this checkout)
+        run: npm run smoke
+      - name: Pack, install and smoke-test the package as users get it
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack
+          npm install -g ./sketchflow-mcp-*.tgz
+          sketchflow-mcp --version
+          npm run smoke -- --bin sketchflow-mcp
+      - name: Claude Desktop bundle builds
+        run: npm run bundle

@@ -1,18 +1,66 @@
 {
-  "name": "sketchflow",
-  "version": "2.0.0",
-  "description": "Vector sketch board and parametric 3D model workspace with an MCP bridge so AI can see, draw and build with you.",
+  "name": "sketchflow-mcp",
+  "version": "2.0.0-beta.1",
+  "description": "SketchFlow: a vector sketch board and a parametric 3D modeller (mates, features, STEP export, gears, welding) that AI assistants drive through MCP while you watch and edit in your browser.",
   "type": "module",
   "bin": {
     "sketchflow-mcp": "server.mjs"
   },
+  "main": "server.mjs",
+  "files": [
+    "server.mjs",
+    "collab-server.mjs",
+    "mcp-reference.mjs",
+    "index.html",
+    "js/",
+    "model/index.html",
+    "model/js/",
+    "model/addons/",
+    "model/ADDONS.md",
+    "model/ARCHITECTURE.md",
+    "dist/sketchflow.html",
+    "dist/sketchflow-3d.html",
+    "examples/README.md",
+    "examples/*.sf3d.json",
+    "examples/*.ops.json",
+    "examples/*.png",
+    "README.md",
+    "INSTALL.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "start": "node server.mjs",
     "serve": "node server.mjs --serve",
     "build": "node build.mjs",
-    "test": "node model/test/kernel.test.mjs && node model/test/model.test.mjs && node model/test/gears.test.mjs && node model/test/welding.test.mjs && node model/test/addons.test.mjs && node model/test/collide.test.mjs && node model/test/reference.test.mjs && node model/test/step.test.mjs && node model/test/collab.test.mjs && node model/test/rooms.test.mjs"
+    "test": "node model/test/kernel.test.mjs && node model/test/model.test.mjs && node model/test/gears.test.mjs && node model/test/welding.test.mjs && node model/test/addons.test.mjs && node model/test/collide.test.mjs && node model/test/reference.test.mjs && node model/test/step.test.mjs && node model/test/collab.test.mjs && node model/test/rooms.test.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "bundle": "node scripts/bundle-mcpb.mjs",
+    "release:prep": "node scripts/release-prep.mjs",
+    "prepublishOnly": "node scripts/release-prep.mjs --check && npm test && node scripts/smoke.mjs"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cad",
+    "3d",
+    "parametric",
+    "step",
+    "sketch",
+    "drawing",
+    "claude",
+    "ollama",
+    "welding",
+    "gears"
+  ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
   "license": "MIT"
 }

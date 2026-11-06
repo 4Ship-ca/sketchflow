@@ -4,14 +4,18 @@
  *  - Speaks MCP (JSON-RPC 2.0, newline-delimited) on stdin/stdout for Claude / any MCP client.
  *  - Serves the SketchFlow board on http://localhost:7777 and talks to it over Server-Sent Events.
  * Usage:
- *   claude mcp add sketchflow -- node /absolute/path/to/sketchflow/server.mjs
- *   node server.mjs --serve        (just host the board, no MCP)
+ *   npx -y sketchflow-mcp@beta                       (an MCP client starts it; see INSTALL.md)
+ *   claude mcp add sketchflow -- npx -y sketchflow-mcp@beta
+ *   sketchflow-mcp --serve        (just host the board, no MCP)     sketchflow-mcp --help
+ * Flags: --serve  --no-open  --lan  --tools=all|3d|2d  --brief  --port=N  --version  --help
  * Env:
  *   SKETCHFLOW_PORT=7777   first port to try (walks up if busy)
  *   SKETCHFLOW_NO_OPEN=1   never auto-open a browser
  *   SKETCHFLOW_LAN=1       also listen on your network so a tablet/phone can be the drawing surface (pairing code required)
  *   SKETCHFLOW_EXPORT_DIR  default folder for exports (else ~/Pictures/SketchFlow or ~/SketchFlow)
  *   SKETCHFLOW_ADDONS      extra folder of 3D add-ons (*.js, see model/ADDONS.md); model/addons/ is always loaded
+ *   SKETCHFLOW_TOOLS=3d    only the 3D model tools (2d: only the sketch board; all: both, the default) — smaller for local models
+ *   SKETCHFLOW_BRIEF=1     short server instructions (the model reads model_reference when it needs an op) — for small context windows
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -25,12 +29,43 @@ import { reference } from './mcp-reference.mjs';
 import { createCollab } from './collab-server.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '2.0.0';
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const VERSION = PKG.version;
 const ARGS = process.argv.slice(2);
+const flag = (name) => { const a = ARGS.find(x => x === '--' + name || x.startsWith('--' + name + '=')); return a === undefined ? undefined : a.includes('=') ? a.slice(a.indexOf('=') + 1) : true; };
+if (flag('version')) { process.stdout.write(VERSION + '\n'); process.exit(0); }
+if (flag('help')) {
+  process.stdout.write(`SketchFlow ${VERSION} — sketch board + parametric 3D modeller, as an MCP server (stdio).
+
+An MCP client (Claude Code, Claude Desktop, Cursor, VS Code, an Ollama client…) starts it for you:
+  claude mcp add sketchflow -- npx -y sketchflow-mcp@beta
+It serves the app on http://localhost:7777 (the next free port) and opens it in your browser when a tool needs it.
+
+  --serve          only host the app (no MCP) and open it
+  --no-open        never open a browser (open the printed URL yourself)
+  --lan            also listen on your network (a tablet/phone can draw; pairing code required)
+  --tools=3d|2d    only the 3D model tools, or only the sketch board tools (default: all)
+  --brief          short server instructions, for models with small context windows
+  --port=N         first port to try (default 7777)
+  --version        print the version
+
+Env: SKETCHFLOW_PORT, SKETCHFLOW_NO_OPEN=1, SKETCHFLOW_LAN=1, SKETCHFLOW_TOOLS, SKETCHFLOW_BRIEF=1,
+     SKETCHFLOW_EXPORT_DIR (exports; default ~/Pictures/SketchFlow), SKETCHFLOW_ADDONS (extra 3D add-ons folder),
+     SKETCHFLOW_ROOMS (shared-editing rooms; default ~/.sketchflow/rooms)
+Docs: INSTALL.md and README.md in ${ROOT}
+`);
+  process.exit(0);
+}
 const SERVE_ONLY = ARGS.includes('--serve');
-const NO_OPEN = process.env.SKETCHFLOW_NO_OPEN === '1' || ARGS.includes('--no-open');
-const LAN = process.env.SKETCHFLOW_LAN === '1' || ARGS.includes('--lan');
-const BASE_PORT = Number(process.env.SKETCHFLOW_PORT || 7777);
+/* a setting from the environment; an extension host may pass an unset option through as an empty or literal \${…} value */
+const envVal = (k) => { const v = process.env[k]; return v == null || v === '' || /^\$\{[^}]*\}$/.test(v) ? '' : v; };
+const envOn = (k) => ['1', 'true', 'yes', 'on'].includes(envVal(k).toLowerCase());   /* '1' or 'true' (extension settings pass true/false) */
+const NO_OPEN = envOn('SKETCHFLOW_NO_OPEN') || ARGS.includes('--no-open');
+const LAN = envOn('SKETCHFLOW_LAN') || ARGS.includes('--lan');
+const BASE_PORT = Number(flag('port') || envVal('SKETCHFLOW_PORT') || 7777);
+const PROFILE = String(flag('tools') || envVal('SKETCHFLOW_TOOLS') || 'all').toLowerCase();
+const BRIEF = flag('brief') === true || envOn('SKETCHFLOW_BRIEF');
+if (!['all', '3d', '2d'].includes(PROFILE)) { process.stderr.write(`[sketchflow] --tools must be all, 3d or 2d (not ${PROFILE})\n`); process.exit(2); }
 const TOKEN = crypto.randomBytes(16).toString('hex');
 const PAIR = crypto.randomBytes(3).toString('hex');
 const log = (...a) => process.stderr.write('[sketchflow] ' + a.join(' ') + '\n');
@@ -44,7 +79,7 @@ const pending = new Map();      /* request id -> {resolve, reject, timer} */
 let inbox = null;               /* last sketch the user pressed Send on */
 /* shared editing rooms (3D): changes from each tab reach everyone else in its room */
 const collab = createCollab({
-  dir: process.env.SKETCHFLOW_ROOMS || path.join(os.homedir(), '.sketchflow', 'rooms'),
+  dir: envVal('SKETCHFLOW_ROOMS') || path.join(os.homedir(), '.sketchflow', 'rooms'),
   broadcast: (room, data) => { for (const c of clients.values()) if (c.room === room) sse(c, 'collab', data); },
   log: (m) => log(m)
 });
@@ -154,7 +189,7 @@ const server = http.createServer(async (req, res) => {
 
 async function addonFiles() {
   const out = new Map();
-  for (const dir of [path.join(ROOT, 'model', 'addons'), process.env.SKETCHFLOW_ADDONS && process.env.SKETCHFLOW_ADDONS.replace(/^~(?=$|\/|\\)/, os.homedir())].filter(Boolean)) {
+  for (const dir of [path.join(ROOT, 'model', 'addons'), envVal('SKETCHFLOW_ADDONS') && envVal('SKETCHFLOW_ADDONS').replace(/^~(?=$|\/|\\)/, os.homedir())].filter(Boolean)) {
     try { for (const f of await fsp.readdir(dir)) if (/^[\w.-]+\.js$/.test(f) && !out.has(f)) out.set(f, path.join(dir, f)); } catch { /* folder missing */ }
   }
   return out;
@@ -398,7 +433,7 @@ function sketchResult(s) {
 }
 const mimeOf = (p) => ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.svg': 'image/svg+xml', '.avif': 'image/avif' })[path.extname(String(p).split('?')[0]).toLowerCase()] || 'image/png';
 function defaultExportDir() {
-  if (process.env.SKETCHFLOW_EXPORT_DIR) return process.env.SKETCHFLOW_EXPORT_DIR;
+  if (envVal('SKETCHFLOW_EXPORT_DIR')) return envVal('SKETCHFLOW_EXPORT_DIR').replace(/^~(?=$|\/|\\)/, os.homedir());
   const pics = path.join(os.homedir(), 'Pictures');
   return fs.existsSync(pics) ? path.join(pics, 'SketchFlow') : path.join(os.homedir(), 'SketchFlow');
 }
@@ -438,7 +473,21 @@ Welds vs fillets — manufacturing logic: a WELD joins two parts that are made s
 Metadata & mass: every part can carry meta {material, density (g/cm³, overrides the material), fill (0–1, e.g. 0.2 for 20% infill), part_no, supplier, notes, quantity}; shorthand material:'aluminium' on add/set; {op:'material', material} sets the model default. model_mass gives mass, centre of gravity, inertia per part and for the assembly, whether it stands, and the parts list. Materials: pla, petg, abs, asa, tpu, nylon, pa_cf, pom, acrylic, polycarbonate, resin, tough_resin, aluminium, steel, stainless, cast_iron, brass, bronze, copper, titanium, oak, pine, plywood, mdf, carbon_fibre, concrete, glass, rubber.
 Add-ons: model_addon lists them. Built-in "gears": shape type 'gear' {module, teeth, width, bore, pressure_angle, style:'spur'|'helical'|'herringbone', helix (° — sign = hand; mating external gears need opposite signs), backlash (mm), clearance (×module), shift, internal (ring gear), rim}; mate kind 'gear' keeps two gears in mesh: {op:'mate', id, to, kind:'gear', around (direction °, world), axial, phase} — centre distance and tooth phase follow the live sizes. Actions: advise {ratio, process: fdm|sla|cnc|laser|injection|hobbed, priority: balanced|strength|quiet|compact|precision, torque N·m, rpm, material, centre_distance, build} (picks module, teeth with a hunting-tooth ratio, form, pressure angle, backlash, clearance, width and explains why), pair {teeth:[z1,z2], module, process, around, driver, ring}, train {teeth:[…] simple chain | stages:[[z1,z2],[z3,z4]] compound}, planetary {sun, planet, planets}, gear {teeth, module, process}. Ask the advisor first when the user names a purpose or a process.
 Welding & joining (built-in add-on "welding"): give two parts that touch — {addon:'welding', action:'advise', args:{a, b, near?, method:'auto'|'weld'|'bond'|'braze'|'filled'|'tab', process:'auto'|'135'|'136'|'141'|'131'|'111'|'121', labor_rate}} finds the joint (butt, tee, corner, lap; thicknesses; seam length; per side: inside corner or flush, torch access and what blocks it, ISO 6947 position) and returns light / regular / heavy suggestions: joint and edge prep (square, V, X, Y, bevel, K, J, U; root face, gap, backing, back gouge), process and filler, sizes, passes, weld metal, time (fit-up, prep / machining, preheat, welding, finishing / grinding, inspection), cost, ease 1–5, ISO 5817 level, NDT, the ISO 2553 symbol and the reasons. Materials decide the method (aluminium to steel, plastics, wood → bonded; copper alloys → brazed; composites → filled and tabbed). action:'apply' with duty builds it in one undoable step: cuts the prep out of the parts, opens the gap, places the weld metal / adhesive / filler / laminate as parts attached to a, and a weld-symbol callout (on drawings too). model_reference topic "welding" has the details.
+Start: open_model tells you what is open — a fresh page holds the bracket demo, or it is the user's own model. For something new, start clean with model_session action:"new" (name it); never build into the user's model unless they asked.
 Workflow: open_model → model_build (one batch per idea, with a clear label, look:true when it helps) → model_view to check → adjust with set/mate. Errors name the valid connectors/objects; the whole batch is rolled back on any error.`;
+/* tool sets: 3d = the parametric model, 2d = the sketch board; --brief keeps only the essentials (model_reference has the rest) */
+const IS_3D = (name) => name === 'open_model' || name.startsWith('model_');
+const SHOWN = TOOLS.filter(t => PROFILE === 'all' || (PROFILE === '3d' ? IS_3D(t.name) : !IS_3D(t.name)));
+const SPLIT = INSTRUCTIONS.indexOf('\n\n3D PARAMETRIC MODEL');
+const INSTR_2D = INSTRUCTIONS.slice(0, SPLIT), INSTR_3D = INSTRUCTIONS.slice(SPLIT + 2);
+const BRIEF_3D = `SketchFlow 3D: a parametric solid modeller in the user's browser (open_model opens it; 4 linked views TOP | 3D / FRONT | RIGHT). Units mm, Z up, -Y toward the viewer.
+- open_model says what is open (a fresh page holds a demo). For something new, first call model_session with action:"new" and a name; never build into the user's model unless they asked.
+- Build with model_build: a batch of ops (atomic; one undo step). Shapes: {op:'add', type:'box', params:{width,depth,height}} (also wedge, cylinder {diameter,height}, cone, sphere); place each with mate:{to, a: their connector, b: own connector, offset, slide:[u,v]} (connectors: top, bottom, front, back, left, right, center, corner±x±y±z).
+- Features: extrude (profile or shape rect/circle/slot/polygon), holes, fillets/chamfers (op edge), booleans (into + mode subtract/add), patterns, welds, joints. Before using an op the first time, call model_reference with its topic — it has the exact fields and a worked example.
+- Check with model_view (an image) or model_describe (text); model_query answers geometry questions; model_check finds overlaps; model_export saves STEP / STL / drawings.
+- Errors name what is valid; the whole batch is rolled back on any error.`;
+const BRIEF_2D = INSTR_2D.split('\n').slice(0, 4).join('\n');
+const INSTR_OUT = PROFILE === '3d' ? (BRIEF ? BRIEF_3D : INSTR_3D) : PROFILE === '2d' ? (BRIEF ? BRIEF_2D : INSTR_2D) : (BRIEF ? BRIEF_2D + '\n\n' + BRIEF_3D : INSTRUCTIONS);
 function out(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 async function handle(msg) {
   const { id, method, params } = msg;
@@ -446,13 +495,13 @@ async function handle(msg) {
   try {
     if (method === 'initialize') {
       const want = params && params.protocolVersion;
-      return isReq && out({ jsonrpc: '2.0', id, result: { protocolVersion: SUPPORTED.includes(want) ? want : SUPPORTED[1], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sketchflow', title: 'SketchFlow sketch board + 3D model', version: VERSION }, instructions: INSTRUCTIONS } });
+      return isReq && out({ jsonrpc: '2.0', id, result: { protocolVersion: SUPPORTED.includes(want) ? want : SUPPORTED[1], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sketchflow', title: 'SketchFlow sketch board + 3D model', version: VERSION }, instructions: INSTR_OUT } });
     }
     if (method === 'notifications/initialized' || method === 'notifications/cancelled' || (method && method.startsWith('notifications/'))) return;
     if (method === 'ping') return isReq && out({ jsonrpc: '2.0', id, result: {} });
-    if (method === 'tools/list') return isReq && out({ jsonrpc: '2.0', id, result: { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) } });
+    if (method === 'tools/list') return isReq && out({ jsonrpc: '2.0', id, result: { tools: SHOWN.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) } });
     if (method === 'tools/call') {
-      const tool = TOOLS.find(t => t.name === (params && params.name));
+      const tool = SHOWN.find(t => t.name === (params && params.name));
       if (!tool) return isReq && out({ jsonrpc: '2.0', id, error: { code: -32602, message: 'Unknown tool: ' + (params && params.name) } });
       try { const result = await tool.run((params && params.arguments) || {}); return isReq && out({ jsonrpc: '2.0', id, result }); }
       catch (e) { return isReq && out({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'Error: ' + e.message }], isError: true } }); }

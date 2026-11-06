@@ -11,35 +11,40 @@ sketchflow/
 ├── index.html        2D board UI + styles (v1)
 ├── js/               core · render · tools · input · ui · io · motion · bridge
 ├── model/            3D workspace (v2): index.html, js/kernel · model · views · app, tests, ARCHITECTURE.md
-├── server.mjs        MCP server + local web server (Node 18+, zero dependencies): / = board, /3d/ = model
+├── server.mjs        MCP server + local web server (Node 20+, zero dependencies): / = board, /3d/ = model
+├── scripts/          smoke test · Claude Desktop bundle (.mcpb) · release prep (package.json, server.json)
 ├── build.mjs         makes single-file versions in dist/
 └── dist/             sketchflow.html · sketchflow-3d.html — double-click to use offline (no AI link)
 ```
 
 ## 1 · Run it with Claude (MCP)
 
-You need **Node 18 or newer**. There is no `npm install`; the server has zero dependencies.
+**Beta:** SketchFlow is on npm as `sketchflow-mcp`. You need **Node 20 or newer**. It has no dependencies; `npx` fetches it on first use. [INSTALL.md](INSTALL.md) covers every client: Claude Code, Claude Desktop (a one-click `.mcpb`), Cursor, VS Code, LM Studio, and local models through Ollama. It also covers the settings and testing a build before it is published.
 
 **Claude Code**
 
 ```bash
-claude mcp add sketchflow -- node /absolute/path/to/sketchflow/server.mjs
+claude mcp add --scope user sketchflow -- npx -y sketchflow-mcp@beta
 ```
 
-Then ask: *"open the sketch board"*. Claude calls `open_board`, which opens **http://localhost:7777** in your browser.
+Then ask: *"open the sketch board"* or *"open the 3D model and build a 100 × 60 × 8 plate with four M5 holes"*. Claude calls `open_board` / `open_model`, which opens **http://localhost:7777** in your browser.
 
-**Claude Desktop** (Settings → Developer → Edit config):
+**Claude Desktop:** install `sketchflow-<version>.mcpb` from the GitHub release. Or add this in Settings → Developer → Edit config:
 
 ```json
 {
   "mcpServers": {
     "sketchflow": {
-      "command": "node",
-      "args": ["/absolute/path/to/sketchflow/server.mjs"]
+      "command": "npx",
+      "args": ["-y", "sketchflow-mcp@beta"]
     }
   }
 }
 ```
+
+**From a checkout** (to develop or try changes): use `node /absolute/path/to/sketchflow/server.mjs` as the command, or `claude mcp add sketchflow-dev -- node /absolute/path/to/sketchflow/server.mjs`.
+
+**Local models (Ollama) and small context windows:** add `--tools=3d --brief` (or `--tools=2d`). The model then gets one tool set and short instructions, about 3.5k tokens instead of about 12k. See [INSTALL.md](INSTALL.md#local-models-ollama).
 
 **Draw on a tablet or phone while Claude runs on your computer:**
 
@@ -49,7 +54,7 @@ Then ask: *"open the sketch board"*. Claude calls `open_board`, which opens **ht
 
 With this set, `open_board` returns a `http://<your-ip>:7777/?k=<code>` link. Open it on the tablet. The pairing code stops other devices on your network from connecting.
 
-Other settings: `SKETCHFLOW_PORT` (default 7777), `SKETCHFLOW_NO_OPEN=1` (don't open a browser), `SKETCHFLOW_EXPORT_DIR` (default `~/Pictures/SketchFlow`).
+Other settings: `SKETCHFLOW_PORT` (default 7777), `SKETCHFLOW_NO_OPEN=1` (don't open a browser), `SKETCHFLOW_EXPORT_DIR` (default `~/Pictures/SketchFlow`), `SKETCHFLOW_TOOLS` and `SKETCHFLOW_BRIEF`. All of them, and the matching flags, are in [INSTALL.md](INSTALL.md#settings) and `npx -y sketchflow-mcp@beta --help`.
 
 ### The loop
 

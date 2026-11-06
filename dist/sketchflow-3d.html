@@ -8563,8 +8563,8 @@ function refreshGhost() {
   const o = selected && model.get(selected), R = model.result;
   if (o && (o.into || o.hidden) && R.local.has(o.id)) {
     let g = R.local.get(o.id).transform(R.world.get(o.id));
-    /* a through cut is 4 m long: show it only across the parts it cuts */
-    if (o.type === 'extrude' && o.params.end === 'through') {
+    /* a through cut (an extrude or a through hole) is longer than the part: show it only across the parts it cuts */
+    if ((o.type === 'extrude' && o.params.end === 'through') || (o.type === 'hole' && o.params.through)) {
       const bs = [model.bodyContaining(o.into || o.id), ...(o.also || []).map(id => R.bodies.find(b => b.id === id))].filter(Boolean);
       if (bs.length) { let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const b of bs) { const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k] - 2); mx[k] = Math.max(mx[k], bb.max[k] + 2); } }
         try { const box = K.box(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]).transform(M4.translate([(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]])); const c = g.intersect(box); if (!c.isEmpty()) g = c; } catch (e) { /* keep the whole tool */ } }
