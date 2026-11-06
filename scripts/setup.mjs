@@ -383,7 +383,7 @@ async function ollama() {
     for (let i = 0; i < 10 && !run(ol, ['list'], { capture: true, allowFail: true }).ok; i++) await sleep(1500);
   }
   const have = run(ol, ['list'], { capture: true, allowFail: true });
-  if (!have.ok) throw new Error('Ollama is installed but not running — start it from the Start menu, then run again');
+  if (!have.ok) throw new Error('Ollama is installed but not running — start the Ollama app, then run again');
   const base = E.OLLAMA_MODEL.includes(':') ? E.OLLAMA_MODEL : E.OLLAMA_MODEL + ':latest';
   if (have.out.split(/\r?\n/).some(l => l.split(/\s+/)[0] === base || l.split(/\s+/)[0] === E.OLLAMA_MODEL)) note('ok', `${E.OLLAMA_MODEL} is already downloaded`);
   else if (await ask(`Download the model ${E.OLLAMA_MODEL} (several GB)?`)) { run(ol, ['pull', E.OLLAMA_MODEL]); note('ok', `downloaded ${E.OLLAMA_MODEL}`); }
