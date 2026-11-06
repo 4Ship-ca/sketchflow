@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.4Ship-ca/sketchflow",
+  "title": "SketchFlow",
+  "description": "Sketch board + parametric 3D CAD (mates, features, STEP export) that AI builds in your browser.",
+  "repository": {
+    "url": "https://github.com/4Ship-ca/sketchflow",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/4Ship-ca/sketchflow#readme",
+  "version": "2.0.0-beta.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "sketchflow-mcp",
+      "version": "2.0.0-beta.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SKETCHFLOW_TOOLS",
+          "description": "Tool set: all (default), 3d (only the 3D model) or 2d (only the sketch board)",
+          "isRequired": false,
+          "format": "string",
+          "default": "all",
+          "choices": [
+            "all",
+            "3d",
+            "2d"
+          ]
+        },
+        {
+          "name": "SKETCHFLOW_BRIEF",
+          "description": "Set to 1 for short server instructions (small context windows)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "SKETCHFLOW_EXPORT_DIR",
+          "description": "Folder for exports (default ~/Pictures/SketchFlow)",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "SKETCHFLOW_PORT",
+          "description": "First local port to try (default 7777)",
+          "isRequired": false,
+          "format": "number"
+        }
+      ]
+    }
+  ]
+}

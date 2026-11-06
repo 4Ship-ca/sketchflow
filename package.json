@@ -2,6 +2,17 @@
   "name": "sketchflow-mcp",
   "version": "2.0.0-beta.1",
   "description": "SketchFlow: a vector sketch board and a parametric 3D modeller (mates, features, STEP export, gears, welding) that AI assistants drive through MCP while you watch and edit in your browser.",
+  "mcpName": "io.github.4Ship-ca/sketchflow",
+  "author": "4Ship_ca",
+  "license": "MIT",
+  "homepage": "https://github.com/4Ship-ca/sketchflow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/4Ship-ca/sketchflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/4Ship-ca/sketchflow/issues"
+  },
   "type": "module",
   "bin": {
     "sketchflow-mcp": "server.mjs"
@@ -61,6 +72,5 @@
     "darwin",
     "linux",
     "win32"
-  ],
-  "license": "MIT"
+  ]
 }
