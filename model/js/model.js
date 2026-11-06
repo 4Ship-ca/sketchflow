@@ -1023,6 +1023,8 @@ export function evaluate(doc, opts) {
   }
   if (opts && opts.placementOnly) return R;   /* motion frames only need where everything is */
   const intoOf = new Map(); for (const t of objs) if (t.into && !off.has(t.id)) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
+  /* a cut can cut more than its own part: also [ids] — the other parts it goes through (a hole through a plate and the deck above it) */
+  const alsoOf = new Map(); for (const t of objs) if (t.into && Array.isArray(t.also) && !off.has(t.id) && (t.op || 'subtract') === 'subtract') for (const x of t.also) if (x !== t.into && byId.has(x) && !off.has(x)) { if (!alsoOf.has(x)) alsoOf.set(x, []); alsoOf.get(x).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
   const bodyOf = (id, chain = new Set()) => {
@@ -1050,6 +1052,11 @@ export function evaluate(doc, opts) {
         s = run(s); steps.push({ kind: op === 'add' || op === 'union' ? 'union' : op, t, run });
       } catch (e) { R.errors.set(t.id, e.message); }
     }
+    /* cuts that belong to another part but go through this one too */
+    for (const t of alsoOf.get(id) || []) {
+      try { const tool = bodyOf(t.id, chain); s = s.subtract(tool); steps.push({ kind: 'subtract', t, run: (x) => x.subtract(tool) }); }
+      catch (e) { R.errors.set(t.id, e.message); }
+    }
     chain.delete(id);
     memo.set(id, s); return s;
   };
@@ -1061,7 +1068,7 @@ export function evaluate(doc, opts) {
   const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
   const sig = (id, seen = new Set()) => {
     const o = byId.get(id); if (!o || seen.has(id)) return null; seen.add(id);
-    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, (intoOf.get(id) || []).map(t => [t.id, sig(t.id, seen)])];
+    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, (intoOf.get(id) || []).map(t => [t.id, sig(t.id, seen)]), (alsoOf.get(id) || []).map(t => ['also', t.id, sig(t.id, new Set(seen))])];
   };
   const subtree = (id, out = []) => { for (const t of intoOf.get(id) || []) if (!out.includes(t.id)) { out.push(t.id); subtree(t.id, out); } return out; };
   const cachedBody = (id) => {
@@ -1504,6 +1511,17 @@ export class Model {
     }
   }
   /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
+  /* the parts a cut tool goes through, other than its own target: real parts whose material its solid meets */
+  partsCrossedBy(id) {
+    const R = this.result, o = this.get(id); if (!o || !R.local.has(id) || !R.world.has(id)) return [];
+    const tool = R.local.get(id).transform(R.world.get(id)), tb = tool.bbox(), own = this.bodyContaining(o.into || id), out = [];
+    for (const b of R.bodies) {
+      if (b.virtual || b.instance || b.hidden || (own && b.id === own.id) || b.id === id) continue;
+      const bb = b.solid.bbox(); if ([0, 1, 2].some(k => bb.min[k] > tb.max[k] || bb.max[k] < tb.min[k])) continue;
+      try { if (Math.abs(b.solid.intersect(tool).volume()) > 1e-3) out.push(b.id); } catch (e) { /* skip a part that won't intersect cleanly */ }
+    }
+    return out;
+  }
   /* anchored parts whose place a driving dimension held, when no driving dimension moves them any more: the anchors place them again */
   releasePlace() {
     const moved = new Set((this.doc.dims || []).filter(md => md.drive != null).map(md => (this.dimMover(md) || {}).id));
@@ -1578,6 +1596,7 @@ export class Model {
         const sp = splitParams(type, o.params);
         const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
         if (o.anchors) ob.anchors = cleanAnchors(o.anchors) || undefined;
+        if (Array.isArray(o.also)) ob.also = o.also.filter(x => typeof x === 'string'); else if (o.also === 'crossed') ob._alsoCrossed = true;
         this.insert(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
@@ -1586,6 +1605,8 @@ export class Model {
         }
         if (o.into) this.op({ op: 'boolean', target: o.into, tool: id, mode: o.mode || 'subtract' });
         this.recompute();
+        /* also:'crossed' — a cut through: it cuts every other part it goes through now (kept as a list, editable) */
+        if (ob._alsoCrossed) { delete ob._alsoCrossed; const cr = ob.into && (ob.op || 'subtract') === 'subtract' ? this.partsCrossedBy(id) : []; if (cr.length) { ob.also = cr; this.recompute(); } }
         return { label: 'Add ' + ob.name, id, name: ob.name };
       }
       case 'set': {
@@ -1597,6 +1618,7 @@ export class Model {
           if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
           if (x.expr && !Object.keys(x.expr).length) delete x.expr;
         }
+        if (o.also !== undefined) { if (o.also === 'crossed') x.also = this.partsCrossedBy(x.id); else if (Array.isArray(o.also) && o.also.length) x.also = o.also.filter(v => typeof v === 'string' && v !== x.into); else delete x.also; if (x.also && !x.also.length) delete x.also; }
         if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; if (o.held === undefined) delete x.held; }
         /* a size typed on a shape that follows anchors is the user's from now on: the anchors stop driving it */
         if (x.anchors && o.params && typeof o.params === 'object') { const drv = anchorDriven(x), mineNow = Object.keys(o.params).filter(k => drv.includes(k)); if (mineNow.length) x.held = [...new Set([...(x.held || []), ...mineNow])]; }
@@ -1652,7 +1674,7 @@ export class Model {
         const ti = d.objects.indexOf(t), xi = d.objects.indexOf(tool); if (xi < ti) { d.objects.splice(xi, 1); d.objects.splice(d.objects.indexOf(t) + 1, 0, tool); }
         this.recompute(); return { label: (tool.op === 'add' ? 'Union ' : tool.op === 'intersect' ? 'Intersect ' : 'Subtract ') + tool.name, id: tool.id };
       }
-      case 'separate': { const x = need(o.id); x.into = null; x.op = null; this.recompute(); return { label: 'Separate ' + x.name, id: x.id }; }
+      case 'separate': { const x = need(o.id); x.into = null; x.op = null; delete x.also; this.recompute(); return { label: 'Separate ' + x.name, id: x.id }; }
       case 'edge': {
         const t = need(o.target), M = this.result.world.get(t.id); if (!M) throw new Error('Target has no geometry');
         const body = this.bodyContaining(t.id); if (!body) throw new Error('Target body not found');
@@ -1667,7 +1689,7 @@ export class Model {
       case 'extrude': case 'loft': case 'revolve': case 'sweep': {
         const params = {}; for (const k of Object.keys(TYPES[o.op].params)) if (o[k] !== undefined) params[k] = o[k];
         if (o.params) Object.assign(params, o.params);
-        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta, anchors: o.anchors };
+        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta, anchors: o.anchors, also: o.also };
         /* sketch on a face: the feature starts on that face and follows it */
         if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
         return this.op(add);
@@ -2103,7 +2125,7 @@ export class Model {
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
-          of: o.of, joins: o.joins, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
+          of: o.of, joins: o.joins, also: o.also && o.also.length ? o.also : undefined, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),

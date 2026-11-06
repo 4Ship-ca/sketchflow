@@ -352,6 +352,7 @@ const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
 function paramField(o, k, v) {
+  if (k === 'length' && o.type === 'extrude' && o.params.end === 'through') return field(label(k), el('span', { class: 'note', title: 'A through extrude goes all the way: set end to blind (or symmetric) to give it a length' }, 'through — all the way, no length'));
   const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = o.type === 'shell' && k === 'open' ? shellOpens(o.into) : optionsFor(o.type, k);
   if (opts) { const sl = el('select', null, ...opts.map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => set(sl.value); return field(label(k), sl); }
   if (typeof v === 'number') return field(label(k), paramInput(o, k));
@@ -691,7 +692,27 @@ function renderProps() {
   if (o.into && o.type !== 'edge') {
     const s3 = sec('Boolean'), mode = el('select', null, ...[['subtract', 'Subtract from'], ['add', 'Union with'], ['intersect', 'Intersect with']].map(([v, n]) => el('option', { value: v, selected: o.op === v }, n)));
     mode.onchange = () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: mode.value }]);
-    s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')), el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
+    s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')));
+    /* a cut can cut the other parts it goes through too */
+    if ((o.op || 'subtract') === 'subtract') {
+      const R = model.result, also = o.also || [], own = model.bodyContaining(o.into);
+      let cand = [];
+      if (R.local.has(o.id) && R.world.has(o.id)) {
+        const tb = R.local.get(o.id).transform(R.world.get(o.id)).bbox();
+        cand = R.bodies.filter(b => !b.virtual && !b.instance && b.id !== o.id && (!own || b.id !== own.id) && model.get(b.id) && (() => { const bb = b.solid.bbox(); return ![0, 1, 2].some(k => bb.min[k] > tb.max[k] || bb.max[k] < tb.min[k]); })()).map(b => b.id);
+      }
+      for (const id of also) if (!cand.includes(id) && model.get(id)) cand.push(id);
+      if (cand.length) {
+        const box = el('div', { class: 'subsec' }, el('b', null, 'Also cuts'), el('div', { class: 'note' }, 'Other parts in its way. Tick the ones it should cut through as well.'));
+        for (const id of cand) {
+          const c = el('input', { type: 'checkbox' }); c.checked = also.includes(id);
+          c.onchange = () => apply([{ op: 'set', id: o.id, also: c.checked ? [...also, id] : also.filter(x => x !== id) }], `${o.name}: ${c.checked ? 'also cuts' : 'no longer cuts'} ${(model.get(id) || {}).name}`);
+          box.append(el('label', { class: 'f' }, (model.get(id) || {}).name || id, c));
+        }
+        s3.append(box);
+      }
+    }
+    s3.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
   }
   if (!['edge', 'pattern', 'callout'].includes(o.type)) massSection(o, sec);
   const s4 = sec('Object');
@@ -1012,7 +1033,16 @@ function renderAddonForm(body) {
 function select(id) { id = model.resolveId(id); if (id) addonForm = null; selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); presenceSoon(); }
 function refreshGhost() {
   const o = selected && model.get(selected), R = model.result;
-  if (o && (o.into || o.hidden) && R.local.has(o.id)) views.setGhost(R.local.get(o.id).transform(M4.mul(M4.translate(V.neg(R.originPoint)), R.world.get(o.id))).transform(M4.translate(R.originPoint)));
+  if (o && (o.into || o.hidden) && R.local.has(o.id)) {
+    let g = R.local.get(o.id).transform(R.world.get(o.id));
+    /* a through cut is 4 m long: show it only across the parts it cuts */
+    if (o.type === 'extrude' && o.params.end === 'through') {
+      const bs = [model.bodyContaining(o.into || o.id), ...(o.also || []).map(id => R.bodies.find(b => b.id === id))].filter(Boolean);
+      if (bs.length) { let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const b of bs) { const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k] - 2); mx[k] = Math.max(mx[k], bb.max[k] + 2); } }
+        try { const box = K.box(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]).transform(M4.translate([(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]])); const c = g.intersect(box); if (!c.isEmpty()) g = c; } catch (e) { /* keep the whole tool */ } }
+    }
+    views.setGhost(g.transform(M4.translate(V.neg(R.originPoint))).transform(M4.translate(R.originPoint)));
+  }
   else views.setGhost(null);
 }
 
@@ -1509,7 +1539,7 @@ function faceActions(d, label, build, extraFields) {
   const on = d.on, ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt), rootName = on.root ? (model.get(on.root) || {}).name : null;
   const go = (kind, v) => {
     const cut = kind === 'cut' || kind === 'through', P = build(cut, v);
-    const op = Object.assign(P.op, { length: ok(v.length, 10), draft: Number.isFinite(v.draft) ? v.draft : 0, name: `${label} ${kind === 'boss' ? 'boss' : kind === 'part' ? '' : 'cut'}`.trim() }, kind === 'through' ? { end: 'through' } : {},
+    const op = Object.assign(P.op, { length: ok(v.length, 10), draft: Number.isFinite(v.draft) ? v.draft : 0, name: `${label} ${kind === 'boss' ? 'boss' : kind === 'part' ? '' : 'cut'}`.trim() }, kind === 'through' ? { end: 'through', also: 'crossed' } : {},
       P.place.mate ? { mate: P.place.mate } : { at: P.place.pose.at, rot: P.place.pose.rot, fixed: true }, kind === 'part' ? {} : { into: on.root, mode: cut ? 'subtract' : 'union' });
     try { const r = apply([op], `${label} ${kind === 'boss' ? 'joined to' : kind === 'part' ? 'on' : 'cut into'} ${rootName || on.name}`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ }
   };
@@ -1553,7 +1583,8 @@ function finishShape(spec) {
   if (target && !(R.virtual && R.virtual.has(under.id))) actions.push(['Cut through ' + (model.get(target) || {}).name, () => {
     const body = model.bodyContaining(target), bb = body.solid.bbox(), corners = []; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) corners.push(V.dot(V.sub([x, y, z], R.originPoint), B.f));
     const f0 = Math.min(...corners) - 1, f1 = Math.max(...corners) + 1, at = V.add(pose.at, V.mul(B.f, f0));
-    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut`, also: 'crossed' }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    if (r && model.get(r.id) && model.get(r.id).also) toast(`It also cuts ${model.get(r.id).also.map(id => (model.get(id) || {}).name || id).join(', ')} (it goes through ${model.get(r.id).also.length > 1 ? 'them' : 'it'}) — Properties → Boolean to change that`, 3600);
   }]);
   actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
   actions.push(['Back', () => { tool.step = 0; d.points = []; views.preview = null; sketchHint(); views.draw(); }]);

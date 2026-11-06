@@ -2988,6 +2988,8 @@ function evaluate(doc, opts) {
   }
   if (opts && opts.placementOnly) return R;   /* motion frames only need where everything is */
   const intoOf = new Map(); for (const t of objs) if (t.into && !off.has(t.id)) { if (!intoOf.has(t.into)) intoOf.set(t.into, []); intoOf.get(t.into).push(t); }
+  /* a cut can cut more than its own part: also [ids] — the other parts it goes through (a hole through a plate and the deck above it) */
+  const alsoOf = new Map(); for (const t of objs) if (t.into && Array.isArray(t.also) && !off.has(t.id) && (t.op || 'subtract') === 'subtract') for (const x of t.also) if (x !== t.into && byId.has(x) && !off.has(x)) { if (!alsoOf.has(x)) alsoOf.set(x, []); alsoOf.get(x).push(t); }
   /* bodies: booleans in feature-list order */
   const memo = new Map();
   const bodyOf = (id, chain = new Set()) => {
@@ -3015,6 +3017,11 @@ function evaluate(doc, opts) {
         s = run(s); steps.push({ kind: op === 'add' || op === 'union' ? 'union' : op, t, run });
       } catch (e) { R.errors.set(t.id, e.message); }
     }
+    /* cuts that belong to another part but go through this one too */
+    for (const t of alsoOf.get(id) || []) {
+      try { const tool = bodyOf(t.id, chain); s = s.subtract(tool); steps.push({ kind: 'subtract', t, run: (x) => x.subtract(tool) }); }
+      catch (e) { R.errors.set(t.id, e.message); }
+    }
     chain.delete(id);
     memo.set(id, s); return s;
   };
@@ -3026,7 +3033,7 @@ function evaluate(doc, opts) {
   const r9 = (M) => (M ? Array.from(M, v => Math.round(v * 1e7) / 1e7) : null);
   const sig = (id, seen = new Set()) => {
     const o = byId.get(id); if (!o || seen.has(id)) return null; seen.add(id);
-    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, (intoOf.get(id) || []).map(t => [t.id, sig(t.id, seen)])];
+    return [o.type, o.params, o.op, o.edge || null, r9(R.world.get(id)), R.errors.get(id) || null, (intoOf.get(id) || []).map(t => [t.id, sig(t.id, seen)]), (alsoOf.get(id) || []).map(t => ['also', t.id, sig(t.id, new Set(seen))])];
   };
   const subtree = (id, out = []) => { for (const t of intoOf.get(id) || []) if (!out.includes(t.id)) { out.push(t.id); subtree(t.id, out); } return out; };
   const cachedBody = (id) => {
@@ -3469,6 +3476,17 @@ class Model {
     }
   }
   /* which end of a dimension moves: the part mated (directly or through a chain) to the other, else the one that is free */
+  /* the parts a cut tool goes through, other than its own target: real parts whose material its solid meets */
+  partsCrossedBy(id) {
+    const R = this.result, o = this.get(id); if (!o || !R.local.has(id) || !R.world.has(id)) return [];
+    const tool = R.local.get(id).transform(R.world.get(id)), tb = tool.bbox(), own = this.bodyContaining(o.into || id), out = [];
+    for (const b of R.bodies) {
+      if (b.virtual || b.instance || b.hidden || (own && b.id === own.id) || b.id === id) continue;
+      const bb = b.solid.bbox(); if ([0, 1, 2].some(k => bb.min[k] > tb.max[k] || bb.max[k] < tb.min[k])) continue;
+      try { if (Math.abs(b.solid.intersect(tool).volume()) > 1e-3) out.push(b.id); } catch (e) { /* skip a part that won't intersect cleanly */ }
+    }
+    return out;
+  }
   /* anchored parts whose place a driving dimension held, when no driving dimension moves them any more: the anchors place them again */
   releasePlace() {
     const moved = new Set((this.doc.dims || []).filter(md => md.drive != null).map(md => (this.dimMover(md) || {}).id));
@@ -3543,6 +3561,7 @@ class Model {
         const sp = splitParams(type, o.params);
         const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
         if (o.anchors) ob.anchors = cleanAnchors(o.anchors) || undefined;
+        if (Array.isArray(o.also)) ob.also = o.also.filter(x => typeof x === 'string'); else if (o.also === 'crossed') ob._alsoCrossed = true;
         this.insert(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
@@ -3551,6 +3570,8 @@ class Model {
         }
         if (o.into) this.op({ op: 'boolean', target: o.into, tool: id, mode: o.mode || 'subtract' });
         this.recompute();
+        /* also:'crossed' — a cut through: it cuts every other part it goes through now (kept as a list, editable) */
+        if (ob._alsoCrossed) { delete ob._alsoCrossed; const cr = ob.into && (ob.op || 'subtract') === 'subtract' ? this.partsCrossedBy(id) : []; if (cr.length) { ob.also = cr; this.recompute(); } }
         return { label: 'Add ' + ob.name, id, name: ob.name };
       }
       case 'set': {
@@ -3562,6 +3583,7 @@ class Model {
           if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
           if (x.expr && !Object.keys(x.expr).length) delete x.expr;
         }
+        if (o.also !== undefined) { if (o.also === 'crossed') x.also = this.partsCrossedBy(x.id); else if (Array.isArray(o.also) && o.also.length) x.also = o.also.filter(v => typeof v === 'string' && v !== x.into); else delete x.also; if (x.also && !x.also.length) delete x.also; }
         if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; if (o.held === undefined) delete x.held; }
         /* a size typed on a shape that follows anchors is the user's from now on: the anchors stop driving it */
         if (x.anchors && o.params && typeof o.params === 'object') { const drv = anchorDriven(x), mineNow = Object.keys(o.params).filter(k => drv.includes(k)); if (mineNow.length) x.held = [...new Set([...(x.held || []), ...mineNow])]; }
@@ -3617,7 +3639,7 @@ class Model {
         const ti = d.objects.indexOf(t), xi = d.objects.indexOf(tool); if (xi < ti) { d.objects.splice(xi, 1); d.objects.splice(d.objects.indexOf(t) + 1, 0, tool); }
         this.recompute(); return { label: (tool.op === 'add' ? 'Union ' : tool.op === 'intersect' ? 'Intersect ' : 'Subtract ') + tool.name, id: tool.id };
       }
-      case 'separate': { const x = need(o.id); x.into = null; x.op = null; this.recompute(); return { label: 'Separate ' + x.name, id: x.id }; }
+      case 'separate': { const x = need(o.id); x.into = null; x.op = null; delete x.also; this.recompute(); return { label: 'Separate ' + x.name, id: x.id }; }
       case 'edge': {
         const t = need(o.target), M = this.result.world.get(t.id); if (!M) throw new Error('Target has no geometry');
         const body = this.bodyContaining(t.id); if (!body) throw new Error('Target body not found');
@@ -3632,7 +3654,7 @@ class Model {
       case 'extrude': case 'loft': case 'revolve': case 'sweep': {
         const params = {}; for (const k of Object.keys(TYPES[o.op].params)) if (o[k] !== undefined) params[k] = o[k];
         if (o.params) Object.assign(params, o.params);
-        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta, anchors: o.anchors };
+        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta, anchors: o.anchors, also: o.also };
         /* sketch on a face: the feature starts on that face and follows it */
         if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
         return this.op(add);
@@ -4068,7 +4090,7 @@ class Model {
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
-          of: o.of, joins: o.joins, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
+          of: o.of, joins: o.joins, also: o.also && o.also.length ? o.also : undefined, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, held: o.held && o.held.length ? o.held : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
@@ -7620,6 +7642,7 @@ const optionsFor = (type, k) => { const o = OPTIONS[k]; return o ? (o[type] || o
 const label = (k) => k.replace(/_/g, ' ');
 function textInput(v, on, attrs) { const i = el('input', Object.assign({ value: v == null ? '' : v }, attrs || {})); i.addEventListener('keydown', e => e.stopPropagation()); i.addEventListener('change', () => on(i.value)); return i; }
 function paramField(o, k, v) {
+  if (k === 'length' && o.type === 'extrude' && o.params.end === 'through') return field(label(k), el('span', { class: 'note', title: 'A through extrude goes all the way: set end to blind (or symmetric) to give it a length' }, 'through — all the way, no length'));
   const set = (val) => apply([{ op: 'set', id: o.id, params: { [k]: val } }]), opts = o.type === 'shell' && k === 'open' ? shellOpens(o.into) : optionsFor(o.type, k);
   if (opts) { const sl = el('select', null, ...opts.map(x => el('option', { value: x, selected: v === x }, x))); sl.onchange = () => set(sl.value); return field(label(k), sl); }
   if (typeof v === 'number') return field(label(k), paramInput(o, k));
@@ -7959,7 +7982,27 @@ function renderProps() {
   if (o.into && o.type !== 'edge') {
     const s3 = sec('Boolean'), mode = el('select', null, ...[['subtract', 'Subtract from'], ['add', 'Union with'], ['intersect', 'Intersect with']].map(([v, n]) => el('option', { value: v, selected: o.op === v }, n)));
     mode.onchange = () => apply([{ op: 'boolean', target: o.into, tool: o.id, mode: mode.value }]);
-    s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')), el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
+    s3.append(field('this tool', mode), el('div', { class: 'f' }, 'target', el('span', null, (model.get(o.into) || {}).name || '—')));
+    /* a cut can cut the other parts it goes through too */
+    if ((o.op || 'subtract') === 'subtract') {
+      const R = model.result, also = o.also || [], own = model.bodyContaining(o.into);
+      let cand = [];
+      if (R.local.has(o.id) && R.world.has(o.id)) {
+        const tb = R.local.get(o.id).transform(R.world.get(o.id)).bbox();
+        cand = R.bodies.filter(b => !b.virtual && !b.instance && b.id !== o.id && (!own || b.id !== own.id) && model.get(b.id) && (() => { const bb = b.solid.bbox(); return ![0, 1, 2].some(k => bb.min[k] > tb.max[k] || bb.max[k] < tb.min[k]); })()).map(b => b.id);
+      }
+      for (const id of also) if (!cand.includes(id) && model.get(id)) cand.push(id);
+      if (cand.length) {
+        const box = el('div', { class: 'subsec' }, el('b', null, 'Also cuts'), el('div', { class: 'note' }, 'Other parts in its way. Tick the ones it should cut through as well.'));
+        for (const id of cand) {
+          const c = el('input', { type: 'checkbox' }); c.checked = also.includes(id);
+          c.onchange = () => apply([{ op: 'set', id: o.id, also: c.checked ? [...also, id] : also.filter(x => x !== id) }], `${o.name}: ${c.checked ? 'also cuts' : 'no longer cuts'} ${(model.get(id) || {}).name}`);
+          box.append(el('label', { class: 'f' }, (model.get(id) || {}).name || id, c));
+        }
+        s3.append(box);
+      }
+    }
+    s3.append(el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => apply([{ op: 'separate', id: o.id }]) }, 'Separate')));
   }
   if (!['edge', 'pattern', 'callout'].includes(o.type)) massSection(o, sec);
   const s4 = sec('Object');
@@ -8280,7 +8323,16 @@ function renderAddonForm(body) {
 function select(id) { id = model.resolveId(id); if (id) addonForm = null; selected = id; views.sel = id; refreshGhost(); renderTree(); renderProps(); views.draw(); presenceSoon(); }
 function refreshGhost() {
   const o = selected && model.get(selected), R = model.result;
-  if (o && (o.into || o.hidden) && R.local.has(o.id)) views.setGhost(R.local.get(o.id).transform(M4.mul(M4.translate(V.neg(R.originPoint)), R.world.get(o.id))).transform(M4.translate(R.originPoint)));
+  if (o && (o.into || o.hidden) && R.local.has(o.id)) {
+    let g = R.local.get(o.id).transform(R.world.get(o.id));
+    /* a through cut is 4 m long: show it only across the parts it cuts */
+    if (o.type === 'extrude' && o.params.end === 'through') {
+      const bs = [model.bodyContaining(o.into || o.id), ...(o.also || []).map(id => R.bodies.find(b => b.id === id))].filter(Boolean);
+      if (bs.length) { let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity]; for (const b of bs) { const bb = b.solid.bbox(); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], bb.min[k] - 2); mx[k] = Math.max(mx[k], bb.max[k] + 2); } }
+        try { const box = K.box(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]).transform(M4.translate([(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]])); const c = g.intersect(box); if (!c.isEmpty()) g = c; } catch (e) { /* keep the whole tool */ } }
+    }
+    views.setGhost(g.transform(M4.translate(V.neg(R.originPoint))).transform(M4.translate(R.originPoint)));
+  }
   else views.setGhost(null);
 }
 
@@ -8777,7 +8829,7 @@ function faceActions(d, label, build, extraFields) {
   const on = d.on, ok = (v, dflt) => (Number.isFinite(v) && v > 0 ? v : dflt), rootName = on.root ? (model.get(on.root) || {}).name : null;
   const go = (kind, v) => {
     const cut = kind === 'cut' || kind === 'through', P = build(cut, v);
-    const op = Object.assign(P.op, { length: ok(v.length, 10), draft: Number.isFinite(v.draft) ? v.draft : 0, name: `${label} ${kind === 'boss' ? 'boss' : kind === 'part' ? '' : 'cut'}`.trim() }, kind === 'through' ? { end: 'through' } : {},
+    const op = Object.assign(P.op, { length: ok(v.length, 10), draft: Number.isFinite(v.draft) ? v.draft : 0, name: `${label} ${kind === 'boss' ? 'boss' : kind === 'part' ? '' : 'cut'}`.trim() }, kind === 'through' ? { end: 'through', also: 'crossed' } : {},
       P.place.mate ? { mate: P.place.mate } : { at: P.place.pose.at, rot: P.place.pose.rot, fixed: true }, kind === 'part' ? {} : { into: on.root, mode: cut ? 'subtract' : 'union' });
     try { const r = apply([op], `${label} ${kind === 'boss' ? 'joined to' : kind === 'part' ? 'on' : 'cut into'} ${rootName || on.name}`)[0]; select(r.id); setTool(null); } catch (e) { /* toast shown */ }
   };
@@ -8821,7 +8873,8 @@ function finishShape(spec) {
   if (target && !(R.virtual && R.virtual.has(under.id))) actions.push(['Cut through ' + (model.get(target) || {}).name, () => {
     const body = model.bodyContaining(target), bb = body.solid.bbox(), corners = []; for (const x of [bb.min[0], bb.max[0]]) for (const y of [bb.min[1], bb.max[1]]) for (const z of [bb.min[2], bb.max[2]]) corners.push(V.dot(V.sub([x, y, z], R.originPoint), B.f));
     const f0 = Math.min(...corners) - 1, f1 = Math.max(...corners) + 1, at = V.add(pose.at, V.mul(B.f, f0));
-    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut` }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    const r = apply([Object.assign({ op: 'extrude', at, rot: pose.rot, fixed: true, length: f1 - f0, profile: pts2, into: body.id, mode: 'subtract', name: `${name} cut`, also: 'crossed' }, spec, withAnc)], `${name} cut through ${body.name}`)[0]; select(r.id); setTool(null);
+    if (r && model.get(r.id) && model.get(r.id).also) toast(`It also cuts ${model.get(r.id).also.map(id => (model.get(id) || {}).name || id).join(', ')} (it goes through ${model.get(r.id).also.length > 1 ? 'them' : 'it'}) — Properties → Boolean to change that`, 3600);
   }]);
   actions.push(['Revolve', (v) => { const revFrame = M4.mul(M4.translate(R.originPoint), M4.frame([0, 0, 0], B.r, B.u)), rp = poseFromMatrix(revFrame); const r = apply([{ op: 'revolve', profile: pts2.map(([x, y]) => [Math.abs(x), y]), degrees: ok(v.degrees, 360), at: rp.at, rot: rp.rot, fixed: true }])[0]; select(r.id); setTool(null); }]);
   actions.push(['Back', () => { tool.step = 0; d.points = []; views.preview = null; sketchHint(); views.draw(); }]);

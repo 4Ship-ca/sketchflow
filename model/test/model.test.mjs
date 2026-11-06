@@ -619,6 +619,22 @@ Ao.apply([{ op: 'mate', id: 'post', to: 'b', a: 'top', b: 'bottom', slide: [10, 
 const t1 = triW();
 ok('…moves with it, and the other points stay put', Math.abs(t1[1][0] - 5) < 1e-6 && Math.abs(t1[1][1] - 10) < 1e-6 && JSON.stringify(t1[0]) === JSON.stringify(t0[0]) && JSON.stringify(t1[2]) === JSON.stringify(t0[2]), [t0, t1]);
 
+/* a cut through more than its own part: also [ids], or also:'crossed' — every part it goes through */
+const Ac = new Model();
+Ac.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'wedge', id: 'w1', params: { width: 120, depth: 6, height: 25 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [0, 47] } }, { op: 'pattern', id: 'mir', of: 'w1', kind: 'mirror', plane: 'xz' }, { op: 'extrude', id: 'deck', shape: 'rect', x: 0, y: 0, width: 100, height: 103.08, length: 6, mate: { to: 'w1', a: 'slope', b: 'start', flip: true, slide: [-47, 0] } }]);
+const av = (id) => Ac.result.bodies.find(b => b.id === id).solid.volume(), dk0 = av('deck'), pl0 = av('plate');
+Ac.apply([{ op: 'extrude', id: 'cut', shape: 'circle', x: 0, y: 0, diameter: 20, end: 'through', mate: { to: 'plate', a: 'bottom', b: 'end', flip: false }, into: 'plate', mode: 'subtract' }]);
+ok('a through cut cuts its own part only, by default', pl0 - av('plate') > 1800 && Math.abs(dk0 - av('deck')) < 1e-6);
+Ac.apply([{ op: 'set', id: 'cut', also: ['deck'] }]);
+ok('…also:[deck] cuts the inclined deck it goes through too (an elliptical hole)', dk0 - av('deck') > Math.PI * 100 * 6 && !Ac.result.errors.size, dk0 - av('deck'));
+Ac.undo(); Ac.undo();
+Ac.apply([{ op: 'extrude', id: 'cut2', shape: 'circle', x: 0, y: 0, diameter: 20, end: 'through', mate: { to: 'plate', a: 'bottom', b: 'end', flip: false }, into: 'plate', mode: 'subtract', also: 'crossed' }]);
+ok("…also:'crossed' finds the parts it goes through when it is made (not the wedges it misses)", JSON.stringify(Ac.get('cut2').also) === '["deck"]' && dk0 - av('deck') > Math.PI * 100 * 6, Ac.get('cut2').also);
+Ac.apply([{ op: 'set', id: 'w1', params: { height: 35 } }]);
+ok('…and still cuts it when the deck moves', dk0 - av('deck') > Math.PI * 100 * 6 && Math.abs(av('deck') - dk0) > 1);
+Ac.apply([{ op: 'separate', id: 'cut2' }]);
+ok('separating the cut stops it cutting either', !Ac.get('cut2').also && Math.abs(av('plate') - pl0) < 1e-6);
+
 /* model coordinates stay the board's when the first part is placed by coordinates (an extrude's bottom is mid start face) */
 const Or = new Model(); Or.apply([{ op: 'extrude', id: 'l', profile: [[0, 0], [100, 0], [100, 10], [0, 10]], length: 20, at: [0, 0, 0], rot: [90, 0, 0], fixed: true }], 'L', { relative: true });
 Or.apply([{ op: 'add', type: 'box', id: 'k', params: { width: 10, depth: 10, height: 10 }, at: [50, 0, 10], fixed: true }], 'K', { relative: true });
