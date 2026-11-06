@@ -12,7 +12,8 @@ sketchflow/
 ├── js/               core · render · tools · input · ui · io · motion · bridge
 ├── model/            3D workspace (v2): index.html, js/kernel · model · views · app, tests, ARCHITECTURE.md
 ├── server.mjs        MCP server + local web server (Node 20+, zero dependencies): / = board, /3d/ = model
-├── scripts/          smoke test · Claude Desktop bundle (.mcpb) · release prep (package.json, server.json)
+├── scripts/          setup (what SF3d_setup.bat runs) · smoke test · Claude Desktop bundle (.mcpb) · release prep
+├── SF3d_setup.bat    Windows setup: install, AI apps, Ollama, publish — settings in SF3d_setup.env (from the .template)
 ├── build.mjs         makes single-file versions in dist/
 └── dist/             sketchflow.html · sketchflow-3d.html — double-click to use offline (no AI link)
 ```
@@ -20,6 +21,8 @@ sketchflow/
 ## 1 · Run it with Claude (MCP)
 
 **Beta:** SketchFlow is on npm as `sketchflow-mcp`. You need **Node 20 or newer**. It has no dependencies; `npx` fetches it on first use. [INSTALL.md](INSTALL.md) covers every client: Claude Code, Claude Desktop (a one-click `.mcpb`), Cursor, VS Code, LM Studio, and local models through Ollama. It also covers the settings and testing a build before it is published.
+
+**Windows:** run `SF3d_setup.bat`. It asks for your settings in a Notepad file, then installs SketchFlow, adds it to your AI apps and, if you like, Ollama and the public release. See [INSTALL.md](INSTALL.md#windows-one-double-click).
 
 **Claude Code**
 

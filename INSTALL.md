@@ -6,6 +6,21 @@ SketchFlow is an MCP server. Your AI app (Claude Code, Claude Desktop, Cursor, V
 
 The beta is published on npm as **`sketchflow-mcp`** under the `beta` tag. `npx -y sketchflow-mcp@beta` downloads it on first use and runs it.
 
+## Windows: one double-click
+
+In the SketchFlow folder, run **`SF3d_setup.bat`**.
+
+1. **First run:** it makes `SF3d_setup.env` from `SF3d_setup.env.template` and opens it in Notepad. Choose what to do, fill in your details, and save. The choices are installing locally, adding SketchFlow to your AI apps, a local model with Ollama, and publishing.
+2. **Second run:** it checks for Node.js 20+ and offers to install it with winget. Then it does what the settings say:
+   - tests and installs SketchFlow, and builds the Claude Desktop bundle;
+   - adds it to Claude Desktop, Claude Code, Cursor, VS Code and LM Studio, backing up each settings file first;
+   - sets up Ollama with a model, the ollmcp client and an `SF3d_ollama.bat` starter;
+   - publishes the beta.
+
+It asks before each upload or history change. `SF3d_setup.bat --dry-run` shows those steps without doing them, and the setup can be run again at any time. Everything it does is written to `SF3d_setup.log`. On macOS and Linux, the same steps run with `node scripts/setup.mjs` (fill in `SF3d_setup.env` first).
+
+The rest of this page does the same by hand, one AI app at a time.
+
 ---
 
 ## Claude Code

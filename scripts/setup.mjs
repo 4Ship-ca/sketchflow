@@ -187,7 +187,8 @@ async function publish() {
   heading(E.DO_PUBLISH === 'prep' ? 'Getting the repository ready to publish' : `Publishing the beta: github.com/${repo}, npm, MCP Registry`);
   gitBin = await need('Git', 'git', { winget: 'Git.Git', paths: [WIN && path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'cmd', 'git.exe')], url: 'https://git-scm.com/downloads' });
   if (!git(['rev-parse', '--is-inside-work-tree'], { capture: true, allowFail: true }).ok) throw new Stop(`${ROOT} is not a git repository — extract the full SketchFlow zip (it includes the .git folder)`);
-  /* a: who the commits are from */
+  /* a: who the commits are from (and, on Windows, no false "changed" files from the file mode bits git can't see there) */
+  if (WIN) git(['config', 'core.filemode', 'false']);
   git(['config', 'user.name', E.AUTHOR_NAME]); git(['config', 'user.email', E.GIT_EMAIL]);
   note('ok', 'commit identity', `${E.AUTHOR_NAME} <${E.GIT_EMAIL}>`);
   const origin = git(['remote', 'get-url', 'origin'], { capture: true, allowFail: true });

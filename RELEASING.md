@@ -8,6 +8,20 @@ How a beta gets from this repository to users:
 
 Once the one-time setup is done, a release is: bump the version, write the changelog, push a tag. `.github/workflows/release.yml` does the rest.
 
+**The quick way:** set `DO_PUBLISH=prep` in `SF3d_setup.env` and run `SF3d_setup.bat` (`node scripts/setup.mjs` on macOS and Linux). It does all of the one-time setup below in this folder:
+- commit identity;
+- the email in the history, with a backup;
+- the release prep commit;
+- bringing `main` up to date.
+
+Look at the result, then run it again with `DO_PUBLISH=1`. That run does the rest:
+- creates the GitHub repository and pushes;
+- publishes to npm with your token, or `npm login`;
+- stores the `NPM_TOKEN` secret;
+- pushes the release tag and waits for the GitHub release and MCP Registry listing.
+
+It asks before each upload, and `DRY_RUN=1` shows them all first. For that, it needs the GitHub CLI, which it offers to install with winget. The steps below are the same thing by hand.
+
 ## One-time setup
 
 ### 1. Decide what becomes public
