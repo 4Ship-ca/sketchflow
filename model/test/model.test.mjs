@@ -550,6 +550,33 @@ ok('one turn of the screw-jointed cap lifts it by the thread pitch (3 mm)', near
 ok('…and it stays clear of the neck threads while it turns', interference(Ex_t).length === 0);
 let threw = false; try { m.apply([{ op: 'mate', id: 'tip', to: 'base', a: 'nope' }]); } catch (e) { threw = /No connector/.test(e.message); }
 ok('bad connector names give a helpful error', threw);
+/* sketch anchors: a rectangle sketched on a wedge's slope follows two corners (one on a mirror copy) */
+const An = new Model();
+An.apply([{ op: 'add', type: 'box', id: 'plate', params: { width: 120, depth: 100, height: 6 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'wedge', id: 'w1', params: { width: 120, depth: 6, height: 25 }, mate: { to: 'plate', a: 'top', b: 'bottom', slide: [0, 47] } }, { op: 'pattern', id: 'mir', of: 'w1', kind: 'mirror', plane: 'xz' }]);
+An.apply([{ op: 'extrude', id: 'deck', shape: 'rect', x: 0, y: 0, width: 50, height: 30, length: 6, mate: { to: 'w1', a: 'slope', b: 'start', flip: true, slide: [-20, 10] }, anchors: [{ obj: 'w1', conn: 'corner+x+y-z' }, { obj: 'w1@mir.1', conn: 'corner-x+y+z' }] }]);
+const dk = () => An.get('deck').params, dbb = () => An.result.bodies.find(b => b.id === 'deck').solid.bbox();
+ok('a rectangle anchored to two corners spans them: across both wedges, the full slope', Math.abs(dk().width - 100) < 1e-6 && Math.abs(dk().height - Math.hypot(120, 25)) < 1e-5 && Math.abs(dbb().min[1] + 50) < 1e-6 && Math.abs(dbb().max[1] - 50) < 1e-6, [dk().width, dk().height]);
+An.apply([{ op: 'set', id: 'w1', params: { width: 90, height: 40 } }]);
+ok('…and follows them when the wedge changes', Math.abs(dk().height - Math.hypot(90, 40)) < 1e-5 && Math.abs(dbb().min[0] + 45) < 1e-6, dk().height);
+An.apply([{ op: 'mate', id: 'w1', to: 'plate', a: 'top', b: 'bottom', slide: [0, 60] }]);
+ok('…and when the wedges move apart (the mirror copy follows too)', Math.abs(dk().width - 126) < 1e-6, dk().width);
+An.undo();
+ok('…undo puts it back', Math.abs(dk().width - 100) < 1e-6);
+An.apply([{ op: 'delete', id: 'mir' }]);
+ok('a corner that is gone: it stays where it is and says so', An.result.warnings.some(w => w.kind === 'anchor' && /is gone/.test(w.text)) && Math.abs(dk().width - 100) < 1e-6);
+An.undo(); An.apply([{ op: 'set', id: 'deck', anchors: null }, { op: 'set', id: 'w1', params: { width: 120 } }]);
+ok('…and with no anchors it keeps its own size', Math.abs(dk().height - Math.hypot(90, 40)) < 1e-5 && !An.get('deck').anchors);
+/* an outline: the anchored point follows, the rest of the outline stays where it is */
+const Ao = new Model();
+Ao.apply([{ op: 'add', type: 'box', id: 'b', params: { width: 100, depth: 60, height: 10 }, mate: { to: 'origin', a: 'xy', b: 'bottom' } }, { op: 'add', type: 'box', id: 'post', params: { width: 10, depth: 10, height: 20 }, mate: { to: 'b', a: 'top', b: 'bottom', slide: [30, 0] } }]);
+Ao.apply([{ op: 'extrude', id: 'tri', profile: [[-20, -10], [10, -10], [-20, 15]], length: 2, mate: { to: 'b', a: 'top', b: 'start', flip: true, slide: [-20, 0] }, anchors: [{ i: 1, obj: 'post', conn: 'corner-x-y-z' }] }]);
+const triW = () => { const M = Ao.result.world.get('tri'); return Ao.get('tri').params.profile.map(q => M4.point(M, [q[0], q[1], 0]).map(v => +v.toFixed(4))); };
+const t0 = triW();
+ok('an anchored outline point sits on its corner', Math.abs(t0[1][0] - 25) < 1e-6 && Math.abs(t0[1][1] + 5) < 1e-6, t0[1]);
+Ao.apply([{ op: 'mate', id: 'post', to: 'b', a: 'top', b: 'bottom', slide: [10, 15] }]);
+const t1 = triW();
+ok('…moves with it, and the other points stay put', Math.abs(t1[1][0] - 5) < 1e-6 && Math.abs(t1[1][1] - 10) < 1e-6 && JSON.stringify(t1[0]) === JSON.stringify(t0[0]) && JSON.stringify(t1[2]) === JSON.stringify(t0[2]), [t0, t1]);
+
 /* model coordinates stay the board's when the first part is placed by coordinates (an extrude's bottom is mid start face) */
 const Or = new Model(); Or.apply([{ op: 'extrude', id: 'l', profile: [[0, 0], [100, 0], [100, 10], [0, 10]], length: 20, at: [0, 0, 0], rot: [90, 0, 0], fixed: true }], 'L', { relative: true });
 Or.apply([{ op: 'add', type: 'box', id: 'k', params: { width: 10, depth: 10, height: 10 }, at: [50, 0, 10], fixed: true }], 'K', { relative: true });

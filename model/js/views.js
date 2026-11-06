@@ -429,9 +429,10 @@ export class Views {
     if (part && rep.parts.length > 1) mark(part.centroid, 5, null);
   }
   drawConnectors(c, pane, cam) {
-    const R = this.model.result, ids = this.connectorsFor === 'all' ? [...R.world.keys()] : [this.connectorsFor];
+    const R = this.model.result, ids = (this.connectorsFor === 'all' ? [...R.world.keys()] : [this.connectorsFor]).filter(id => id !== this.connectorsSkip);
     for (const id of ids) {
       for (const cn of worldConnectors(R, id)) {
+        if (this.connectorKinds && !this.connectorKinds.has(cn.kind)) continue;
         const p = this.project(pane, V.sub(cn.o, this.O), cam); if (p.behind) continue;
         const hot = this.hover && this.hover.conn && this.hover.conn.id === id && this.hover.conn.name === cn.name;
         c.beginPath();

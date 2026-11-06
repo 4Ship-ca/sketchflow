@@ -254,7 +254,7 @@ function renderTree() {
   };
   const rows = treeOrder();
   rows.forEach(({ o, depth }, k) => {
-    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '');
+    const sub = subOf(o) + (o.expr && Object.keys(o.expr).length ? ' · 🔗' : '') + (o.anchors && o.anchors.length ? ` · follows ${o.anchors.length} corner${o.anchors.length > 1 ? 's' : ''}` : '');
     const row = el('div', { class: 'row' + (o.id === selected ? ' on' : '') + (depth ? ' tool' : '') + (off.has(o.id) ? ' off' : '') + (o.suppressed ? ' sup' : ''), 'data-id': o.id, onclick: () => select(o.id), title: o.mate ? `mated ${o.mate.b} → ${o.mate.to === 'origin' ? 'origin' : (model.get(o.mate.to) || {}).name} · ${o.mate.a}` : '' },
       el('span', { class: 'ic' }, icon(iconOf(o))),
       el('div', { style: 'min-width:0' }, el('div', { class: 'nm' }, o.name), el('div', { class: 'sub' }, o.suppressed ? 'suppressed · ' + sub : sub)),
@@ -606,6 +606,7 @@ function renderProps() {
     s1.append(el('div', { class: 'empty', style: 'padding:4px 0' }, 'Copies follow the original: change its size and every copy changes. about = {"obj": id, "conn": connector} sets the axis (circular) or plane (mirror).'));
   }
   if (o.type === 'callout') calloutSection(o, s1);
+  if (canFollow(o)) followSection(o, s1);
   if (o.meta && o.meta.joint) jointPartSection(o, s1);
   if (o.type === 'weld') {
     const r = o._resolved || {};
@@ -907,6 +908,40 @@ function jointPartSection(o, s1) {
   if (o.meta.notes) s1.append(el('div', { class: 'note' }, o.meta.notes));
   s1.append(el('div', { class: 'btns' }, el('button', { class: 'btn pri', title: 'After changing a thickness or size: build this joint again for the parts as they are now', onclick: () => redoJoint(tag) }, 'Redo for new sizes'), c ? el('button', { class: 'btn', onclick: () => select(c.id) }, 'Weld symbol') : null, el('button', { class: 'btn danger', onclick: () => deleteJoint(tag) }, 'Delete the whole joint')));
 }
+/* ---------- sketch anchors: a shape sketched on a face that follows other parts' corners ---------- */
+const canFollow = (o) => o && o.type === 'extrude' && o.mate && o.mate.to && !o.mate.kind && ['start', 'end'].includes(o.mate.b) && (o.params.shape === 'rect' || !o.params.shape || o.params.shape === 'points');
+const connName = (a) => { const R = model.result, v = R.virtual && R.virtual.get(a.obj), base = model.get(v ? v.source : a.obj); return `${a.conn} of ${base ? base.name : a.obj}${v ? ' (copy ' + (v.index + 1) + ')' : ''}`; };
+function followSection(o, s1) {
+  const an = o.anchors || [], rect = o.params.shape === 'rect';
+  const box = el('div', { class: 'subsec' }, el('b', null, 'Follows'));
+  if (!an.length) box.append(el('div', { class: 'note' }, rect ? 'Make it follow two opposite corners of other parts — its size and its place on the face then come from them, whenever they change.' : 'Make points of this outline follow other parts\' corners: each corner you pick holds the nearest point, and the outline keeps its other constraints.'));
+  an.forEach((a, k) => box.append(el('div', { class: 'f' }, rect ? `corner ${k + 1}` : `point ${a.i + 1}`, el('span', { class: 'pin' }, el('span', { class: 'mono' }, connName(a)), el('button', { class: 'chain', title: 'Stop following this one', onclick: () => apply([{ op: 'set', id: o.id, anchors: an.filter((x, j) => j !== k) }], `${o.name}: stop following ${a.conn}`) }, '×')))));
+  box.append(el('div', { class: 'btns' }, el('button', { class: 'btn' + (an.length ? '' : ' pri'), title: 'Click the corners (or centres) it should follow, in any view', onclick: () => setTool('anchor', o.id) }, an.length ? 'Follow more…' : 'Follow corners…'), an.length ? el('button', { class: 'btn', onclick: () => apply([{ op: 'set', id: o.id, anchors: null }], `${o.name}: stop following`) }, 'Stop following') : null));
+  s1.append(box);
+}
+function anchorHint() {
+  const o = model.get(tool.data.id), n = (o.anchors || []).length, rect = o.params.shape === 'rect';
+  hint(`Follow: click the ${rect ? (n ? 'opposite corner' : 'corners') : 'corners'} ${o.name} should follow (the square dots)${n ? ` — ${n} so far` : ''}`, [['Done', () => setTool(null)]]);
+}
+function anchorClick(hit) {
+  const o = tool && model.get(tool.data.id); if (!o) { setTool(null); return; }
+  if (!hit || hit.kind !== 'conn') { toast('Click one of the dots: a corner (square), or a face or centre'); return; }
+  if (hit.conn.id === o.id) return;
+  const a = { obj: hit.conn.id, conn: hit.conn.name }, an = (o.anchors || []).slice();
+  if (o.params.shape === 'rect') { if (an.some(x => x.obj === a.obj && x.conn === a.conn)) { toast('It follows that one already'); return; } an.push(a); }
+  else {
+    /* an outline: the corner holds the nearest of its points */
+    const R = model.result, M = R.world.get(o.id), c = worldConnectors(R, a.obj).find(x => x.name === a.conn); if (!M || !c) return;
+    const q = M4.point(M4.inv(M), c.o); let best = 0, bd = Infinity;
+    o.params.profile.forEach((pt, i) => { const dd = Math.hypot(pt[0] - q[0], pt[1] - q[1]); if (dd < bd) { bd = dd; best = i; } });
+    for (let k = an.length - 1; k >= 0; k--) if (an[k].i === best) an.splice(k, 1);
+    an.push(Object.assign({ i: best }, a));
+  }
+  try { apply([{ op: 'set', id: o.id, anchors: an }], `${o.name}: follow ${a.conn}`); } catch (e) { return; }
+  const w = model.result.warnings.find(x => x.kind === 'anchor' && x.id === o.id);
+  toast(w ? w.text : o.params.shape === 'rect' ? (an.length >= 2 ? `${o.name} now spans ${an.length} corners: ${fmt(o.params.width)} × ${fmt(o.params.height)}, and follows them` : 'Now click the opposite corner') : `Point ${an[an.length - 1].i + 1} now follows ${connName(a)}`, 3000);
+  if (o.params.shape === 'rect' && an.length >= 2) setTool(null); else anchorHint();
+}
 /* ---------- add-on action forms (right panel) ---------- */
 let addonForm = null;
 function openAddonForm(addonId, action) { addonForm = { addonId, action, values: null, result: null }; setTool(null); selected = null; views.sel = null; renderProps(); }
@@ -1206,12 +1241,13 @@ function setTool(name, arg) {
   setTimeout(presenceSoon, 0);
   if (tool && tool.data && tool.data.prevLayout) views.layout = tool.data.prevLayout;   /* a face sketch maximised its view: put the layout back */
   views.sketchGrid = 0; views.sketchPane = null; snapCache = null; document.querySelectorAll('.menu.snapmenu').forEach(m => m.remove());
-  tool = name ? { name, step: 0, data: {} } : null; views.connectorsFor = null; views.preview = null;
+  tool = name ? { name, step: 0, data: {} } : null; views.connectorsFor = null; views.connectorKinds = null; views.connectorsSkip = null; views.preview = null;
   if (tool && typeof arg === 'string' && ['hole', 'text', 'boss', 'cut'].includes(name)) tool.data.only = arg;   /* from a part's Add to… buttons */
   if (!name) hint(null);
   else if (name === 'mate') { if (arg) { tool.data.moving = arg; tool.step = 1; views.connectorsFor = arg; hint('Mate: click the connector on ' + model.get(arg).name + ' to attach'); } else hint('Mate: click the object you want to move'); }
   else if (name.startsWith('bool-')) hint((name === 'bool-add' ? 'Union' : name === 'bool-subtract' ? 'Subtract' : 'Intersect') + ': click the target body, then the tool body');
   else if (name === 'weld-wiz') { tool.data.a = typeof arg === 'string' ? arg : null; weldWizHint(); }
+  else if (name === 'anchor') { tool.data.id = arg; views.connectorsFor = 'all'; views.connectorKinds = new Set(['corner', 'center', 'face']); views.connectorsSkip = arg; anchorHint(); }
   else if (name === 'edge-weld') {
     hint('Weld: click where two separate parts meet — the bead joins them, and they stay separate parts', [['Done', () => setTool(null)]], [['size', 'leg mm', prefs.weldSize || 4], ['profile', 'profile', prefs.weldProfile || 'flat', ['flat', 'convex', 'concave']]]);
     const [sz, pf] = document.querySelectorAll('#hint [data-k]');
@@ -1340,12 +1376,18 @@ function arcTo(d, p, through) {
   return g ? { i: d.points.length - 1, c: P3(g.c), ccw: g.ccw } : null;
 }
 let snapCache = null;
+const refKey = (p) => p.map(v => v.toFixed(4)).join(',');
+/* the outline's points that were snapped to a part's corner (or centre): they follow it */
+function pointAnchors(d) { const out = (d.points || []).map((q, i) => { const r = d.refAt && d.refAt.get(refKey(q)); return r ? { i, obj: r.obj, conn: r.conn } : null; }).filter(Boolean); return out.length ? out : undefined; }
 function snapTargets(paneId) {
   const R = model.result; if (snapCache && snapCache.R === R && snapCache.pane === paneId) return snapCache.list;
   const B = BASISof(paneId), O = R.originPoint, list = [], seen = new Set();
-  const put = (w, kind, label) => { const q = V.sub(w, O), x = V.dot(q, B.r), y = V.dot(q, B.u), k = Math.round(x * 1e3) + ',' + Math.round(y * 1e3) + kind; if (seen.has(k) || list.length > 40000) return; seen.add(k); list.push({ x, y, kind, label }); };
+  const put = (w, kind, label, ref) => { const q = V.sub(w, O), x = V.dot(q, B.r), y = V.dot(q, B.u), k = Math.round(x * 1e3) + ',' + Math.round(y * 1e3) + kind; if (seen.has(k) || list.length > 40000) return; seen.add(k); list.push({ x, y, kind, label, ref }); };
   put(O, 'point', 'origin');
-  for (const o of model.doc.objects) if (R.world.has(o.id) && !META.has(o.type)) for (const c of worldConnectors(R, o.id)) if (c.kind === 'center' || c.kind === 'face') put(c.o, 'point', c.kind === 'center' ? 'centre' : c.name + ' centre');
+  /* named corners and centres first: a sketch point snapped to one follows it (pattern and mirror copies included) */
+  const owner = (id) => (model.get(id) || model.get((R.virtual.get(id) || {}).source) || {}).name || id;
+  const ids = model.doc.objects.filter(o => R.world.has(o.id) && !META.has(o.type)).map(o => o.id).concat([...(R.virtual || new Map()).keys()].filter(id => R.world.has(id)));
+  for (const id of ids) for (const c of worldConnectors(R, id)) if (c.kind === 'corner' || c.kind === 'center' || c.kind === 'face') put(c.o, 'point', `${owner(id)} · ${c.kind === 'corner' ? 'corner' : c.kind === 'center' ? 'centre' : c.name + ' centre'}`, { obj: id, conn: c.name });
   for (const b of R.bodies) { if (b.hidden || b.solid.isEmpty()) continue; for (const [a, c] of K.creaseEdges(b.solid)) { put(a, 'point', 'corner'); put(c, 'point', 'corner'); put(V.lerp(a, c, 0.5), 'mid', 'midpoint'); } }
   snapCache = { R, pane: paneId, list }; return list;
 }
@@ -1362,7 +1404,7 @@ function snapSketch(pane, pp, straight) {
     const cand = o.points ? pts.map((p, i) => ({ x: V.dot(p, B.r), y: V.dot(p, B.u), kind: 'point', label: i === 0 ? 'start' : 'point' })) : [];
     for (const t of snapTargets(pane.id)) if (t.kind === 'mid' ? o.mids : o.points) cand.push(t);
     for (const t of cand) { const dd = Math.hypot(t.x - x, t.y - y); if (dd < bd) { bd = dd; best = t; } }
-    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label }; }
+    if (best) { x = best.x; y = best.y; snap = { kind: best.kind, label: best.label + (best.ref && d.on ? ' — follows it' : ''), ref: d.on ? best.ref : undefined }; }
   }
   if (!snap && last && !d.arcEnd && (straight || o.hv || o.angle)) {
     const dx = x - last[0], dy = y - last[1], g = (v) => (o.grid ? Math.round(v / o.step) * o.step : v);
@@ -1469,7 +1511,8 @@ function finishShape(spec) {
   if (d.on) {
     /* on a face: the shape's sizes stay parameters; its centre goes where it was drawn, on that face */
     const centre3 = V.add(V.mul(B.r, spec.x), V.mul(B.u, spec.y)), local = Object.assign({}, spec, { x: 0, y: 0 });
-    hint(`${sizeText} on ${d.on.name} (${d.on.faceName}) — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
+    const anchors = spec.shape === 'rect' ? [d.points[0], d.lastP].map(q => q && d.refAt && d.refAt.get(refKey(q))).filter(Boolean).map(r => ({ obj: r.obj, conn: r.conn })) : [];
+    hint(`${sizeText} on ${d.on.name} (${d.on.faceName})${anchors.length ? ` — follows ${anchors.length === 1 ? 'a corner' : anchors.length + ' corners'}` : ''} — its sizes stay editable dimensions:`, faceActions(d, name, (cut) => ({ place: onFace(d, [centre3], cut, centre3), op: Object.assign({ op: 'extrude' }, local, anchors.length ? { anchors } : {}) })), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
     tool.step = 9; return;
   }
   /* the part under the shape (for Cut): pick through the shape's centre in that view */
@@ -1510,7 +1553,7 @@ function finishSketch() {
     tool.step = 9; return;
   }
   if (d.on) {
-    hint(`Profile on ${d.on.name} (${d.on.faceName}), ${pts2.length} points${d.arcs.length ? ', ' + d.arcs.length + ' arc' + (d.arcs.length > 1 ? 's' : '') : ''}:`, faceActions(d, 'Extrude', (cut) => { const place = onFace(d, d.points, cut, null, d.arcs, d.splines); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, splines: place.splines, constraints: autoConstraints(place.prof, 4, place.arcs.concat(place.splines)).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j }))) } }; }), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
+    hint(`Profile on ${d.on.name} (${d.on.faceName}), ${pts2.length} points${d.arcs.length ? ', ' + d.arcs.length + ' arc' + (d.arcs.length > 1 ? 's' : '') : ''}:`, faceActions(d, 'Extrude', (cut) => { const place = onFace(d, d.points, cut, null, d.arcs, d.splines); return { place, op: { op: 'extrude', profile: place.prof, arcs: place.arcs, splines: place.splines, constraints: autoConstraints(place.prof, 4, place.arcs.concat(place.splines)).concat(d.tangents.map(([i, j]) => ({ type: 'tangent', i, j }))), anchors: pointAnchors(d) } }; }), [['length', 'height / depth mm', 10], ['draft', 'draft °', 0]]);
     tool.step = 9; return;
   }
   hint('Profile closed (' + pts2.length + ' points' + (arcs2.length ? ', ' + arcs2.length + ' arc' + (arcs2.length > 1 ? 's' : '') : '') + ') — make it 3D:', [
@@ -1612,12 +1655,13 @@ function clickTool(pane, x, y, hit, e) {
     if (pane.id === '3d') { toast(t.data.on ? `Draw this sketch in the ${t.data.on.pane.toUpperCase()} view` : 'Sketch in FRONT, TOP or RIGHT — or use On a face… to sketch on a part'); return; }
     const d = t.data, want = d.on ? d.on.pane : d.pane;
     if (want && want !== pane.id) { toast(d.on ? `This sketch is on ${d.on.name}: draw it in the ${want.toUpperCase()} view` : 'Keep the whole profile in one view'); return; }
-    const pp = views.planePoint(pane, x, y), { p } = snapSketch(pane, pp, e.shiftKey);
+    const pp = views.planePoint(pane, x, y), { p, snap } = snapSketch(pane, pp, e.shiftKey);
+    if (snap && snap.ref) (d.refAt = d.refAt || new Map()).set(refKey(p), snap.ref);
     d.pane = pane.id; d.basis = BASISof(pane.id); d.hist = d.hist || []; d.arcs = d.arcs || []; d.tangents = d.tangents || [];
     const B = d.basis, P2 = (q) => [V.dot(q, B.r), V.dot(q, B.u)];
     if (d.mode && d.mode !== 'polyline') {
       if (!d.points.length) { d.points.push(p); views.preview = { pane: pane.id, points: [p] }; sketchHint(); views.draw(); return; }
-      const spec = shapeFrom(d.mode, P2(d.points[0]), P2(p));
+      const spec = shapeFrom(d.mode, P2(d.points[0]), P2(p)); d.lastP = p;
       if (!spec || (spec.width === 0 || spec.height === 0 || spec.diameter === 0)) { toast('Drag it out a little bigger'); return; }
       try { shapeProfile(spec); } catch (err) { toast(err.message); return; }
       finishShape(spec); return;
@@ -1663,6 +1707,7 @@ function clickTool(pane, x, y, hit, e) {
     const id = model.resolveId(pk.id); setTool(null); splitHint(rootOf(id), selected && (model.get(selected) || {}).type === 'plane' ? selected : null); return;
   }
   if (t.name === 'weld-wiz') { weldWizClick(views.pick(pane, x, y)); return; }
+  if (t.name === 'anchor') { anchorClick(hit); return; }
   if (t.name === 'pick') {
     const pk = views.pick(pane, x, y); if (!pk) { toast('Click on a part'); return; }
     const id = model.resolveId(pk.id), then = t.data.then; setTool(null); if (id) then(id); return;

@@ -149,6 +149,15 @@ How a joint is made decides how it is modelled:
 - **Fillet or chamfer: one part.** The corner is blended because the part is printed, cast or machined as one piece. Filleting where two parts meet first unions them (the tool says so), so they can no longer be pulled apart.
 - **Weld: two parts.** The parts are made separately and joined. Each keeps its own definition, material and mass. The bead is its own body with its own mass, and **E** (pull apart) shows the components separately. Deleting the weld leaves both parts whole. A weld between parts that a boolean already merged is refused, and a weld across unweldable materials is flagged.
 
+### Sketch anchors: following other parts without a solver over the whole assembly
+
+A part sketched on a face can carry `anchors`: connectors of other parts (corners, face centres, pattern and mirror copies) that its points follow. Its own placement stays an ordinary mate, the profile's centre pinned to the face at a slide. After every evaluation, `followAnchors` works out where the anchors are, in the part's own in-plane axes:
+
+- **A rectangle** takes its size along each axis from the anchors' spread, and its slide from their middle.
+- **A drawn outline** holds each anchored point with a `fix` constraint that moves with it. The slide is corrected so the rest of the outline stays where it is.
+
+The model is then evaluated again, for a few passes. Neither the size nor the slide depends on the part's own geometry, so this converges in one or two passes. Undo, shared editing and MCP see ordinary parameter and mate changes.
+
 ### Welding & joining: advice from the geometry, built as parts
 
 The welding add-on works from the evaluated solids, not from what the parts are called. The joint is the largest pair of faces of the two parts that look at each other within 6 mm; whether each part *ends* there (its face is the whole contact) tells butt from tee from lap, and a tee whose stem is flush with the plate's edge is a corner. Thickness is a ray through the part from the contact. Torch access is 25 rays per side, fanned ±25° round the approach direction from five points along the seam, against every other part's facets (bounding boxes first). The ISO 6947 position comes from the seam direction and the approach against world Z.

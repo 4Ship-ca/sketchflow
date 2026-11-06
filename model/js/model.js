@@ -159,6 +159,64 @@ function connectorsOf(o, solid) {
   }
 }
 const centroid2 = (pts) => { let x = 0, y = 0; for (const p of pts) { x += p[0]; y += p[1]; } return [x / pts.length, y / pts.length]; };
+/* anchors [{obj, conn, i?}]: a part sketched on a face (mated to it by its start / end) whose points follow other parts'
+   connectors. A shaped rectangle takes its size along each of its own axes from the spread of its anchors, and its place
+   on the face (the mate's slide) from where they are; one anchor on a side moves it without resizing. A drawn outline
+   (profile points) holds each anchored point (i) with a fix constraint that moves with its target; the rest of the
+   outline stays where it is, re-solved with its own constraints. Returns true when it changed anything. */
+export const anchorWorld = (R, a) => { const c = worldConnectors(R, a.obj).find(x => x.name === a.conn); return c ? c.o : null; };
+function followAnchorsOf(R, o, missing, notes) {
+  const m = o.mate, M = R.world.get(o.id), p = o.params;
+  if (!M || !p) return false;
+  if (!m || !m.to || m.kind || m.frame || !['start', 'end'].includes(m.b)) { notes.push({ o, text: 'anchors only work on a part sketched on a face (mated to it by its start or end) — it stays where it is' }); return false; }
+  const tc = worldConnectors(R, m.to).find(c => c.name === m.a); if (!tc) return false;
+  const pts = []; for (const a of o.anchors) { const w = anchorWorld(R, a); if (w) pts.push(Object.assign({ w }, a)); else missing.push({ o, a }); }
+  if (!pts.length) return false;
+  const xw = V.norm(M4.dir(M, [1, 0, 0])), yw = V.norm(M4.dir(M, [0, 1, 0])), zw = V.norm(M4.dir(M, [0, 0, 1])), u = tc.u, v = V.cross(tc.n, tc.u);
+  const Ol = M4.point(M, [0, 0, 0]), rel = (w) => V.sub(w, tc.o), r6a = (x) => Math.round(x * 1e6) / 1e6, ex = o.expr || {}, mx = o.mexpr || {};
+  let changed = false, at = null;   /* at: where the mate's connector (the profile's centre) now belongs, in world */
+  if (p.shape === 'rect') {
+    const Cw = V.add(V.add(Ol, V.mul(xw, +p.x || 0)), V.mul(yw, +p.y || 0)), axes = [xw, yw], keys = ['width', 'height'], cen = [0, 0];
+    for (let k = 0; k < 2; k++) {
+      const c0 = V.dot(rel(Cw), axes[k]), vals = pts.map(q => V.dot(rel(q.w), axes[k])), lo = Math.min(...vals), hi = Math.max(...vals);
+      let size = +p[keys[k]];
+      if (hi - lo > 1e-6) {
+        if (ex[keys[k]]) notes.push({ o, text: `its ${keys[k]} follows a formula (${ex[keys[k]]}), so its anchors don't resize it — unlink it to let them` });
+        else size = hi - lo;
+        cen[k] = (hi + lo) / 2;
+      } else { const s = Math.sign(Math.round((lo - c0) * 1e6)); cen[k] = s ? lo - s * size / 2 : lo; }
+      if (Math.abs(size - p[keys[k]]) > 1e-6) { p[keys[k]] = r6a(size); changed = true; }
+    }
+    at = V.add(V.add(V.add(tc.o, V.mul(xw, cen[0])), V.mul(yw, cen[1])), V.mul(zw, V.dot(rel(Cw), zw)));
+  } else if (Array.isArray(p.profile) && (!p.shape || p.shape === 'points')) {
+    if (!Array.isArray(p.constraints)) p.constraints = [];
+    const cons = p.constraints;
+    for (const q of pts) {
+      if (!(q.i >= 0 && q.i < p.profile.length)) { notes.push({ o, text: `an anchor names point ${(q.i | 0) + 1}, which the outline does not have` }); continue; }
+      const L = [r6a(V.dot(V.sub(q.w, Ol), xw)), r6a(V.dot(V.sub(q.w, Ol), yw))];
+      /* the anchored point is held by a fix of its own (a plain fix on the same point would fight it) */
+      for (let k = cons.length - 1; k >= 0; k--) if (cons[k].type === 'fix' && cons[k].i === q.i && !cons[k].anchor) { cons.splice(k, 1); changed = true; }
+      let fx = cons.find(c => c.type === 'fix' && c.i === q.i && c.anchor);
+      if (!fx) { fx = { type: 'fix', i: q.i, at: L, anchor: true }; cons.push(fx); changed = true; }
+      const cur = p.profile[q.i];
+      if (Math.hypot(fx.at[0] - L[0], fx.at[1] - L[1]) > 1e-6 || Math.hypot(cur[0] - L[0], cur[1] - L[1]) > 1e-6) { fx.at = L; p.profile[q.i] = L.slice(); changed = true; }
+    }
+    const c = centroid2(p.profile); at = V.add(V.add(Ol, V.mul(xw, c[0])), V.mul(yw, c[1]));
+  } else { notes.push({ o, text: `anchors move a rectangle or a drawn outline, not a ${p.shape}` }); return false; }
+  /* the slide that puts the profile's centre there (the rest of the part keeps its place on the face) */
+  const sl = m.slide || [0, 0], ns = [r6a(V.dot(rel(at), u)), r6a(V.dot(rel(at), v))];
+  if (Math.abs(ns[0] - (+sl[0] || 0)) > 1e-6 || Math.abs(ns[1] - (+sl[1] || 0)) > 1e-6) {
+    if (mx['slide.0'] || mx['slide.1']) notes.push({ o, text: 'its slide follows a formula, so its anchors don\'t move it — unlink it to let them' });
+    else { o.mate = Object.assign({}, m, { slide: ns }); changed = true; }
+  }
+  return changed;
+}
+const cleanAnchors = (list) => {
+  if (list == null || list === false) return null;
+  if (!Array.isArray(list)) throw new Error('anchors: give a list of {obj, conn} (and i, the point, for a drawn outline)');
+  const out = list.filter(Boolean).map(a => { if (typeof a.obj !== 'string' || typeof a.conn !== 'string') throw new Error('each anchor needs obj (a part id) and conn (one of its connectors, e.g. corner+x-y-z)'); return Object.assign({ obj: a.obj, conn: a.conn }, Number.isInteger(a.i) ? { i: a.i } : {}); });
+  return out.length ? out : null;
+};
 const ORIGIN_CONNS = [conn('origin', [0, 0, 0], [0, 0, 1], [1, 0, 0], 'center'), conn('xy', [0, 0, 0], [0, 0, 1], [1, 0, 0]), conn('xz', [0, 0, 0], [0, -1, 0], [1, 0, 0]), conn('yz', [0, 0, 0], [1, 0, 0], [0, 1, 0])];
 const frameOf = (c) => M4.frame(c.o, c.u, c.n);
 
@@ -1346,7 +1404,25 @@ export class Model {
   constructor(doc) { this.doc = doc || newDoc(); this.undoStack = []; this.redoStack = []; this.listeners = new Set(); this.result = null; this.recompute(); }
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit() { for (const f of this.listeners) try { f(this); } catch (e) { console.error(e); } }
-  recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  recompute() { const t0 = performance.now(); this.result = evaluate(this.doc); this.followAnchors(); this.solveDims(); this.result.ms = performance.now() - t0; return this.result; }
+  /* sketch anchors: points of a face sketch held on other parts' connectors (a corner, a face centre) follow them — after
+     every evaluation the anchored sizes and places are brought up to date, and the model evaluated again (a few passes) */
+  followAnchors() {
+    const list = this.doc.objects.filter(o => Array.isArray(o.anchors) && o.anchors.length);
+    if (!list.length) return;
+    let missing = [], notes = [];
+    for (let pass = 0; pass < 6; pass++) {
+      missing = []; notes = []; let moved = false;
+      for (const o of list) {
+        if (this.result.off && this.result.off.has(o.id)) continue;
+        try { if (followAnchorsOf(this.result, o, missing, notes)) moved = true; } catch (e) { notes.push({ o, text: e.message }); }
+      }
+      if (!moved) break;
+      this.result = evaluate(this.doc);
+    }
+    for (const { o, a } of missing) this.result.warnings.push({ kind: 'anchor', id: o.id, text: `${o.name}: the ${a.conn} it follows on ${(this.get(a.obj) || {}).name || a.obj} is gone — it stays where it is (Properties → Follows to change it)` });
+    for (const { o, text } of notes) this.result.warnings.push({ kind: 'anchor', id: o.id, text: `${o.name}: ${text}` });
+  }
   /* the face connector of a part at a point (the face's normal there narrows it down), and that point as a slide on the
      face: what a click on a face turns into, so a feature placed there is mated to that face and follows it */
   faceAt(id, at, normal) {
@@ -1469,6 +1545,7 @@ export class Model {
         const id = o.id && !this.get(o.id) ? String(o.id) : uid(type.slice(0, 3));
         const sp = splitParams(type, o.params);
         const ob = { id, name: o.name || TYPES[type].label + ' ' + (d.objects.filter(x => x.type === type).length + 1), type, params: defaultParams(type, sp.vals), expr: Object.keys(sp.links).length ? sp.links : undefined, pose: { at: W(o.at) || [0, 0, 0], rot: o.rot || [0, 0, 0] }, mate: null, into: null, op: null, color: o.color || null, fixed: !!o.fixed, meta: cleanMeta(Object.assign({}, o.meta || {}, o.material ? { material: o.material } : {})) };
+        if (o.anchors) ob.anchors = cleanAnchors(o.anchors) || undefined;
         this.insert(ob);
         if (o.mate) this.op(Object.assign({ op: 'mate', id }, o.mate));
         else if (!o.at && !o.fixed && d.objects.length > 1 && o.stack !== false) {
@@ -1488,6 +1565,7 @@ export class Model {
           if (Object.keys(sp.links).length) x.expr = Object.assign({}, x.expr || {}, sp.links);
           if (x.expr && !Object.keys(x.expr).length) delete x.expr;
         }
+        if (o.anchors !== undefined) { const an = cleanAnchors(o.anchors); if (an) x.anchors = an; else delete x.anchors; }
         if (o.name) x.name = String(o.name); if (o.color !== undefined) x.color = o.color; if (o.hidden !== undefined) x.hidden = !!o.hidden;
         if (o.meta || o.material !== undefined) { const mm = Object.assign({}, x.meta || {}, o.meta || {}, o.material !== undefined ? { material: o.material } : {}); for (const k of Object.keys(mm)) if (mm[k] === null || mm[k] === '') delete mm[k]; x.meta = cleanMeta(mm); }
         if (o.at || o.rot) { x.pose = { at: W(o.at) || (x.pose || {}).at || [0, 0, 0], rot: o.rot || (x.pose || {}).rot || [0, 0, 0] }; }
@@ -1554,7 +1632,7 @@ export class Model {
       case 'extrude': case 'loft': case 'revolve': case 'sweep': {
         const params = {}; for (const k of Object.keys(TYPES[o.op].params)) if (o[k] !== undefined) params[k] = o[k];
         if (o.params) Object.assign(params, o.params);
-        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta };
+        const add = { op: 'add', type: o.op, id: o.id, name: o.name, params, at: o.at, rot: o.rot, mate: o.mate, into: o.into, mode: o.mode, color: o.color, fixed: o.fixed, stack: false, material: o.material, meta: o.meta, anchors: o.anchors };
         /* sketch on a face: the feature starts on that face and follows it */
         if (o.face && o.face.obj) add.mate = { to: o.face.obj, a: o.face.conn || 'top', b: o.op === 'revolve' ? 'bottom' : 'start', flip: o.op !== 'revolve', offset: 0 };
         return this.op(add);
@@ -1911,7 +1989,7 @@ export class Model {
         const sub = []; const walk = (id) => { for (const y of d.objects) if (y.into === id && !sub.includes(y)) { sub.push(y); walk(y.id); } }; walk(x.id);
         const map = new Map([[x.id, uid(x.type.slice(0, 3))], ...sub.map(y => [y.id, uid(y.type.slice(0, 3))])]);
         const copy = (y) => {
-          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved;
+          const c = JSON.parse(JSON.stringify(y)); c.id = map.get(y.id); delete c._resolved; delete c.anchors;   /* a copy beside it does not follow the original's corners */
           if (y === x) { c.name = (o.name || y.name + ' copy'); c.into = x.into; }
           else { c.name = y.name; c.into = map.get(y.into) || y.into; }
           if (c.mate && map.has(c.mate.to)) c.mate.to = map.get(c.mate.to);
@@ -1989,7 +2067,7 @@ export class Model {
         return { id: o.id, name: o.name, type: o.type, addon: T && T.addon, params: o.params, info, at: META.has(o.type) ? undefined : at, mate: o.mate, mate_formulas: o.mexpr || undefined, boolean: o.into ? { into: o.into, mode: o.op } : null, fixed: !!o.fixed, resolved: o._resolved,
           sketch: R.sketch && R.sketch.has(o.id) ? { dof: R.sketch.get(o.id).dof, ok: R.sketch.get(o.id).ok, constraints: o.params.constraints, arcs: (o.params.arcs || []).length ? o.params.arcs : undefined, spline_fit: (o.params.splines || []).length ? R.sketch.get(o.id).fit : undefined } : undefined,
           suppressed: o.suppressed || undefined, rolled_back: R.off && R.off.has(o.id) && !o.suppressed ? true : undefined,
-          of: o.of, joins: o.joins, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
+          of: o.of, joins: o.joins, anchors: o.anchors && o.anchors.length ? o.anchors : undefined, meta: o.meta && Object.keys(o.meta).length ? o.meta : undefined, links: o.expr && Object.keys(o.expr).length ? o.expr : undefined,
           copies: o.type === 'pattern' ? [...R.virtual.values()].filter(v => v.pattern === o.id).length : undefined,
           connectors: META.has(o.type) ? undefined : (R.conns.get(o.id) || []).map(c => c.name) };
       }),
